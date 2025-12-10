@@ -13,12 +13,16 @@
     "@mediapipe/tasks-vision": "^0.10.20",
     "@supabase/supabase-js": "^2.47.10",
     "axios": "^1.7.9",
+    "clsx": "^2.1.1",
+    "framer-motion": "^12.23.26",
     "lucide-react": "^0.468.0",
     "onnxruntime-web": "^1.20.1",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-router-dom": "^7.0.2",
-    "react-toastify": "^10.0.6"
+    "react-toastify": "^10.0.6",
+    "tailwind-merge": "^3.4.0",
+    "zod": "^4.1.13"
   },
   "devDependencies": {
     "@eslint/js": "^9.17.0",
