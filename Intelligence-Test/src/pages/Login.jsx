@@ -67,9 +67,33 @@ export default function Login() {
       toast.success("Đăng nhập thành công!");
       navigate('/');
     } catch (error) {
-      const errorMessage = error.message === 'Invalid login credentials' 
-        ? 'Email hoặc mật khẩu không đúng'
-        : error.message || "Đăng nhập thất bại";
+      let errorMessage = "Đăng nhập thất bại";
+      
+      if (error.message === 'Invalid login credentials') {
+        errorMessage = 'Email hoặc mật khẩu không đúng';
+      } else if (error.message === 'Email not confirmed') {
+        errorMessage = 'Email chưa được xác nhận. Vui lòng kiểm tra hộp thư để xác nhận.';
+        // Try to auto-confirm email via backend
+        try {
+          const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+          const confirmResponse = await fetch(`${apiUrl}/api/auth/confirm-email`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email })
+          });
+          
+          if (confirmResponse.ok) {
+            toast.info('Email đã được xác nhận. Vui lòng thử đăng nhập lại.');
+            setLoading(false);
+            return;
+          }
+        } catch (confirmError) {
+          console.error('Auto-confirm failed:', confirmError);
+        }
+      } else {
+        errorMessage = error.message || "Đăng nhập thất bại";
+      }
+      
       toast.error(errorMessage);
     } finally {
       setLoading(false);
@@ -91,11 +115,11 @@ export default function Login() {
     setLoading(true);
     try {
       await register(email, password, fullName, role, studentId || null);
-      toast.success("Đăng ký thành công! Vui lòng kiểm tra email để xác nhận tài khoản.");
+      toast.success("Đăng ký thành công! Bạn có thể đăng nhập ngay.");
       setIsRegister(false);
       resetForm();
     } catch (error) {
-      const errorMessage = error.message?.includes('already registered')
+      const errorMessage = error.message?.includes('already registered') || error.message?.includes('đã được đăng ký')
         ? 'Email này đã được đăng ký'
         : error.message || "Đăng ký thất bại";
       toast.error(errorMessage);

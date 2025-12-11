@@ -179,6 +179,140 @@ app.get('/health', (req, res) => {
   });
 });
 
+// --- Auth Endpoints ---
+
+// Validation schema for registration
+const RegisterSchema = z.object({
+  email: z.string().email(),
+  password: z.string().min(6),
+  fullName: z.string().min(2),
+  role: z.enum(['student', 'instructor']).default('student'),
+  studentId: z.string().optional().nullable()
+});
+
+// Register new user and auto-confirm email
+app.post('/api/auth/register', async (req, res) => {
+  if (!supabase) {
+    return res.status(503).json({ error: 'Database not configured' });
+  }
+
+  const validation = RegisterSchema.safeParse(req.body);
+  if (!validation.success) {
+    return res.status(400).json({ 
+      error: 'Dữ liệu không hợp lệ', 
+      details: validation.error.errors 
+    });
+  }
+
+  const { email, password, fullName, role, studentId } = validation.data;
+
+  try {
+    // Check if email already exists
+    const { data: existingUsers } = await supabase.auth.admin.listUsers();
+    const emailExists = existingUsers?.users?.some(u => u.email === email);
+    
+    if (emailExists) {
+      return res.status(400).json({ error: 'Email này đã được đăng ký' });
+    }
+
+    // Create user with admin API (auto-confirms email)
+    const { data: userData, error: createError } = await supabase.auth.admin.createUser({
+      email,
+      password,
+      email_confirm: true, // Auto-confirm email
+      user_metadata: {
+        full_name: fullName,
+        role: role,
+        student_id: studentId
+      }
+    });
+
+    if (createError) {
+      console.error('Create user error:', createError);
+      return res.status(400).json({ 
+        error: createError.message || 'Không thể tạo tài khoản' 
+      });
+    }
+
+    // Create profile in profiles table
+    if (userData.user) {
+      const { error: profileError } = await supabase
+        .from('profiles')
+        .upsert({
+          id: userData.user.id,
+          email: email,
+          full_name: fullName,
+          role: role,
+          student_id: studentId || null
+        }, { onConflict: 'id' });
+
+      if (profileError) {
+        console.error('Profile creation error:', profileError);
+        // Don't fail the request, profile will be created on first login via trigger
+      }
+    }
+
+    res.json({ 
+      success: true, 
+      message: 'Đăng ký thành công! Bạn có thể đăng nhập ngay.',
+      user: {
+        id: userData.user.id,
+        email: userData.user.email
+      }
+    });
+
+  } catch (error) {
+    console.error('Registration error:', error);
+    res.status(500).json({ error: 'Có lỗi xảy ra khi đăng ký' });
+  }
+});
+
+// Confirm email for existing unconfirmed users
+app.post('/api/auth/confirm-email', async (req, res) => {
+  if (!supabase) {
+    return res.status(503).json({ error: 'Database not configured' });
+  }
+
+  const { email } = req.body;
+  if (!email) {
+    return res.status(400).json({ error: 'Email là bắt buộc' });
+  }
+
+  try {
+    // Find user by email
+    const { data: { users }, error: listError } = await supabase.auth.admin.listUsers();
+    
+    if (listError) throw listError;
+
+    const user = users?.find(u => u.email === email);
+    
+    if (!user) {
+      return res.status(404).json({ error: 'Không tìm thấy tài khoản với email này' });
+    }
+
+    if (user.email_confirmed_at) {
+      return res.json({ success: true, message: 'Email đã được xác nhận trước đó' });
+    }
+
+    // Confirm email using admin API
+    const { error: updateError } = await supabase.auth.admin.updateUserById(
+      user.id,
+      { email_confirm: true }
+    );
+
+    if (updateError) throw updateError;
+
+    res.json({ 
+      success: true, 
+      message: 'Email đã được xác nhận thành công. Bạn có thể đăng nhập ngay.' 
+    });
+
+  } catch (error) {
+    console.error('Confirm email error:', error);
+    res.status(500).json({ error: 'Có lỗi xảy ra khi xác nhận email' });
+  }
+});
+
 // --- Exam Session Endpoints ---
 
 // Start exam session
