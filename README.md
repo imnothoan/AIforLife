@@ -107,12 +107,16 @@ cp .env.example .env
 npm run dev
 ```
 
-### 4. (Optional) YOLO Model
+### 4. YOLO Model (BẮT BUỘC cho chống gian lận)
 
-Đặt file ONNX model vào `Intelligence-Test/public/models/`:
-- `anticheat_yolo11s.onnx` - Object detection model
+**QUAN TRỌNG**: YOLO model là BẮT BUỘC để phát hiện điện thoại, tài liệu, tai nghe trong phòng thi.
 
-Để train model, sử dụng notebook: `Intelligence_Test_YOLO_Training_colab.ipynb`
+1. Mở notebook `Intelligence_Test_YOLO_Training_colab.ipynb` trên Google Colab
+2. Chạy tất cả các cells để train model
+3. Download file `best.onnx` từ Google Drive sau khi train xong
+4. Copy vào: `Intelligence-Test/public/models/anticheat_yolo11s.onnx`
+
+**⚠️ Không có YOLO model = Hệ thống KHÔNG THỂ phát hiện gian lận bằng vật thể!**
 
 ## Cấu trúc thư mục
 
