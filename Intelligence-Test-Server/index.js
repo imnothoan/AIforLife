@@ -53,8 +53,19 @@ app.use(rateLimiter);
 const supabaseUrl = process.env.SUPABASE_URL;
 const supabaseKey = process.env.SUPABASE_SERVICE_KEY;
 
+// Validate required environment variables
+const isProduction = process.env.NODE_ENV === 'production';
+
 if (!supabaseUrl || !supabaseKey) {
-  console.error('Missing Supabase configuration. Please set SUPABASE_URL and SUPABASE_SERVICE_KEY environment variables.');
+  const errorMsg = 'Missing Supabase configuration. Please set SUPABASE_URL and SUPABASE_SERVICE_KEY environment variables.';
+  console.error(errorMsg);
+  
+  // In production, fail fast - server cannot function without database
+  if (isProduction) {
+    process.exit(1);
+  }
+  // In development, continue with warnings for demo endpoints
+  console.warn('Server running in demo mode - database operations will fail');
 }
 
 const supabase = supabaseUrl && supabaseKey ? createClient(supabaseUrl, supabaseKey) : null;
@@ -62,6 +73,17 @@ const supabase = supabaseUrl && supabaseKey ? createClient(supabaseUrl, supabase
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 const genAI = GEMINI_API_KEY ? new GoogleGenerativeAI(GEMINI_API_KEY) : null;
 const model = genAI ? genAI.getGenerativeModel({ model: "gemini-pro" }) : null;
+
+// Middleware to check if Supabase is configured
+function requireSupabase(req, res, next) {
+  if (!supabase) {
+    return res.status(503).json({ 
+      error: 'Database not configured',
+      message: 'Server is running in demo mode. Please configure Supabase credentials.'
+    });
+  }
+  next();
+}
 
 // --- Validation Schemas (Zod) ---
 const SubmitExamSchema = z.object({
@@ -107,6 +129,10 @@ const LogProctoringSchema = z.object({
 
 // --- Middleware: Auth verification ---
 async function verifyAuth(req, res, next) {
+  if (!supabase) {
+    return res.status(503).json({ error: 'Database not configured' });
+  }
+  
   const authHeader = req.headers.authorization;
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
     return res.status(401).json({ error: 'Unauthorized' });

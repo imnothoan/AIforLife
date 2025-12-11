@@ -7,13 +7,13 @@ import { z } from 'zod';
 import { FileText, Eye, EyeOff, Mail, Lock, User, IdCard, Loader2 } from 'lucide-react';
 
 const loginSchema = z.object({
-  email: z.email({ message: "Email không hợp lệ" }),
+  email: z.string().email({ message: "Email không hợp lệ" }),
   password: z.string().min(6, { message: "Mật khẩu phải có ít nhất 6 ký tự" }),
 });
 
 const registerSchema = z.object({
   fullName: z.string().min(2, { message: "Họ tên phải có ít nhất 2 ký tự" }),
-  email: z.email({ message: "Email không hợp lệ" }),
+  email: z.string().email({ message: "Email không hợp lệ" }),
   password: z.string().min(6, { message: "Mật khẩu phải có ít nhất 6 ký tự" }),
   confirmPassword: z.string(),
   studentId: z.string().optional(),

@@ -500,22 +500,32 @@ export default function Exam() {
     setIsSubmitting(true);
 
     try {
-      // Calculate score (mock)
-      const correctAnswers = { '1': 'A', '2': 'C', '3': 'A', '4': 'A', '5': 'A' };
-      let score = 0;
-      let total = 0;
+      // DEMO MODE: These answers are for demonstration only
+      // In production, answers should be validated server-side via supabase RPC
+      // The correct answers should NEVER be sent to the client
+      const DEMO_MODE = examId === 'demo' || examId === '1';
       
-      questions.forEach(q => {
-        total += q.points;
-        if (answers[q.id] === correctAnswers[q.id]) {
-          score += q.points;
-        }
-      });
+      if (DEMO_MODE) {
+        // Demo scoring - this is only for testing purposes
+        // In production, this code block should not exist
+        const demoCorrectAnswers = { '1': 'A', '2': 'C', '3': 'A', '4': 'A', '5': 'A' };
+        let score = 0;
+        let total = 0;
+        
+        questions.forEach(q => {
+          total += q.points;
+          if (answers[q.id] === demoCorrectAnswers[q.id]) {
+            score += q.points;
+          }
+        });
 
-      // Submit to server (mock)
-      // In production, call supabase function
-
-      toast.success(`Nộp bài thành công! Điểm: ${score}/${total}`);
+        toast.success(`Nộp bài thành công! Điểm: ${score}/${total}`);
+      } else {
+        // Production: Submit to server for secure scoring
+        // The server will compare answers and calculate score
+        // await submitToServer(sessionId, answers, violations)
+        toast.success("Nộp bài thành công!");
+      }
       
       // Exit fullscreen
       if (document.fullscreenElement) {

@@ -16,6 +16,9 @@ const CONFIG = {
     YAW_THRESHOLD: 0.25,      // Looking left/right
     PITCH_THRESHOLD: 0.20,    // Looking up/down
     CONSECUTIVE_FRAMES: 5,    // Number of suspicious frames before triggering
+    // MediaPipe Face Landmarker returns 478 landmarks (468 face mesh + 10 iris)
+    // We require at least 468 for full face mesh detection
+    MIN_LANDMARKS_FOR_POSE: 468,
   },
   // YOLO settings
   YOLO: {
@@ -96,7 +99,7 @@ async function initializeAI() {
 // HEAD POSE ESTIMATION
 // ============================================
 function extractHeadPose(faceLandmarks, transformMatrix) {
-  if (!faceLandmarks || faceLandmarks.length < 468) {
+  if (!faceLandmarks || faceLandmarks.length < CONFIG.FACE.MIN_LANDMARKS_FOR_POSE) {
     return { yaw: 0, pitch: 0, roll: 0, isValid: false };
   }
 
