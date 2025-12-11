@@ -65,67 +65,71 @@ export const AuthProvider = ({ children }) => {
 
   const register = async (email, password, fullName, role = 'student', studentId = null) => {
     // Use backend API for registration (auto-confirms email)
-    const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+    const apiUrl = import.meta.env.VITE_API_URL;
     
-    try {
-      const response = await fetch(`${apiUrl}/api/auth/register`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          email,
-          password,
-          fullName,
-          role,
-          studentId
-        })
-      });
+    // Only use backend API if configured (production)
+    if (apiUrl) {
+      try {
+        const response = await fetch(`${apiUrl}/api/auth/register`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            email,
+            password,
+            fullName,
+            role,
+            studentId
+          })
+        });
 
-      const result = await response.json();
+        const result = await response.json();
 
-      if (!response.ok) {
-        throw new Error(result.error || 'Đăng ký thất bại');
-      }
-
-      return { data: result, error: null };
-    } catch (error) {
-      // Fallback to direct Supabase signup if backend is unavailable
-      console.warn('Backend registration failed, falling back to Supabase:', error.message);
-      
-      const { data, error: signUpError } = await supabase.auth.signUp({
-        email,
-        password,
-        options: {
-          data: {
-            full_name: fullName,
-            role: role,
-            student_id: studentId
-          }
+        if (!response.ok) {
+          throw new Error(result.error || 'Đăng ký thất bại');
         }
-      });
 
-      if (signUpError) throw signUpError;
-
-      // If profile auto-creation didn't work, manually create it
-      if (data.user) {
-        const { error: profileError } = await supabase
-          .from('profiles')
-          .upsert({
-            id: data.user.id,
-            email: email,
-            full_name: fullName,
-            role: role,
-            student_id: studentId
-          }, { onConflict: 'id' });
-
-        if (profileError) {
-          console.error('Profile creation error:', profileError);
-        }
+        return { data: result, error: null };
+      } catch (error) {
+        // Fallback to direct Supabase signup if backend is unavailable
+        console.warn('Backend registration unavailable, using Supabase directly');
       }
-
-      return { data, error: signUpError };
     }
+    
+    // Fallback: Direct Supabase signup (requires email confirmation)
+    const { data, error: signUpError } = await supabase.auth.signUp({
+      email,
+      password,
+      options: {
+        data: {
+          full_name: fullName,
+          role: role,
+          student_id: studentId
+        }
+      }
+    });
+
+    if (signUpError) throw signUpError;
+
+    // If profile auto-creation didn't work, manually create it
+    if (data.user) {
+      const { error: profileError } = await supabase
+        .from('profiles')
+        .upsert({
+          id: data.user.id,
+          email: email,
+          full_name: fullName,
+          role: role,
+          student_id: studentId
+        }, { onConflict: 'id' });
+
+      if (profileError) {
+        console.error('Profile creation error:', profileError);
+      }
+    }
+
+    return { data, error: signUpError };
   };
 
   const logout = async () => {

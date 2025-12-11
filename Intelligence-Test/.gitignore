@@ -20,3 +20,7 @@ Thumbs.db
 # IDE
 .vscode/
 .idea/
+
+# Large model files (download separately)
+public/models/*.onnx
+public/models/*.pt

@@ -207,11 +207,14 @@ app.post('/api/auth/register', async (req, res) => {
   const { email, password, fullName, role, studentId } = validation.data;
 
   try {
-    // Check if email already exists
-    const { data: existingUsers } = await supabase.auth.admin.listUsers();
-    const emailExists = existingUsers?.users?.some(u => u.email === email);
+    // Check if email already exists by querying profiles table (more efficient than listing all users)
+    const { data: existingProfile } = await supabase
+      .from('profiles')
+      .select('id')
+      .eq('email', email)
+      .single();
     
-    if (emailExists) {
+    if (existingProfile) {
       return res.status(400).json({ error: 'Email này đã được đăng ký' });
     }
 
@@ -228,9 +231,14 @@ app.post('/api/auth/register', async (req, res) => {
     });
 
     if (createError) {
-      console.error('Create user error:', createError);
+      // Handle duplicate email error from Supabase
+      if (createError.message?.includes('already been registered') || 
+          createError.message?.includes('already exists')) {
+        return res.status(400).json({ error: 'Email này đã được đăng ký' });
+      }
+      console.error('Create user error:', createError.message);
       return res.status(400).json({ 
-        error: createError.message || 'Không thể tạo tài khoản' 
+        error: 'Không thể tạo tài khoản. Vui lòng thử lại.' 
       });
     }
 
@@ -247,7 +255,7 @@ app.post('/api/auth/register', async (req, res) => {
         }, { onConflict: 'id' });
 
       if (profileError) {
-        console.error('Profile creation error:', profileError);
+        console.error('Profile creation failed');
         // Don't fail the request, profile will be created on first login via trigger
       }
     }
@@ -262,7 +270,7 @@ app.post('/api/auth/register', async (req, res) => {
     });
 
   } catch (error) {
-    console.error('Registration error:', error);
+    console.error('Registration failed');
     res.status(500).json({ error: 'Có lỗi xảy ra khi đăng ký' });
   }
 });
@@ -279,28 +287,27 @@ app.post('/api/auth/confirm-email', async (req, res) => {
   }
 
   try {
-    // Find user by email
-    const { data: { users }, error: listError } = await supabase.auth.admin.listUsers();
+    // Find user by email using profiles table (more efficient)
+    const { data: profile, error: profileError } = await supabase
+      .from('profiles')
+      .select('id')
+      .eq('email', email)
+      .single();
     
-    if (listError) throw listError;
-
-    const user = users?.find(u => u.email === email);
-    
-    if (!user) {
+    if (profileError || !profile) {
       return res.status(404).json({ error: 'Không tìm thấy tài khoản với email này' });
     }
 
-    if (user.email_confirmed_at) {
-      return res.json({ success: true, message: 'Email đã được xác nhận trước đó' });
-    }
-
-    // Confirm email using admin API
+    // Confirm email using admin API with user ID from profile
     const { error: updateError } = await supabase.auth.admin.updateUserById(
-      user.id,
+      profile.id,
       { email_confirm: true }
     );
 
-    if (updateError) throw updateError;
+    if (updateError) {
+      console.error('Email confirmation failed');
+      return res.status(500).json({ error: 'Không thể xác nhận email' });
+    }
 
     res.json({ 
       success: true, 
@@ -308,7 +315,7 @@ app.post('/api/auth/confirm-email', async (req, res) => {
     });
 
   } catch (error) {
-    console.error('Confirm email error:', error);
+    console.error('Confirm email failed');
     res.status(500).json({ error: 'Có lỗi xảy ra khi xác nhận email' });
   }
 });

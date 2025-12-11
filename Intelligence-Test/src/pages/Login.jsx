@@ -73,22 +73,24 @@ export default function Login() {
         errorMessage = 'Email hoặc mật khẩu không đúng';
       } else if (error.message === 'Email not confirmed') {
         errorMessage = 'Email chưa được xác nhận. Vui lòng kiểm tra hộp thư để xác nhận.';
-        // Try to auto-confirm email via backend
-        try {
-          const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000';
-          const confirmResponse = await fetch(`${apiUrl}/api/auth/confirm-email`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ email })
-          });
-          
-          if (confirmResponse.ok) {
-            toast.info('Email đã được xác nhận. Vui lòng thử đăng nhập lại.');
-            setLoading(false);
-            return;
+        // Try to auto-confirm email via backend (only if API configured)
+        const apiUrl = import.meta.env.VITE_API_URL;
+        if (apiUrl) {
+          try {
+            const confirmResponse = await fetch(`${apiUrl}/api/auth/confirm-email`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ email })
+            });
+            
+            if (confirmResponse.ok) {
+              toast.info('Email đã được xác nhận. Vui lòng thử đăng nhập lại.');
+              setLoading(false);
+              return;
+            }
+          } catch (confirmError) {
+            // Silent fail - user will see the original error message
           }
-        } catch (confirmError) {
-          console.error('Auto-confirm failed:', confirmError);
         }
       } else {
         errorMessage = error.message || "Đăng nhập thất bại";
