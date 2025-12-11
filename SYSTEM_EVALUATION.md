@@ -210,7 +210,7 @@
 
 ## ⚠️ 9. CÁC LƯU Ý KHI TRIỂN KHAI
 
-### Trước khi triển khai:
+### Trước khi triển khai (TẤT CẢ ĐỀU BẮT BUỘC):
 1. **Chạy database schema** trong Supabase SQL Editor:
    - `database/smart_exam_schema.sql`
 
@@ -218,8 +218,10 @@
    - Frontend: `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`, `VITE_API_URL`
    - Backend: `SUPABASE_URL`, `SUPABASE_SERVICE_KEY`, `GEMINI_API_KEY`
 
-3. **Deploy YOLO model** (nếu cần object detection):
+3. **Deploy YOLO model** (BẮT BUỘC cho chống gian lận):
+   - Train model bằng notebook: `Intelligence_Test_YOLO_Training_colab.ipynb`
    - Copy `best.onnx` → `public/models/anticheat_yolo11s.onnx`
+   - **QUAN TRỌNG**: Không có YOLO, hệ thống sẽ KHÔNG THỂ phát hiện điện thoại, tài liệu, tai nghe!
 
 ### Khuyến nghị cho production:
 - [ ] Sử dụng Redis cho rate limiting thay vì in-memory
