@@ -328,86 +328,236 @@ export default function Exam() {
   // ============================================
   useEffect(() => {
     const loadExamData = async () => {
-      // For demo, use mock data
-      // In production, fetch from Supabase
-      setExamData({
-        id: examId,
-        title: 'Trí tuệ nhân tạo (AI)',
-        code: 'INT3401',
-        duration_minutes: 45,
-        require_camera: true,
-        require_fullscreen: true
-      });
+      // Check if demo mode
+      const isDemo = examId === 'demo' || examId === '1';
+      
+      if (isDemo) {
+        // Demo mode - use mock data for testing
+        setExamData({
+          id: examId,
+          title: 'Trí tuệ nhân tạo (AI) - BÀI THI MẪU',
+          code: 'INT3401',
+          duration_minutes: 45,
+          require_camera: true,
+          require_fullscreen: true
+        });
 
-      // Mock questions
-      setQuestions([
-        {
-          id: '1',
-          question_text: 'Deep Learning là gì?',
-          question_type: 'multiple_choice',
-          options: [
-            { id: 'A', text: 'Một loại máy học dựa trên mạng nơ-ron nhân tạo' },
-            { id: 'B', text: 'Một phần mềm chỉnh sửa ảnh' },
-            { id: 'C', text: 'Một thuật toán sắp xếp' },
-            { id: 'D', text: 'Một ngôn ngữ lập trình' },
-          ],
-          points: 2
-        },
-        {
-          id: '2',
-          question_text: 'Mạng nơ-ron tích chập (CNN) thường được sử dụng cho loại dữ liệu nào?',
-          question_type: 'multiple_choice',
-          options: [
-            { id: 'A', text: 'Dữ liệu văn bản' },
-            { id: 'B', text: 'Dữ liệu âm thanh' },
-            { id: 'C', text: 'Dữ liệu hình ảnh' },
-            { id: 'D', text: 'Dữ liệu bảng' },
-          ],
-          points: 2
-        },
-        {
-          id: '3',
-          question_text: 'Hàm kích hoạt ReLU có công thức là gì?',
-          question_type: 'multiple_choice',
-          options: [
-            { id: 'A', text: 'f(x) = max(0, x)' },
-            { id: 'B', text: 'f(x) = 1/(1+e^(-x))' },
-            { id: 'C', text: 'f(x) = tanh(x)' },
-            { id: 'D', text: 'f(x) = x^2' },
-          ],
-          points: 2
-        },
-        {
-          id: '4',
-          question_text: 'Overfitting xảy ra khi:',
-          question_type: 'multiple_choice',
-          options: [
-            { id: 'A', text: 'Model học quá tốt trên tập train nhưng kém trên tập test' },
-            { id: 'B', text: 'Model không học được gì từ dữ liệu' },
-            { id: 'C', text: 'Model có quá ít tham số' },
-            { id: 'D', text: 'Dữ liệu train quá ít' },
-          ],
-          points: 2
-        },
-        {
-          id: '5',
-          question_text: 'Transformer được giới thiệu trong bài báo nào?',
-          question_type: 'multiple_choice',
-          options: [
-            { id: 'A', text: 'Attention Is All You Need' },
-            { id: 'B', text: 'ImageNet Classification with Deep CNNs' },
-            { id: 'C', text: 'Playing Atari with Deep RL' },
-            { id: 'D', text: 'Generative Adversarial Networks' },
-          ],
-          points: 2
-        },
-      ]);
+        setQuestions([
+          {
+            id: '1',
+            question_text: 'Deep Learning là gì?',
+            question_type: 'multiple_choice',
+            options: [
+              { id: 'A', text: 'Một loại máy học dựa trên mạng nơ-ron nhân tạo' },
+              { id: 'B', text: 'Một phần mềm chỉnh sửa ảnh' },
+              { id: 'C', text: 'Một thuật toán sắp xếp' },
+              { id: 'D', text: 'Một ngôn ngữ lập trình' },
+            ],
+            points: 2
+          },
+          {
+            id: '2',
+            question_text: 'Mạng nơ-ron tích chập (CNN) thường được sử dụng cho loại dữ liệu nào?',
+            question_type: 'multiple_choice',
+            options: [
+              { id: 'A', text: 'Dữ liệu văn bản' },
+              { id: 'B', text: 'Dữ liệu âm thanh' },
+              { id: 'C', text: 'Dữ liệu hình ảnh' },
+              { id: 'D', text: 'Dữ liệu bảng' },
+            ],
+            points: 2
+          },
+          {
+            id: '3',
+            question_text: 'Hàm kích hoạt ReLU có công thức là gì?',
+            question_type: 'multiple_choice',
+            options: [
+              { id: 'A', text: 'f(x) = max(0, x)' },
+              { id: 'B', text: 'f(x) = 1/(1+e^(-x))' },
+              { id: 'C', text: 'f(x) = tanh(x)' },
+              { id: 'D', text: 'f(x) = x^2' },
+            ],
+            points: 2
+          },
+          {
+            id: '4',
+            question_text: 'Overfitting xảy ra khi:',
+            question_type: 'multiple_choice',
+            options: [
+              { id: 'A', text: 'Model học quá tốt trên tập train nhưng kém trên tập test' },
+              { id: 'B', text: 'Model không học được gì từ dữ liệu' },
+              { id: 'C', text: 'Model có quá ít tham số' },
+              { id: 'D', text: 'Dữ liệu train quá ít' },
+            ],
+            points: 2
+          },
+          {
+            id: '5',
+            question_text: 'Transformer được giới thiệu trong bài báo nào?',
+            question_type: 'multiple_choice',
+            options: [
+              { id: 'A', text: 'Attention Is All You Need' },
+              { id: 'B', text: 'ImageNet Classification with Deep CNNs' },
+              { id: 'C', text: 'Playing Atari with Deep RL' },
+              { id: 'D', text: 'Generative Adversarial Networks' },
+            ],
+            points: 2
+          },
+        ]);
 
-      setTimeRemaining(45 * 60); // 45 minutes in seconds
+        setTimeRemaining(45 * 60);
+        setSessionId('demo-session');
+        return;
+      }
+
+      // Production mode - fetch from Supabase
+      try {
+        // Fetch exam data
+        const { data: exam, error: examError } = await supabase
+          .from('exams')
+          .select(`
+            *,
+            class:classes(name, code)
+          `)
+          .eq('id', examId)
+          .single();
+
+        if (examError) {
+          console.error('Failed to load exam:', examError);
+          toast.error('Không thể tải thông tin bài thi');
+          navigate('/');
+          return;
+        }
+
+        // Check if exam is available
+        const now = new Date();
+        const startTime = new Date(exam.start_time);
+        const endTime = new Date(exam.end_time);
+
+        if (exam.status !== 'published') {
+          toast.error('Bài thi này chưa được công bố');
+          navigate('/');
+          return;
+        }
+
+        if (now < startTime) {
+          toast.error('Bài thi chưa bắt đầu');
+          navigate('/');
+          return;
+        }
+
+        if (now > endTime) {
+          toast.error('Bài thi đã kết thúc');
+          navigate('/');
+          return;
+        }
+
+        setExamData({
+          id: exam.id,
+          title: exam.title,
+          code: exam.class?.code || 'N/A',
+          duration_minutes: exam.duration_minutes,
+          require_camera: exam.require_camera,
+          require_fullscreen: exam.require_fullscreen,
+          max_tab_violations: exam.max_tab_violations,
+          max_fullscreen_violations: exam.max_fullscreen_violations
+        });
+
+        // Fetch questions
+        const { data: questionsData, error: questionsError } = await supabase
+          .from('questions')
+          .select('id, question_text, question_type, options, points, order_index')
+          .eq('exam_id', examId)
+          .order('order_index');
+
+        if (questionsError) {
+          console.error('Failed to load questions:', questionsError);
+          toast.error('Không thể tải câu hỏi');
+          navigate('/');
+          return;
+        }
+
+        // Shuffle questions if required
+        const finalQuestions = exam.is_shuffled 
+          ? shuffleArray(questionsData) 
+          : questionsData;
+
+        setQuestions(finalQuestions);
+        setTimeRemaining(exam.duration_minutes * 60);
+
+        // Check for existing session or create new one
+        const { data: existingSession } = await supabase
+          .from('exam_sessions')
+          .select('id, status, started_at')
+          .eq('exam_id', examId)
+          .eq('student_id', user?.id)
+          .eq('status', 'in_progress')
+          .single();
+
+        if (existingSession) {
+          // Resume existing session
+          setSessionId(existingSession.id);
+          
+          // Calculate remaining time using UTC timestamps to avoid timezone issues
+          // Supabase returns timestamps in ISO format with timezone info
+          const startedAtUTC = new Date(existingSession.started_at).getTime();
+          const nowUTC = Date.now();
+          const elapsedSeconds = Math.floor((nowUTC - startedAtUTC) / 1000);
+          const remaining = Math.max(0, exam.duration_minutes * 60 - elapsedSeconds);
+          setTimeRemaining(remaining);
+
+          // If time has already expired, auto-submit
+          if (remaining === 0) {
+            toast.warning('Thời gian thi đã hết!');
+            setExamStarted(true);
+            handleAutoSubmit();
+            return;
+          }
+
+          // Load existing answers
+          const { data: existingAnswers } = await supabase
+            .from('answers')
+            .select('question_id, student_answer, is_flagged, student_notes')
+            .eq('session_id', existingSession.id);
+
+          if (existingAnswers) {
+            const answersMap = {};
+            const flaggedSet = new Set();
+            const notesMap = {};
+            
+            existingAnswers.forEach(a => {
+              answersMap[a.question_id] = a.student_answer;
+              if (a.is_flagged) flaggedSet.add(a.question_id);
+              if (a.student_notes) notesMap[a.question_id] = a.student_notes;
+            });
+
+            setAnswers(answersMap);
+            setFlaggedQuestions(flaggedSet);
+            setNotes(notesMap);
+          }
+
+          toast.info('Đã khôi phục phiên thi trước đó');
+        }
+
+      } catch (error) {
+        console.error('Error loading exam:', error);
+        toast.error('Có lỗi xảy ra khi tải bài thi');
+        navigate('/');
+      }
+    };
+
+    // Helper function to shuffle array
+    const shuffleArray = (array) => {
+      const shuffled = [...array];
+      for (let i = shuffled.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+      }
+      return shuffled;
     };
 
     loadExamData();
-  }, [examId]);
+  }, [examId, user, navigate]);
 
   // ============================================
   // PROCTORING LOG HELPER
@@ -469,6 +619,62 @@ export default function Exam() {
   const goPrev = () => goToQuestion(currentQuestionIndex - 1);
 
   // ============================================
+  // AUTO-SAVE ANSWERS (every 30 seconds)
+  // ============================================
+  useEffect(() => {
+    if (!examStarted || !sessionId) return;
+    
+    const isDemo = examId === 'demo' || examId === '1';
+    if (isDemo) return; // Don't auto-save in demo mode
+
+    // Track last saved answers to detect changes
+    let lastSavedAnswers = { ...answers };
+    let lastSavedFlags = new Set(flaggedQuestions);
+    let lastSavedNotes = { ...notes };
+
+    const saveAnswers = async () => {
+      try {
+        // Find all modified answers since last save
+        const modifiedQuestions = questions.filter(q => {
+          const answerChanged = answers[q.id] !== lastSavedAnswers[q.id];
+          const flagChanged = flaggedQuestions.has(q.id) !== lastSavedFlags.has(q.id);
+          const noteChanged = notes[q.id] !== lastSavedNotes[q.id];
+          return answerChanged || flagChanged || noteChanged;
+        });
+
+        if (modifiedQuestions.length === 0) return;
+
+        // Batch upsert all modified answers
+        const answersToUpsert = modifiedQuestions.map(q => ({
+          session_id: sessionId,
+          question_id: q.id,
+          student_answer: answers[q.id] || null,
+          is_flagged: flaggedQuestions.has(q.id),
+          student_notes: notes[q.id] || null
+        }));
+
+        const { error } = await supabase
+          .from('answers')
+          .upsert(answersToUpsert, { onConflict: 'session_id,question_id' });
+
+        if (error) throw error;
+
+        // Update last saved state
+        lastSavedAnswers = { ...answers };
+        lastSavedFlags = new Set(flaggedQuestions);
+        lastSavedNotes = { ...notes };
+      } catch (err) {
+        console.error('Auto-save error:', err);
+        // Don't notify user for auto-save failures to avoid distraction
+      }
+    };
+
+    const autoSaveInterval = setInterval(saveAnswers, 30000); // Every 30 seconds
+    
+    return () => clearInterval(autoSaveInterval);
+  }, [examStarted, sessionId, examId, questions, answers, flaggedQuestions, notes]);
+
+  // ============================================
   // SUBMIT HANDLERS
   // ============================================
   const handleAutoSubmit = async () => {
@@ -500,14 +706,10 @@ export default function Exam() {
     setIsSubmitting(true);
 
     try {
-      // DEMO MODE: These answers are for demonstration only
-      // In production, answers should be validated server-side via supabase RPC
-      // The correct answers should NEVER be sent to the client
-      const DEMO_MODE = examId === 'demo' || examId === '1';
+      const isDemo = examId === 'demo' || examId === '1';
       
-      if (DEMO_MODE) {
-        // Demo scoring - this is only for testing purposes
-        // In production, this code block should not exist
+      if (isDemo) {
+        // Demo scoring - for testing purposes only
         const demoCorrectAnswers = { '1': 'A', '2': 'C', '3': 'A', '4': 'A', '5': 'A' };
         let score = 0;
         let total = 0;
@@ -521,10 +723,63 @@ export default function Exam() {
 
         toast.success(`Nộp bài thành công! Điểm: ${score}/${total}`);
       } else {
-        // Production: Submit to server for secure scoring
-        // The server will compare answers and calculate score
-        // await submitToServer(sessionId, answers, violations)
-        toast.success("Nộp bài thành công!");
+        // Production: Submit answers to database
+        // Batch upsert all answers at once for better performance
+        const answersToInsert = questions.map(q => ({
+          session_id: sessionId,
+          question_id: q.id,
+          student_answer: answers[q.id] || null,
+          is_flagged: flaggedQuestions.has(q.id),
+          student_notes: notes[q.id] || null
+        }));
+
+        // Batch upsert answers
+        const { error: answersError } = await supabase
+          .from('answers')
+          .upsert(answersToInsert, { onConflict: 'session_id,question_id' });
+
+        if (answersError) {
+          console.error('Error saving answers:', answersError);
+          throw new Error('Không thể lưu câu trả lời');
+        }
+
+        // Update session with violation counts first (before submit)
+        const { error: violationError } = await supabase
+          .from('exam_sessions')
+          .update({
+            cheat_count: cheatCount,
+            tab_violations: tabViolations,
+            fullscreen_violations: fullscreenViolations,
+            gaze_away_count: gazeAwayCount
+          })
+          .eq('id', sessionId);
+
+        if (violationError) {
+          console.error('Error saving violations:', violationError);
+          // Continue with submission even if violation update fails
+          // The core exam data is more important
+        }
+
+        // Submit exam via RPC function
+        const { data: result, error: submitError } = await supabase
+          .rpc('submit_exam', {
+            p_session_id: sessionId,
+            p_auto_submit: isAuto
+          });
+
+        if (submitError) {
+          throw submitError;
+        }
+
+        if (result) {
+          const percentage = result.percentage || 0;
+          const passed = result.passed;
+          toast.success(
+            `Nộp bài thành công! Điểm: ${percentage.toFixed(1)}% ${passed ? '✓ Đạt' : '✗ Không đạt'}`
+          );
+        } else {
+          toast.success("Nộp bài thành công!");
+        }
       }
       
       // Exit fullscreen
@@ -559,8 +814,40 @@ export default function Exam() {
     // Enter fullscreen
     await enterFullscreen();
     
-    // Create session (mock - in production use supabase function)
-    setSessionId('mock-session-id');
+    const isDemo = examId === 'demo' || examId === '1';
+    
+    if (isDemo) {
+      // Demo mode - use mock session
+      setSessionId('demo-session-id');
+    } else if (!sessionId && user) {
+      // Production mode - create a new session in database
+      try {
+        const { data: newSessionId, error } = await supabase
+          .rpc('start_exam_session', {
+            p_exam_id: examId,
+            p_user_agent: navigator.userAgent,
+            p_ip_address: null // IP is captured server-side
+          });
+
+        if (error) {
+          console.error('Failed to create session:', error);
+          if (error.message.includes('Maximum attempts')) {
+            toast.error('Bạn đã hết lượt thi cho bài này');
+          } else if (error.message.includes('not enrolled')) {
+            toast.error('Bạn chưa đăng ký lớp học này');
+          } else {
+            toast.error('Không thể bắt đầu bài thi: ' + error.message);
+          }
+          return;
+        }
+
+        setSessionId(newSessionId);
+      } catch (err) {
+        console.error('Session creation error:', err);
+        toast.error('Có lỗi xảy ra khi bắt đầu bài thi');
+        return;
+      }
+    }
     
     setExamStarted(true);
     toast.info("Bài thi bắt đầu! Chúc bạn làm bài tốt.");
