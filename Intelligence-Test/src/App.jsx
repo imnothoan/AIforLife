@@ -6,6 +6,7 @@ import 'react-toastify/dist/ReactToastify.css';
 import Login from './pages/Login';
 import Exam from './pages/Exam';
 import Dashboard from './pages/Dashboard';
+import InstructorDashboard from './pages/InstructorDashboard';
 import './index.css';
 import axios from 'axios';
 
@@ -25,17 +26,36 @@ const PrivateRoute = ({ children }) => {
   return user ? children : <Navigate to="/login" />;
 };
 
+const InstructorRoute = ({ children }) => {
+  const { user, profile, isInstructor } = useAuth();
+  if (!user) return <Navigate to="/login" />;
+  if (!isInstructor()) return <Navigate to="/" />;
+  return children;
+};
+
 function App() {
   return (
     <AuthProvider>
       <Router>
-        <div className="min-h-screen bg-gray-50 text-gray-900 font-sans">
+        <div className="min-h-screen bg-background text-text-main font-sans">
           <Routes>
             <Route path="/login" element={<Login />} />
             <Route path="/" element={<PrivateRoute><Dashboard /></PrivateRoute>} />
+            <Route path="/instructor" element={<InstructorRoute><InstructorDashboard /></InstructorRoute>} />
             <Route path="/exam/:id" element={<PrivateRoute><Exam /></PrivateRoute>} />
           </Routes>
-          <ToastContainer position="top-right" />
+          <ToastContainer 
+            position="top-right" 
+            autoClose={4000}
+            hideProgressBar={false}
+            newestOnTop
+            closeOnClick
+            rtl={false}
+            pauseOnFocusLoss
+            draggable
+            pauseOnHover
+            theme="light"
+          />
         </div>
       </Router>
     </AuthProvider>
