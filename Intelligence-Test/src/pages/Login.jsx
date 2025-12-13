@@ -61,21 +61,33 @@ export default function Login() {
       return t('validation.required');
     }
     
-    const code = error.errors[0]?.code;
-    const path = error.errors[0]?.path?.[0];
+    const firstError = error.errors[0];
+    const code = firstError?.code;
+    const path = firstError?.path?.[0];
     
+    // Handle empty/missing fields with specific messages
+    if (code === 'too_small' || code === 'invalid_type') {
+      if (path === 'email') {
+        return t('validation.emailRequired');
+      }
+      if (path === 'password') {
+        return t('validation.passwordRequired');
+      }
+      if (path === 'fullName') {
+        return t('validation.minLength', { min: 2 });
+      }
+    }
+    
+    // Handle invalid email format
     if (code === 'invalid_string' && path === 'email') {
       return t('validation.invalidEmail');
     }
-    if (code === 'too_small' && path === 'password') {
-      return t('validation.minLength', { min: 6 });
-    }
-    if (code === 'too_small' && path === 'fullName') {
-      return t('validation.minLength', { min: 2 });
-    }
+    
+    // Handle password confirmation mismatch
     if (path === 'confirmPassword') {
       return t('validation.passwordMismatch');
     }
+    
     return t('validation.required');
   };
 

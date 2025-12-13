@@ -173,12 +173,19 @@ const translations = {
     'instructor.classCode': 'Mã lớp',
     'instructor.welcome': 'Chào mừng bạn đến với SmartExamPro',
     'instructor.welcomeDesc': 'Hãy tạo lớp học đầu tiên để bắt đầu',
+    'instructor.createClassTitle': 'Tạo lớp học mới',
+    'instructor.addStudentTitle': 'Thêm sinh viên vào lớp',
+    'instructor.createExamTitle': 'Tạo bài thi mới',
     
     // Class management
     'class.name': 'Tên lớp học',
+    'class.namePlaceholder': 'VD: Trí tuệ nhân tạo K66',
     'class.code': 'Mã lớp',
+    'class.codePlaceholder': 'VD: INT3401-20231',
     'class.description': 'Mô tả',
+    'class.descriptionPlaceholder': 'Mô tả về lớp học...',
     'class.semester': 'Học kỳ',
+    'class.semesterSelect': 'Chọn học kỳ',
     'class.semester1': 'Học kỳ 1',
     'class.semester2': 'Học kỳ 2',
     'class.semesterSummer': 'Học kỳ hè',
@@ -205,9 +212,13 @@ const translations = {
     'exam.publish': 'Công bố',
     'exam.published': 'Đã công bố bài thi!',
     'exam.title': 'Tên bài thi',
+    'exam.titlePlaceholder': 'VD: Kiểm tra giữa kỳ AI',
+    'exam.description': 'Mô tả',
+    'exam.descriptionPlaceholder': 'Mô tả về nội dung bài thi...',
     'exam.basicInfo': 'Thông tin cơ bản',
     'exam.timeSettings': 'Thời gian thi',
     'exam.antiCheatSettings': 'Cài đặt chống gian lận',
+    'exam.durationMinutes': 'Thời lượng (phút)',
     'exam.passingScore': 'Điểm đạt (%)',
     'exam.requireCamera': 'Yêu cầu Camera',
     'exam.requireFullscreen': 'Yêu cầu Fullscreen',
@@ -217,6 +228,7 @@ const translations = {
     'exam.maxFullscreenViolations': 'Số lần thoát fullscreen tối đa',
     'exam.createSuccess': 'Tạo bài thi thành công!',
     'exam.createError': 'Không thể tạo bài thi. Vui lòng thử lại sau.',
+    'exam.manageQuestions': 'Quản lý câu hỏi',
     
     // Student management
     'student.add': 'Thêm sinh viên',
@@ -247,6 +259,8 @@ const translations = {
     
     // Validation
     'validation.required': 'Trường này là bắt buộc',
+    'validation.emailRequired': 'Vui lòng nhập địa chỉ email',
+    'validation.passwordRequired': 'Vui lòng nhập mật khẩu',
     'validation.invalidEmail': 'Email không hợp lệ',
     'validation.minLength': 'Phải có ít nhất {min} ký tự',
     'validation.maxLength': 'Không được vượt quá {max} ký tự',
@@ -509,12 +523,19 @@ const translations = {
     'instructor.classCode': 'Class Code',
     'instructor.welcome': 'Welcome to SmartExamPro',
     'instructor.welcomeDesc': 'Create your first class to get started',
+    'instructor.createClassTitle': 'Create New Class',
+    'instructor.addStudentTitle': 'Add Students to Class',
+    'instructor.createExamTitle': 'Create New Exam',
     
     // Class management
     'class.name': 'Class Name',
+    'class.namePlaceholder': 'E.g.: Artificial Intelligence K66',
     'class.code': 'Class Code',
+    'class.codePlaceholder': 'E.g.: INT3401-20231',
     'class.description': 'Description',
+    'class.descriptionPlaceholder': 'Describe the class...',
     'class.semester': 'Semester',
+    'class.semesterSelect': 'Select semester',
     'class.semester1': 'Semester 1',
     'class.semester2': 'Semester 2',
     'class.semesterSummer': 'Summer Semester',
@@ -541,9 +562,13 @@ const translations = {
     'exam.publish': 'Publish',
     'exam.published': 'Exam published!',
     'exam.title': 'Exam Title',
+    'exam.titlePlaceholder': 'E.g.: AI Midterm Exam',
+    'exam.description': 'Description',
+    'exam.descriptionPlaceholder': 'Describe the exam content...',
     'exam.basicInfo': 'Basic Information',
     'exam.timeSettings': 'Time Settings',
     'exam.antiCheatSettings': 'Anti-Cheat Settings',
+    'exam.durationMinutes': 'Duration (minutes)',
     'exam.passingScore': 'Passing Score (%)',
     'exam.requireCamera': 'Require Camera',
     'exam.requireFullscreen': 'Require Fullscreen',
@@ -553,6 +578,7 @@ const translations = {
     'exam.maxFullscreenViolations': 'Max Fullscreen Violations',
     'exam.createSuccess': 'Exam created successfully!',
     'exam.createError': 'Cannot create exam. Please try again later.',
+    'exam.manageQuestions': 'Manage Questions',
     
     // Student management
     'student.add': 'Add Student',
@@ -583,6 +609,8 @@ const translations = {
     
     // Validation
     'validation.required': 'This field is required',
+    'validation.emailRequired': 'Please enter your email address',
+    'validation.passwordRequired': 'Please enter your password',
     'validation.invalidEmail': 'Invalid email',
     'validation.minLength': 'Must be at least {min} characters',
     'validation.maxLength': 'Cannot exceed {max} characters',
