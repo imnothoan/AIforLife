@@ -136,13 +136,14 @@ export default function FaceVerification({
     
     const initFaceLandmarker = async () => {
       try {
+        // Using pinned version for stability
         const vision = await FilesetResolver.forVisionTasks(
-          "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest/wasm"
+          "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.18/wasm"
         );
         
         const landmarker = await FaceLandmarker.createFromOptions(vision, {
           baseOptions: {
-            modelAssetPath: "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/latest/face_landmarker.task",
+            modelAssetPath: "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task",
             delegate: "GPU"
           },
           runningMode: "IMAGE",
@@ -344,7 +345,7 @@ export default function FaceVerification({
     }
     
     const similarity = cosineSimilarity(capturedEmbedding, storedEmbedding);
-    console.log('Face similarity score:', similarity);
+    // Removed console.log for production security - similarity score is sensitive biometric data
     
     if (similarity >= FACE_CONFIG.SIMILARITY_THRESHOLD) {
       setStatus('success');
@@ -360,11 +361,11 @@ export default function FaceVerification({
   const getFaceQualityMessage = () => {
     if (!faceDetected) return t('face.noFaceDetected');
     switch (faceQuality) {
-      case 'too_small': return 'Di chuyển lại gần camera';
-      case 'too_large': return 'Di chuyển ra xa camera';
-      case 'off_center': return 'Đặt khuôn mặt vào giữa khung hình';
+      case 'too_small': return t('face.moveCloser');
+      case 'too_large': return t('face.moveFarther');
+      case 'off_center': return t('face.centerFace');
       case 'multiple': return t('face.multipleFaces');
-      case 'good': return '✓ Khuôn mặt đã sẵn sàng';
+      case 'good': return '✓ ' + t('face.ready');
       default: return '';
     }
   };

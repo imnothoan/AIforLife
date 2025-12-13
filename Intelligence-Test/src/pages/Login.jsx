@@ -56,8 +56,13 @@ export default function Login() {
 
   // Helper function to translate Zod validation errors
   const translateValidationError = (error) => {
+    // Check if error has valid errors array
+    if (!error?.errors || error.errors.length === 0) {
+      return t('validation.required');
+    }
+    
     const code = error.errors[0]?.code;
-    const path = error.errors[0]?.path[0];
+    const path = error.errors[0]?.path?.[0];
     
     if (code === 'invalid_string' && path === 'email') {
       return t('validation.invalidEmail');
@@ -126,7 +131,7 @@ export default function Login() {
       } else if (errorMsg.includes('network') || errorMsg.includes('fetch') || errorMsg.includes('failed to fetch')) {
         errorMessage = t('auth.networkError');
       } else if (errorMsg.includes('user not found')) {
-        errorMessage = t('auth.networkError'); // Account doesn't exist, suggest registration
+        errorMessage = t('auth.invalidCredentials'); // Account doesn't exist - show generic error for security
       } else {
         errorMessage = t('auth.loginFailed');
       }

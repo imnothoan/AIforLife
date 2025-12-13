@@ -285,6 +285,10 @@ const translations = {
     'face.verify': 'Xác minh',
     'face.verifying': 'Đang xác minh...',
     'face.success': 'Xác minh thành công!',
+    'face.ready': 'Khuôn mặt đã sẵn sàng',
+    'face.moveCloser': 'Di chuyển lại gần camera',
+    'face.moveFarther': 'Di chuyển ra xa camera',
+    'face.centerFace': 'Đặt khuôn mặt vào giữa khung hình',
     'face.failed': 'Xác minh thất bại. Vui lòng thử lại.',
     'face.mismatch': 'Khuôn mặt không khớp với thí sinh đã đăng ký!',
     'face.noFaceDetected': 'Không phát hiện khuôn mặt. Vui lòng thử lại.',
@@ -593,6 +597,10 @@ const translations = {
     'face.randomCheckDesc': 'The system requires re-verification of your identity.',
     'face.timeLimit': 'You have 30 seconds to complete verification.',
     'face.countdown': 'Remaining: {seconds} seconds',
+    'face.ready': 'Face is ready',
+    'face.moveCloser': 'Move closer to the camera',
+    'face.moveFarther': 'Move away from the camera',
+    'face.centerFace': 'Center your face in the frame',
     
     // Language
     'language.select': 'Language',
