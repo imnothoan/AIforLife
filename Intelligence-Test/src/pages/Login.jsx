@@ -8,20 +8,20 @@ import { z } from 'zod';
 import { FileText, Eye, EyeOff, Mail, Lock, User, IdCard, Loader2 } from 'lucide-react';
 import LanguageSwitcher from '../components/LanguageSwitcher';
 
+// Validation schemas with error codes (not messages)
 const loginSchema = z.object({
-  email: z.string().email({ message: "Email không hợp lệ" }),
-  password: z.string().min(6, { message: "Mật khẩu phải có ít nhất 6 ký tự" }),
+  email: z.string().email(),
+  password: z.string().min(6),
 });
 
 const registerSchema = z.object({
-  fullName: z.string().min(2, { message: "Họ tên phải có ít nhất 2 ký tự" }),
-  email: z.string().email({ message: "Email không hợp lệ" }),
-  password: z.string().min(6, { message: "Mật khẩu phải có ít nhất 6 ký tự" }),
+  fullName: z.string().min(2),
+  email: z.string().email(),
+  password: z.string().min(6),
   confirmPassword: z.string(),
   studentId: z.string().optional(),
   role: z.enum(['student', 'instructor']),
 }).refine((data) => data.password === data.confirmPassword, {
-  message: "Mật khẩu xác nhận không khớp",
   path: ["confirmPassword"],
 });
 
@@ -54,6 +54,26 @@ export default function Login() {
     setShowPassword(false);
   };
 
+  // Helper function to translate Zod validation errors
+  const translateValidationError = (error) => {
+    const code = error.errors[0]?.code;
+    const path = error.errors[0]?.path[0];
+    
+    if (code === 'invalid_string' && path === 'email') {
+      return t('validation.invalidEmail');
+    }
+    if (code === 'too_small' && path === 'password') {
+      return t('validation.minLength', { min: 6 });
+    }
+    if (code === 'too_small' && path === 'fullName') {
+      return t('validation.minLength', { min: 2 });
+    }
+    if (path === 'confirmPassword') {
+      return t('validation.passwordMismatch');
+    }
+    return t('validation.required');
+  };
+
   const handleLogin = async (e) => {
     e.preventDefault();
 
@@ -62,7 +82,7 @@ export default function Login() {
 
     const validation = loginSchema.safeParse({ email, password });
     if (!validation.success) {
-      toast.error(validation.error.errors[0].message);
+      toast.error(translateValidationError(validation.error));
       return;
     }
 
@@ -106,7 +126,7 @@ export default function Login() {
       } else if (errorMsg.includes('network') || errorMsg.includes('fetch') || errorMsg.includes('failed to fetch')) {
         errorMessage = t('auth.networkError');
       } else if (errorMsg.includes('user not found')) {
-        errorMessage = t('auth.registerNow');
+        errorMessage = t('auth.networkError'); // Account doesn't exist, suggest registration
       } else {
         errorMessage = t('auth.loginFailed');
       }
@@ -128,7 +148,7 @@ export default function Login() {
     });
 
     if (!validation.success) {
-      toast.error(validation.error.errors[0].message);
+      toast.error(translateValidationError(validation.error));
       return;
     }
 
@@ -195,7 +215,7 @@ export default function Login() {
                 <FileText className="text-white w-6 h-6" />
               </div>
               <span className="text-2xl font-bold text-white tracking-tight">
-                {t('app.name').split('Exam')[0]}Exam<span className="text-primary-200">Pro</span>
+                SmartExam<span className="text-primary-200">Pro</span>
               </span>
             </div>
             <p className="text-primary-100 text-sm">
