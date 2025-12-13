@@ -27,17 +27,17 @@ export default function Login() {
   const [isRegister, setIsRegister] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
-  
+
   // Login state
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  
+
   // Register state
   const [fullName, setFullName] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [studentId, setStudentId] = useState('');
   const [role, setRole] = useState('student');
-  
+
   const { login, register } = useAuth();
   const navigate = useNavigate();
 
@@ -71,10 +71,10 @@ export default function Login() {
       navigate('/');
     } catch (error) {
       let errorMessage = "Đăng nhập thất bại";
-      
+
       // User-friendly error messages
       const errorMsg = error.message?.toLowerCase() || '';
-      
+
       if (errorMsg.includes('invalid login credentials') || errorMsg.includes('invalid password')) {
         errorMessage = 'Email hoặc mật khẩu không đúng. Vui lòng kiểm tra lại.';
       } else if (errorMsg.includes('email not confirmed')) {
@@ -88,7 +88,7 @@ export default function Login() {
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ email })
             });
-            
+
             if (confirmResponse.ok) {
               toast.info('Email đã được xác nhận. Vui lòng thử đăng nhập lại.');
               setLoading(false);
@@ -107,7 +107,7 @@ export default function Login() {
       } else {
         errorMessage = 'Đăng nhập thất bại. Vui lòng thử lại sau.';
       }
-      
+
       toast.error(errorMessage);
     } finally {
       setLoading(false);
@@ -120,10 +120,10 @@ export default function Login() {
     // Prevent double-click
     if (loading) return;
 
-    const validation = registerSchema.safeParse({ 
-      fullName, email, password, confirmPassword, studentId, role 
+    const validation = registerSchema.safeParse({
+      fullName, email, password, confirmPassword, studentId, role
     });
-    
+
     if (!validation.success) {
       toast.error(validation.error.errors[0].message);
       return;
@@ -138,7 +138,7 @@ export default function Login() {
     } catch (error) {
       const errorMsg = error.message?.toLowerCase() || '';
       let errorMessage;
-      
+
       // User-friendly error messages
       if (errorMsg.includes('already registered') || errorMsg.includes('đã được đăng ký') || errorMsg.includes('already exists')) {
         errorMessage = 'Email này đã được đăng ký. Vui lòng đăng nhập hoặc dùng email khác.';
@@ -153,7 +153,7 @@ export default function Login() {
       } else {
         errorMessage = 'Đăng ký thất bại. Vui lòng thử lại sau.';
       }
-      
+
       toast.error(errorMessage);
     } finally {
       setLoading(false);
@@ -209,17 +209,17 @@ export default function Login() {
                   className="space-y-5"
                 >
                   <h3 className="text-2xl font-bold text-center text-text-main mb-6">Đăng nhập</h3>
-                  
+
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
                     <div className="relative">
                       <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-                      <input 
-                        type="email" 
+                      <input
+                        type="email"
                         placeholder="student@example.com"
                         className="input pl-10"
-                        value={email} 
-                        onChange={(e) => setEmail(e.target.value)} 
+                        value={email}
+                        onChange={(e) => setEmail(e.target.value)}
                       />
                     </div>
                   </div>
@@ -228,12 +228,12 @@ export default function Login() {
                     <label className="block text-sm font-medium text-gray-700 mb-1">Mật khẩu</label>
                     <div className="relative">
                       <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-                      <input 
-                        type={showPassword ? 'text' : 'password'} 
+                      <input
+                        type={showPassword ? 'text' : 'password'}
                         placeholder="••••••••"
                         className="input pl-10 pr-10"
-                        value={password} 
-                        onChange={(e) => setPassword(e.target.value)} 
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
                       />
                       <button
                         type="button"
@@ -269,17 +269,17 @@ export default function Login() {
                   className="space-y-4"
                 >
                   <h3 className="text-2xl font-bold text-center text-text-main mb-4">Đăng ký</h3>
-                  
+
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Họ và tên</label>
                     <div className="relative">
                       <User className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-                      <input 
-                        type="text" 
+                      <input
+                        type="text"
                         placeholder="Nguyễn Văn A"
                         className="input pl-10"
-                        value={fullName} 
-                        onChange={(e) => setFullName(e.target.value)} 
+                        value={fullName}
+                        onChange={(e) => setFullName(e.target.value)}
                       />
                     </div>
                   </div>
@@ -288,12 +288,12 @@ export default function Login() {
                     <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
                     <div className="relative">
                       <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-                      <input 
-                        type="email" 
+                      <input
+                        type="email"
                         placeholder="student@example.com"
                         className="input pl-10"
-                        value={email} 
-                        onChange={(e) => setEmail(e.target.value)} 
+                        value={email}
+                        onChange={(e) => setEmail(e.target.value)}
                       />
                     </div>
                   </div>
@@ -303,12 +303,12 @@ export default function Login() {
                       <label className="block text-sm font-medium text-gray-700 mb-1">Mật khẩu</label>
                       <div className="relative">
                         <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-                        <input 
-                          type={showPassword ? 'text' : 'password'} 
+                        <input
+                          type={showPassword ? 'text' : 'password'}
                           placeholder="••••••"
                           className="input pl-10 text-sm"
-                          value={password} 
-                          onChange={(e) => setPassword(e.target.value)} 
+                          value={password}
+                          onChange={(e) => setPassword(e.target.value)}
                         />
                       </div>
                     </div>
@@ -316,12 +316,12 @@ export default function Login() {
                       <label className="block text-sm font-medium text-gray-700 mb-1">Xác nhận</label>
                       <div className="relative">
                         <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-                        <input 
-                          type={showPassword ? 'text' : 'password'} 
+                        <input
+                          type={showPassword ? 'text' : 'password'}
                           placeholder="••••••"
                           className="input pl-10 text-sm"
-                          value={confirmPassword} 
-                          onChange={(e) => setConfirmPassword(e.target.value)} 
+                          value={confirmPassword}
+                          onChange={(e) => setConfirmPassword(e.target.value)}
                         />
                       </div>
                     </div>
@@ -333,22 +333,20 @@ export default function Login() {
                       <button
                         type="button"
                         onClick={() => setRole('student')}
-                        className={`px-4 py-2.5 rounded-lg border-2 font-medium transition-all ${
-                          role === 'student'
+                        className={`px-4 py-2.5 rounded-lg border-2 font-medium transition-all ${role === 'student'
                             ? 'border-primary bg-primary-50 text-primary'
                             : 'border-gray-200 text-gray-600 hover:border-gray-300'
-                        }`}
+                          }`}
                       >
                         Thí sinh
                       </button>
                       <button
                         type="button"
                         onClick={() => setRole('instructor')}
-                        className={`px-4 py-2.5 rounded-lg border-2 font-medium transition-all ${
-                          role === 'instructor'
+                        className={`px-4 py-2.5 rounded-lg border-2 font-medium transition-all ${role === 'instructor'
                             ? 'border-primary bg-primary-50 text-primary'
                             : 'border-gray-200 text-gray-600 hover:border-gray-300'
-                        }`}
+                          }`}
                       >
                         Giảng viên
                       </button>
@@ -364,12 +362,12 @@ export default function Login() {
                       <label className="block text-sm font-medium text-gray-700 mb-1">Mã sinh viên (tuỳ chọn)</label>
                       <div className="relative">
                         <IdCard className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-                        <input 
-                          type="text" 
+                        <input
+                          type="text"
                           placeholder="21020001"
                           className="input pl-10"
-                          value={studentId} 
-                          onChange={(e) => setStudentId(e.target.value)} 
+                          value={studentId}
+                          onChange={(e) => setStudentId(e.target.value)}
                         />
                       </div>
                     </motion.div>
@@ -407,7 +405,7 @@ export default function Login() {
 
         {/* Footer */}
         <p className="text-center text-gray-500 text-xs mt-4">
-          © 2024 SmartExamPro. Nền tảng khảo thí thông minh.
+          © 2025 SmartExamPro. Nền tảng khảo thí thông minh.
         </p>
       </motion.div>
     </div>
