@@ -54,6 +54,9 @@ export default function Login() {
   const handleLogin = async (e) => {
     e.preventDefault();
 
+    // Prevent double-click
+    if (loading) return;
+
     const validation = loginSchema.safeParse({ email, password });
     if (!validation.success) {
       toast.error(validation.error.errors[0].message);
@@ -113,6 +116,9 @@ export default function Login() {
 
   const handleRegister = async (e) => {
     e.preventDefault();
+
+    // Prevent double-click
+    if (loading) return;
 
     const validation = registerSchema.safeParse({ 
       fullName, email, password, confirmPassword, studentId, role 

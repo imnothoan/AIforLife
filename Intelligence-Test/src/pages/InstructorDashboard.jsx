@@ -21,6 +21,11 @@ function isValidEmail(email) {
   return EMAIL_REGEX.test(email);
 }
 
+// Validate class code format (alphanumeric with hyphens)
+function isValidClassCode(code) {
+  return /^[A-Za-z0-9-_]+$/.test(code);
+}
+
 // ============================================
 // MODAL COMPONENTS
 // ============================================
@@ -94,17 +99,39 @@ function CreateExamForm({ classId, onClose, onSuccess }) {
   const handleSubmit = async (e) => {
     e.preventDefault();
     
-    // Validate
-    if (!formData.title.trim()) {
+    // Prevent double-click
+    if (loading) return;
+
+    const trimmedTitle = formData.title.trim();
+    
+    // Validate title
+    if (!trimmedTitle) {
       toast.error('Vui lòng nhập tên bài thi');
       return;
     }
+    if (trimmedTitle.length > 200) {
+      toast.error('Tên bài thi không được vượt quá 200 ký tự');
+      return;
+    }
+    
+    // Validate time
     if (!formData.start_time || !formData.end_time) {
       toast.error('Vui lòng chọn thời gian bắt đầu và kết thúc');
       return;
     }
-    if (new Date(formData.end_time) <= new Date(formData.start_time)) {
+    
+    const startTime = new Date(formData.start_time);
+    const endTime = new Date(formData.end_time);
+    
+    if (endTime <= startTime) {
       toast.error('Thời gian kết thúc phải sau thời gian bắt đầu');
+      return;
+    }
+    
+    // Validate duration
+    const durationMinutes = parseInt(formData.duration_minutes);
+    if (isNaN(durationMinutes) || durationMinutes < 5 || durationMinutes > 480) {
+      toast.error('Thời lượng thi phải từ 5 đến 480 phút');
       return;
     }
 
@@ -382,12 +409,21 @@ function AddStudentForm({ classId, onClose, onSuccess }) {
   const handleSubmit = async (e) => {
     e.preventDefault();
     
+    // Prevent double-click
+    if (loading) return;
+    
     const emails = mode === 'single' 
       ? [email.trim()]
       : bulkEmails.split('\n').map(e => e.trim()).filter(e => e);
 
     if (emails.length === 0) {
       toast.error('Vui lòng nhập email sinh viên');
+      return;
+    }
+
+    // Limit bulk emails to 100 at a time
+    if (emails.length > 100) {
+      toast.error('Chỉ có thể thêm tối đa 100 email một lần');
       return;
     }
 
@@ -560,8 +596,26 @@ function CreateClassForm({ onClose, onSuccess }) {
   const handleSubmit = async (e) => {
     e.preventDefault();
 
-    if (!formData.name.trim() || !formData.code.trim()) {
+    // Prevent double-click
+    if (loading) return;
+
+    const trimmedName = formData.name.trim();
+    const trimmedCode = formData.code.trim();
+
+    if (!trimmedName || !trimmedCode) {
       toast.error('Vui lòng nhập tên và mã lớp');
+      return;
+    }
+
+    // Validate class code format
+    if (!isValidClassCode(trimmedCode)) {
+      toast.error('Mã lớp chỉ được chứa chữ cái, số, dấu gạch ngang (-) và gạch dưới (_)');
+      return;
+    }
+
+    // Validate name length
+    if (trimmedName.length > 100) {
+      toast.error('Tên lớp không được vượt quá 100 ký tự');
       return;
     }
 
