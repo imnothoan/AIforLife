@@ -12,6 +12,16 @@ import {
 } from 'lucide-react';
 
 // ============================================
+// UTILITY FUNCTIONS
+// ============================================
+
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+function isValidEmail(email) {
+  return EMAIL_REGEX.test(email);
+}
+
+// ============================================
 // MODAL COMPONENTS
 // ============================================
 
@@ -102,12 +112,14 @@ function CreateExamForm({ classId, onClose, onSuccess }) {
     
     const createExam = async (attempt = 0) => {
       const MAX_RETRIES = 3;
+      const TIMEOUT_MS = 15000;
       try {
-        // Add timeout to prevent infinite loading
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 15000);
+        // Use Promise.race for timeout since Supabase doesn't support AbortController
+        const timeoutPromise = new Promise((_, reject) => 
+          setTimeout(() => reject(new Error('REQUEST_TIMEOUT')), TIMEOUT_MS)
+        );
 
-        const { data, error } = await supabase
+        const supabasePromise = supabase
           .from('exams')
           .insert({
             ...formData,
@@ -118,7 +130,7 @@ function CreateExamForm({ classId, onClose, onSuccess }) {
           .select()
           .single();
 
-        clearTimeout(timeoutId);
+        const { data, error } = await Promise.race([supabasePromise, timeoutPromise]);
 
         if (error) throw error;
 
@@ -128,7 +140,7 @@ function CreateExamForm({ classId, onClose, onSuccess }) {
       } catch (error) {
         console.error('Create exam error:', error);
         
-        if (error.name === 'AbortError' || error.message?.includes('timeout')) {
+        if (error.message === 'REQUEST_TIMEOUT') {
           if (attempt < MAX_RETRIES) {
             toast.info(`Đang thử lại... (${attempt + 1}/${MAX_RETRIES})`);
             await new Promise(resolve => setTimeout(resolve, 1000));
@@ -379,9 +391,8 @@ function AddStudentForm({ classId, onClose, onSuccess }) {
       return;
     }
 
-    // Validate email format
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    const invalidEmails = emails.filter(e => !emailRegex.test(e));
+    // Validate email format using utility function
+    const invalidEmails = emails.filter(e => !isValidEmail(e));
     if (invalidEmails.length > 0) {
       toast.error(`Email không hợp lệ: ${invalidEmails.slice(0, 3).join(', ')}${invalidEmails.length > 3 ? '...' : ''}`);
       return;
@@ -558,11 +569,13 @@ function CreateClassForm({ onClose, onSuccess }) {
     
     const createClass = async (attempt = 0) => {
       try {
-        // Add timeout to prevent infinite loading
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 15000); // 15s timeout
+        // Use Promise.race for timeout since Supabase doesn't support AbortController
+        const TIMEOUT_MS = 15000;
+        const timeoutPromise = new Promise((_, reject) => 
+          setTimeout(() => reject(new Error('REQUEST_TIMEOUT')), TIMEOUT_MS)
+        );
 
-        const { data, error } = await supabase
+        const supabasePromise = supabase
           .from('classes')
           .insert({
             ...formData,
@@ -572,7 +585,7 @@ function CreateClassForm({ onClose, onSuccess }) {
           .select()
           .single();
 
-        clearTimeout(timeoutId);
+        const { data, error } = await Promise.race([supabasePromise, timeoutPromise]);
 
         if (error) throw error;
 
@@ -583,7 +596,7 @@ function CreateClassForm({ onClose, onSuccess }) {
         console.error('Create class error:', error);
         
         // Handle specific error cases with user-friendly messages
-        if (error.name === 'AbortError' || error.message?.includes('timeout')) {
+        if (error.message === 'REQUEST_TIMEOUT') {
           if (attempt < MAX_RETRIES) {
             setRetryCount(attempt + 1);
             toast.info(`Đang thử lại... (${attempt + 1}/${MAX_RETRIES})`);
