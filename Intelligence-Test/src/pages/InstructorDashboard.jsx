@@ -12,6 +12,21 @@ import {
 } from 'lucide-react';
 
 // ============================================
+// UTILITY FUNCTIONS
+// ============================================
+
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+function isValidEmail(email) {
+  return EMAIL_REGEX.test(email);
+}
+
+// Validate class code format (alphanumeric with hyphens)
+function isValidClassCode(code) {
+  return /^[A-Za-z0-9-_]+$/.test(code);
+}
+
+// ============================================
 // MODAL COMPONENTS
 // ============================================
 
@@ -84,44 +99,94 @@ function CreateExamForm({ classId, onClose, onSuccess }) {
   const handleSubmit = async (e) => {
     e.preventDefault();
     
-    // Validate
-    if (!formData.title.trim()) {
+    // Prevent double-click
+    if (loading) return;
+
+    const trimmedTitle = formData.title.trim();
+    
+    // Validate title
+    if (!trimmedTitle) {
       toast.error('Vui lòng nhập tên bài thi');
       return;
     }
+    if (trimmedTitle.length > 200) {
+      toast.error('Tên bài thi không được vượt quá 200 ký tự');
+      return;
+    }
+    
+    // Validate time
     if (!formData.start_time || !formData.end_time) {
       toast.error('Vui lòng chọn thời gian bắt đầu và kết thúc');
       return;
     }
-    if (new Date(formData.end_time) <= new Date(formData.start_time)) {
+    
+    const startTime = new Date(formData.start_time);
+    const endTime = new Date(formData.end_time);
+    
+    if (endTime <= startTime) {
       toast.error('Thời gian kết thúc phải sau thời gian bắt đầu');
+      return;
+    }
+    
+    // Validate duration
+    const durationMinutes = parseInt(formData.duration_minutes);
+    if (isNaN(durationMinutes) || durationMinutes < 5 || durationMinutes > 480) {
+      toast.error('Thời lượng thi phải từ 5 đến 480 phút');
       return;
     }
 
     setLoading(true);
-    try {
-      const { data, error } = await supabase
-        .from('exams')
-        .insert({
-          ...formData,
-          class_id: classId,
-          created_by: user.id,
-          status: 'draft'
-        })
-        .select()
-        .single();
+    
+    const createExam = async (attempt = 0) => {
+      const MAX_RETRIES = 3;
+      const TIMEOUT_MS = 15000;
+      try {
+        // Use Promise.race for timeout since Supabase doesn't support AbortController
+        const timeoutPromise = new Promise((_, reject) => 
+          setTimeout(() => reject(new Error('REQUEST_TIMEOUT')), TIMEOUT_MS)
+        );
 
-      if (error) throw error;
+        const supabasePromise = supabase
+          .from('exams')
+          .insert({
+            ...formData,
+            class_id: classId,
+            created_by: user.id,
+            status: 'draft'
+          })
+          .select()
+          .single();
 
-      toast.success('Tạo bài thi thành công!');
-      onSuccess?.(data);
-      onClose();
-    } catch (error) {
-      console.error('Create exam error:', error);
-      toast.error(error.message || 'Có lỗi xảy ra khi tạo bài thi');
-    } finally {
-      setLoading(false);
-    }
+        const { data, error } = await Promise.race([supabasePromise, timeoutPromise]);
+
+        if (error) throw error;
+
+        toast.success('Tạo bài thi thành công!');
+        onSuccess?.(data);
+        onClose();
+      } catch (error) {
+        console.error('Create exam error:', error);
+        
+        if (error.message === 'REQUEST_TIMEOUT') {
+          if (attempt < MAX_RETRIES) {
+            toast.info(`Đang thử lại... (${attempt + 1}/${MAX_RETRIES})`);
+            await new Promise(resolve => setTimeout(resolve, 1000));
+            return createExam(attempt + 1);
+          }
+          toast.error('Kết nối chậm. Vui lòng kiểm tra mạng và thử lại.');
+        } else if (error.code === '42501' || error.message?.includes('permission')) {
+          toast.error('Bạn không có quyền tạo bài thi. Vui lòng kiểm tra lại.');
+        } else if (error.message?.includes('network') || error.message?.includes('fetch')) {
+          toast.error('Lỗi kết nối mạng. Vui lòng kiểm tra và thử lại.');
+        } else {
+          toast.error('Không thể tạo bài thi. Vui lòng thử lại sau.');
+        }
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    await createExam(0);
   };
 
   return (
@@ -344,6 +409,9 @@ function AddStudentForm({ classId, onClose, onSuccess }) {
   const handleSubmit = async (e) => {
     e.preventDefault();
     
+    // Prevent double-click
+    if (loading) return;
+    
     const emails = mode === 'single' 
       ? [email.trim()]
       : bulkEmails.split('\n').map(e => e.trim()).filter(e => e);
@@ -353,13 +421,27 @@ function AddStudentForm({ classId, onClose, onSuccess }) {
       return;
     }
 
+    // Limit bulk emails to 100 at a time
+    if (emails.length > 100) {
+      toast.error('Chỉ có thể thêm tối đa 100 email một lần');
+      return;
+    }
+
+    // Validate email format using utility function
+    const invalidEmails = emails.filter(e => !isValidEmail(e));
+    if (invalidEmails.length > 0) {
+      toast.error(`Email không hợp lệ: ${invalidEmails.slice(0, 3).join(', ')}${invalidEmails.length > 3 ? '...' : ''}`);
+      return;
+    }
+
     setLoading(true);
     let successCount = 0;
     let errorCount = 0;
+    const errorMessages = [];
 
     for (const studentEmail of emails) {
       try {
-        // Find user by email
+        // Find user by email with timeout
         const { data: profile, error: profileError } = await supabase
           .from('profiles')
           .select('id')
@@ -367,7 +449,7 @@ function AddStudentForm({ classId, onClose, onSuccess }) {
           .single();
 
         if (profileError || !profile) {
-          toast.warning(`Không tìm thấy tài khoản: ${studentEmail}`);
+          errorMessages.push(`${studentEmail}: Chưa đăng ký tài khoản`);
           errorCount++;
           continue;
         }
@@ -383,9 +465,9 @@ function AddStudentForm({ classId, onClose, onSuccess }) {
 
         if (enrollError) {
           if (enrollError.code === '23505') {
-            toast.warning(`Sinh viên đã có trong lớp: ${studentEmail}`);
+            errorMessages.push(`${studentEmail}: Đã có trong lớp`);
           } else {
-            toast.error(`Lỗi thêm ${studentEmail}: ${enrollError.message}`);
+            errorMessages.push(`${studentEmail}: Lỗi thêm`);
           }
           errorCount++;
         } else {
@@ -393,6 +475,7 @@ function AddStudentForm({ classId, onClose, onSuccess }) {
         }
       } catch (err) {
         console.error('Add student error:', err);
+        errorMessages.push(`${studentEmail}: Lỗi kết nối`);
         errorCount++;
       }
     }
@@ -402,7 +485,17 @@ function AddStudentForm({ classId, onClose, onSuccess }) {
     if (successCount > 0) {
       toast.success(`Đã thêm ${successCount} sinh viên vào lớp!`);
       onSuccess?.();
-      if (errorCount === 0) onClose();
+    }
+    
+    if (errorCount > 0) {
+      // Show first 3 error messages
+      const displayErrors = errorMessages.slice(0, 3).join('\n');
+      const moreErrors = errorMessages.length > 3 ? `\n... và ${errorMessages.length - 3} lỗi khác` : '';
+      toast.warning(`Một số sinh viên không thể thêm:\n${displayErrors}${moreErrors}`, { autoClose: 8000 });
+    }
+
+    if (successCount > 0 && errorCount === 0) {
+      onClose();
     }
   };
 
@@ -485,6 +578,8 @@ function AddStudentForm({ classId, onClose, onSuccess }) {
 function CreateClassForm({ onClose, onSuccess }) {
   const { user } = useAuth();
   const [loading, setLoading] = useState(false);
+  const [retryCount, setRetryCount] = useState(0);
+  const MAX_RETRIES = 3;
   const [formData, setFormData] = useState({
     name: '',
     code: '',
@@ -501,38 +596,84 @@ function CreateClassForm({ onClose, onSuccess }) {
   const handleSubmit = async (e) => {
     e.preventDefault();
 
-    if (!formData.name.trim() || !formData.code.trim()) {
+    // Prevent double-click
+    if (loading) return;
+
+    const trimmedName = formData.name.trim();
+    const trimmedCode = formData.code.trim();
+
+    if (!trimmedName || !trimmedCode) {
       toast.error('Vui lòng nhập tên và mã lớp');
       return;
     }
 
-    setLoading(true);
-    try {
-      const { data, error } = await supabase
-        .from('classes')
-        .insert({
-          ...formData,
-          instructor_id: user.id,
-          is_active: true
-        })
-        .select()
-        .single();
-
-      if (error) throw error;
-
-      toast.success('Tạo lớp học thành công!');
-      onSuccess?.(data);
-      onClose();
-    } catch (error) {
-      console.error('Create class error:', error);
-      if (error.code === '23505') {
-        toast.error('Mã lớp đã tồn tại');
-      } else {
-        toast.error(error.message || 'Có lỗi xảy ra');
-      }
-    } finally {
-      setLoading(false);
+    // Validate class code format
+    if (!isValidClassCode(trimmedCode)) {
+      toast.error('Mã lớp chỉ được chứa chữ cái, số, dấu gạch ngang (-) và gạch dưới (_)');
+      return;
     }
+
+    // Validate name length
+    if (trimmedName.length > 100) {
+      toast.error('Tên lớp không được vượt quá 100 ký tự');
+      return;
+    }
+
+    setLoading(true);
+    
+    const createClass = async (attempt = 0) => {
+      try {
+        // Use Promise.race for timeout since Supabase doesn't support AbortController
+        const TIMEOUT_MS = 15000;
+        const timeoutPromise = new Promise((_, reject) => 
+          setTimeout(() => reject(new Error('REQUEST_TIMEOUT')), TIMEOUT_MS)
+        );
+
+        const supabasePromise = supabase
+          .from('classes')
+          .insert({
+            ...formData,
+            instructor_id: user.id,
+            is_active: true
+          })
+          .select()
+          .single();
+
+        const { data, error } = await Promise.race([supabasePromise, timeoutPromise]);
+
+        if (error) throw error;
+
+        toast.success('Tạo lớp học thành công!');
+        onSuccess?.(data);
+        onClose();
+      } catch (error) {
+        console.error('Create class error:', error);
+        
+        // Handle specific error cases with user-friendly messages
+        if (error.message === 'REQUEST_TIMEOUT') {
+          if (attempt < MAX_RETRIES) {
+            setRetryCount(attempt + 1);
+            toast.info(`Đang thử lại... (${attempt + 1}/${MAX_RETRIES})`);
+            await new Promise(resolve => setTimeout(resolve, 1000)); // Wait 1s before retry
+            return createClass(attempt + 1);
+          }
+          toast.error('Kết nối chậm. Vui lòng kiểm tra mạng và thử lại.');
+        } else if (error.code === '23505') {
+          toast.error('Mã lớp này đã tồn tại. Vui lòng chọn mã khác.');
+        } else if (error.code === '42501' || error.message?.includes('permission')) {
+          toast.error('Bạn không có quyền tạo lớp học. Vui lòng liên hệ quản trị viên.');
+        } else if (error.message?.includes('network') || error.message?.includes('fetch')) {
+          toast.error('Lỗi kết nối mạng. Vui lòng kiểm tra và thử lại.');
+        } else {
+          toast.error('Không thể tạo lớp học. Vui lòng thử lại sau.');
+        }
+        setRetryCount(0);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    await createClass(0);
   };
 
   return (

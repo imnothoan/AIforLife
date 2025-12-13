@@ -75,7 +75,15 @@ export default function Dashboard() {
         setExams(enrichedExams);
       } catch (err) {
         console.error('Load exams error:', err);
-        toast.error('Có lỗi xảy ra khi tải dữ liệu');
+        // User-friendly error messages
+        const errorMsg = err.message?.toLowerCase() || '';
+        if (errorMsg.includes('network') || errorMsg.includes('fetch')) {
+          toast.error('Lỗi kết nối mạng. Vui lòng kiểm tra internet.');
+        } else if (errorMsg.includes('permission') || errorMsg.includes('unauthorized')) {
+          toast.error('Phiên đăng nhập hết hạn. Vui lòng đăng nhập lại.');
+        } else {
+          toast.error('Không thể tải danh sách bài thi. Vui lòng thử lại.');
+        }
       } finally {
         setLoading(false);
       }
