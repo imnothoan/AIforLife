@@ -1,10 +1,12 @@
 import React, { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
+import { useLanguage } from '../context/LanguageContext';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import { motion, AnimatePresence } from 'framer-motion';
 import { z } from 'zod';
 import { FileText, Eye, EyeOff, Mail, Lock, User, IdCard, Loader2 } from 'lucide-react';
+import LanguageSwitcher from '../components/LanguageSwitcher';
 
 const loginSchema = z.object({
   email: z.string().email({ message: "Email không hợp lệ" }),
@@ -39,6 +41,7 @@ export default function Login() {
   const [role, setRole] = useState('student');
 
   const { login, register } = useAuth();
+  const { t } = useLanguage();
   const navigate = useNavigate();
 
   const resetForm = () => {
@@ -67,18 +70,18 @@ export default function Login() {
     try {
       const { error } = await login(email, password);
       if (error) throw error;
-      toast.success("Đăng nhập thành công!");
+      toast.success(t('auth.loginSuccess'));
       navigate('/');
     } catch (error) {
-      let errorMessage = "Đăng nhập thất bại";
+      let errorMessage = t('auth.loginFailed');
 
       // User-friendly error messages
       const errorMsg = error.message?.toLowerCase() || '';
 
       if (errorMsg.includes('invalid login credentials') || errorMsg.includes('invalid password')) {
-        errorMessage = 'Email hoặc mật khẩu không đúng. Vui lòng kiểm tra lại.';
+        errorMessage = t('auth.invalidCredentials');
       } else if (errorMsg.includes('email not confirmed')) {
-        errorMessage = 'Email chưa được xác nhận. Vui lòng kiểm tra hộp thư để xác nhận.';
+        errorMessage = t('auth.emailNotConfirmed');
         // Try to auto-confirm email via backend (only if API configured)
         const apiUrl = import.meta.env.VITE_API_URL;
         if (apiUrl) {
@@ -90,7 +93,7 @@ export default function Login() {
             });
 
             if (confirmResponse.ok) {
-              toast.info('Email đã được xác nhận. Vui lòng thử đăng nhập lại.');
+              toast.info(t('auth.loginNow'));
               setLoading(false);
               return;
             }
@@ -99,13 +102,13 @@ export default function Login() {
           }
         }
       } else if (errorMsg.includes('too many requests') || errorMsg.includes('rate limit')) {
-        errorMessage = 'Quá nhiều yêu cầu. Vui lòng đợi 1 phút và thử lại.';
+        errorMessage = t('auth.tooManyRequests');
       } else if (errorMsg.includes('network') || errorMsg.includes('fetch') || errorMsg.includes('failed to fetch')) {
-        errorMessage = 'Lỗi kết nối mạng. Vui lòng kiểm tra internet và thử lại.';
+        errorMessage = t('auth.networkError');
       } else if (errorMsg.includes('user not found')) {
-        errorMessage = 'Tài khoản không tồn tại. Vui lòng đăng ký mới.';
+        errorMessage = t('auth.registerNow');
       } else {
-        errorMessage = 'Đăng nhập thất bại. Vui lòng thử lại sau.';
+        errorMessage = t('auth.loginFailed');
       }
 
       toast.error(errorMessage);
@@ -132,7 +135,7 @@ export default function Login() {
     setLoading(true);
     try {
       await register(email, password, fullName, role, studentId || null);
-      toast.success("Đăng ký thành công! Bạn có thể đăng nhập ngay.");
+      toast.success(t('auth.registerSuccess'));
       setIsRegister(false);
       resetForm();
     } catch (error) {
@@ -141,17 +144,17 @@ export default function Login() {
 
       // User-friendly error messages
       if (errorMsg.includes('already registered') || errorMsg.includes('đã được đăng ký') || errorMsg.includes('already exists')) {
-        errorMessage = 'Email này đã được đăng ký. Vui lòng đăng nhập hoặc dùng email khác.';
+        errorMessage = t('auth.emailExists');
       } else if (errorMsg.includes('invalid email') || errorMsg.includes('email')) {
-        errorMessage = 'Email không hợp lệ. Vui lòng kiểm tra lại.';
+        errorMessage = t('validation.invalidEmail');
       } else if (errorMsg.includes('password') && errorMsg.includes('weak')) {
-        errorMessage = 'Mật khẩu quá yếu. Vui lòng chọn mật khẩu mạnh hơn.';
+        errorMessage = t('validation.minLength', { min: 6 });
       } else if (errorMsg.includes('network') || errorMsg.includes('fetch') || errorMsg.includes('failed to fetch')) {
-        errorMessage = 'Lỗi kết nối mạng. Vui lòng kiểm tra internet và thử lại.';
+        errorMessage = t('auth.networkError');
       } else if (errorMsg.includes('too many requests') || errorMsg.includes('rate limit')) {
-        errorMessage = 'Quá nhiều yêu cầu. Vui lòng đợi 1 phút và thử lại.';
+        errorMessage = t('auth.tooManyRequests');
       } else {
-        errorMessage = 'Đăng ký thất bại. Vui lòng thử lại sau.';
+        errorMessage = t('auth.registerFailed');
       }
 
       toast.error(errorMessage);
@@ -167,6 +170,11 @@ export default function Login() {
 
   return (
     <div className="flex items-center justify-center min-h-screen bg-gradient-to-br from-primary-50 via-background to-primary-100">
+      {/* Language Switcher */}
+      <div className="absolute top-4 right-4 z-20">
+        <LanguageSwitcher compact />
+      </div>
+      
       {/* Background decoration */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
         <div className="absolute -top-40 -right-40 w-80 h-80 bg-primary-200 rounded-full mix-blend-multiply filter blur-xl opacity-70 animate-pulse" />
@@ -187,11 +195,11 @@ export default function Login() {
                 <FileText className="text-white w-6 h-6" />
               </div>
               <span className="text-2xl font-bold text-white tracking-tight">
-                SmartExam<span className="text-primary-200">Pro</span>
+                {t('app.name').split('Exam')[0]}Exam<span className="text-primary-200">Pro</span>
               </span>
             </div>
             <p className="text-primary-100 text-sm">
-              Nền tảng khảo thí thông minh
+              {t('app.subtitle')}
             </p>
           </div>
 
@@ -208,10 +216,10 @@ export default function Login() {
                   onSubmit={handleLogin}
                   className="space-y-5"
                 >
-                  <h3 className="text-2xl font-bold text-center text-text-main mb-6">Đăng nhập</h3>
+                  <h3 className="text-2xl font-bold text-center text-text-main mb-6">{t('auth.login')}</h3>
 
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">{t('auth.email')}</label>
                     <div className="relative">
                       <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
                       <input
@@ -225,7 +233,7 @@ export default function Login() {
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Mật khẩu</label>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">{t('auth.password')}</label>
                     <div className="relative">
                       <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
                       <input
@@ -253,9 +261,9 @@ export default function Login() {
                     {loading ? (
                       <span className="flex items-center justify-center">
                         <Loader2 className="animate-spin -ml-1 mr-2 h-5 w-5" />
-                        Đang xử lý...
+                        {t('auth.processing')}
                       </span>
-                    ) : 'Đăng nhập'}
+                    ) : t('auth.login')}
                   </button>
                 </motion.form>
               ) : (
@@ -268,10 +276,10 @@ export default function Login() {
                   onSubmit={handleRegister}
                   className="space-y-4"
                 >
-                  <h3 className="text-2xl font-bold text-center text-text-main mb-4">Đăng ký</h3>
+                  <h3 className="text-2xl font-bold text-center text-text-main mb-4">{t('auth.register')}</h3>
 
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Họ và tên</label>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">{t('auth.fullName')}</label>
                     <div className="relative">
                       <User className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
                       <input
@@ -285,7 +293,7 @@ export default function Login() {
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">{t('auth.email')}</label>
                     <div className="relative">
                       <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
                       <input
@@ -300,7 +308,7 @@ export default function Login() {
 
                   <div className="grid grid-cols-2 gap-3">
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Mật khẩu</label>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">{t('auth.password')}</label>
                       <div className="relative">
                         <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
                         <input
@@ -313,7 +321,7 @@ export default function Login() {
                       </div>
                     </div>
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Xác nhận</label>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">{t('auth.confirmPassword')}</label>
                       <div className="relative">
                         <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
                         <input
@@ -328,7 +336,7 @@ export default function Login() {
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Vai trò</label>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">{t('auth.role')}</label>
                     <div className="grid grid-cols-2 gap-3">
                       <button
                         type="button"
@@ -338,7 +346,7 @@ export default function Login() {
                             : 'border-gray-200 text-gray-600 hover:border-gray-300'
                           }`}
                       >
-                        Thí sinh
+                        {t('auth.student')}
                       </button>
                       <button
                         type="button"
@@ -348,7 +356,7 @@ export default function Login() {
                             : 'border-gray-200 text-gray-600 hover:border-gray-300'
                           }`}
                       >
-                        Giảng viên
+                        {t('auth.instructor')}
                       </button>
                     </div>
                   </div>
@@ -359,7 +367,7 @@ export default function Login() {
                       animate={{ opacity: 1, height: 'auto' }}
                       exit={{ opacity: 0, height: 0 }}
                     >
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Mã sinh viên (tuỳ chọn)</label>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">{t('auth.studentId')} ({t('auth.optional')})</label>
                       <div className="relative">
                         <IdCard className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
                         <input
@@ -381,9 +389,9 @@ export default function Login() {
                     {loading ? (
                       <span className="flex items-center justify-center">
                         <Loader2 className="animate-spin -ml-1 mr-2 h-5 w-5" />
-                        Đang xử lý...
+                        {t('auth.processing')}
                       </span>
-                    ) : 'Đăng ký'}
+                    ) : t('auth.register')}
                   </button>
                 </motion.form>
               )}
@@ -391,13 +399,13 @@ export default function Login() {
 
             {/* Toggle */}
             <div className="mt-6 text-center text-sm text-gray-600">
-              {isRegister ? 'Đã có tài khoản?' : 'Chưa có tài khoản?'}{' '}
+              {isRegister ? t('auth.hasAccount') : t('auth.noAccount')}{' '}
               <button
                 type="button"
                 onClick={toggleMode}
                 className="text-primary font-semibold hover:text-primary-700 transition-colors"
               >
-                {isRegister ? 'Đăng nhập ngay' : 'Đăng ký ngay'}
+                {isRegister ? t('auth.loginNow') : t('auth.registerNow')}
               </button>
             </div>
           </div>
@@ -405,7 +413,7 @@ export default function Login() {
 
         {/* Footer */}
         <p className="text-center text-gray-500 text-xs mt-4">
-          © 2025 SmartExamPro. Nền tảng khảo thí thông minh.
+          © 2025 {t('app.name')}. {t('app.subtitle')}.
         </p>
       </motion.div>
     </div>

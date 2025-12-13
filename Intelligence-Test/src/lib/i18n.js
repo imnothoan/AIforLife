@@ -1,0 +1,600 @@
+// ================================================================
+// INTERNATIONALIZATION (i18n) SYSTEM
+// Supports: Vietnamese (vi), English (en)
+// ================================================================
+
+const translations = {
+  vi: {
+    // App branding
+    'app.name': 'SmartExamPro',
+    'app.subtitle': 'Nền tảng khảo thí thông minh',
+    
+    // Common
+    'common.loading': 'Đang tải...',
+    'common.save': 'Lưu',
+    'common.cancel': 'Hủy',
+    'common.delete': 'Xóa',
+    'common.edit': 'Sửa',
+    'common.create': 'Tạo',
+    'common.search': 'Tìm kiếm',
+    'common.filter': 'Lọc',
+    'common.confirm': 'Xác nhận',
+    'common.yes': 'Có',
+    'common.no': 'Không',
+    'common.error': 'Lỗi',
+    'common.success': 'Thành công',
+    'common.warning': 'Cảnh báo',
+    'common.info': 'Thông tin',
+    'common.close': 'Đóng',
+    'common.back': 'Quay lại',
+    'common.next': 'Tiếp theo',
+    'common.previous': 'Trước',
+    'common.submit': 'Nộp',
+    'common.download': 'Tải xuống',
+    'common.upload': 'Tải lên',
+    
+    // Auth
+    'auth.login': 'Đăng nhập',
+    'auth.logout': 'Đăng xuất',
+    'auth.register': 'Đăng ký',
+    'auth.email': 'Email',
+    'auth.password': 'Mật khẩu',
+    'auth.confirmPassword': 'Xác nhận mật khẩu',
+    'auth.fullName': 'Họ và tên',
+    'auth.studentId': 'Mã sinh viên',
+    'auth.role': 'Vai trò',
+    'auth.student': 'Thí sinh',
+    'auth.instructor': 'Giảng viên',
+    'auth.admin': 'Quản trị viên',
+    'auth.loginSuccess': 'Đăng nhập thành công!',
+    'auth.loginFailed': 'Đăng nhập thất bại',
+    'auth.registerSuccess': 'Đăng ký thành công! Bạn có thể đăng nhập ngay.',
+    'auth.registerFailed': 'Đăng ký thất bại',
+    'auth.invalidCredentials': 'Email hoặc mật khẩu không đúng. Vui lòng kiểm tra lại.',
+    'auth.emailNotConfirmed': 'Email chưa được xác nhận. Vui lòng kiểm tra hộp thư.',
+    'auth.emailExists': 'Email này đã được đăng ký. Vui lòng đăng nhập hoặc dùng email khác.',
+    'auth.tooManyRequests': 'Quá nhiều yêu cầu. Vui lòng đợi 1 phút và thử lại.',
+    'auth.networkError': 'Lỗi kết nối mạng. Vui lòng kiểm tra internet và thử lại.',
+    'auth.noAccount': 'Chưa có tài khoản?',
+    'auth.hasAccount': 'Đã có tài khoản?',
+    'auth.registerNow': 'Đăng ký ngay',
+    'auth.loginNow': 'Đăng nhập ngay',
+    'auth.optional': 'tuỳ chọn',
+    'auth.processing': 'Đang xử lý...',
+    
+    // Dashboard - Student
+    'dashboard.hello': 'Xin chào',
+    'dashboard.selectExam': 'Chọn bài thi bên dưới để bắt đầu. Hãy đảm bảo đường truyền mạng ổn định.',
+    'dashboard.noExams': 'Chưa có bài thi nào',
+    'dashboard.noExamsDesc': 'Bạn chưa được đăng ký vào lớp học nào hoặc chưa có bài thi sẵn sàng.',
+    'dashboard.demoExam': 'Bài thi mẫu để thử nghiệm:',
+    'dashboard.enterExam': 'Vào phòng thi',
+    'dashboard.reviewExam': 'Xem lại bài',
+    'dashboard.notStarted': 'Chưa đến giờ',
+    'dashboard.expired': 'Đã hết hạn',
+    'dashboard.notAvailable': 'Không khả dụng',
+    
+    // Exam Status
+    'exam.status.completed': 'Đã hoàn thành',
+    'exam.status.upcoming': 'Sắp diễn ra',
+    'exam.status.ended': 'Đã kết thúc',
+    'exam.status.active': 'Đang diễn ra',
+    'exam.status.draft': 'Nháp',
+    'exam.status.published': 'Đã công bố',
+    
+    // Exam
+    'exam.course': 'Môn',
+    'exam.code': 'Mã môn',
+    'exam.duration': 'Thời gian',
+    'exam.minutes': 'phút',
+    'exam.score': 'Điểm số',
+    'exam.startTime': 'Bắt đầu',
+    'exam.endTime': 'Kết thúc',
+    'exam.passing': 'Đạt',
+    'exam.failed': 'Không đạt',
+    'exam.question': 'Câu',
+    'exam.of': '/',
+    'exam.points': 'điểm',
+    'exam.flagged': 'Đã gắn cờ',
+    'exam.flag': 'Gắn cờ',
+    'exam.notes': 'Ghi chú nháp',
+    'exam.notesPlaceholder': 'Ghi chú cá nhân cho câu hỏi này... (chỉ bạn thấy)',
+    'exam.previousQuestion': 'Câu trước',
+    'exam.nextQuestion': 'Câu sau',
+    'exam.submitExam': 'Nộp bài',
+    'exam.submitConfirm': 'Bạn có chắc chắn muốn nộp bài?',
+    'exam.unansweredWarning': 'câu chưa trả lời!',
+    'exam.flaggedWarning': 'câu đang gắn cờ!',
+    'exam.submitSuccess': 'Nộp bài thành công!',
+    'exam.submitError': 'Có lỗi xảy ra khi nộp bài. Vui lòng thử lại.',
+    'exam.timeUp': 'Hết giờ! Bài thi đang được nộp tự động...',
+    'exam.timeWarning5': 'Còn 5 phút! Hãy kiểm tra lại bài làm.',
+    'exam.timeWarning1': 'Còn 1 phút!',
+    'exam.answered': 'Đã trả lời',
+    'exam.unanswered': 'Chưa trả lời',
+    'exam.questionList': 'Danh sách câu hỏi',
+    
+    // Exam Rules
+    'exam.rules.title': 'Quy định phòng thi',
+    'exam.rules.camera': 'Bật Camera & Micro trong suốt thời gian thi',
+    'exam.rules.fullscreen': 'Sử dụng chế độ Toàn màn hình (Fullscreen)',
+    'exam.rules.noMultiScreen': 'Nghiêm cấm sử dụng màn hình phụ (HDMI/Projector)',
+    'exam.rules.noTabSwitch': 'Nghiêm cấm rời khỏi tab thi (Alt+Tab)',
+    'exam.rules.noRemoteDesktop': 'Nghiêm cấm sử dụng TeamViewer, AnyDesk, UltraViewer...',
+    'exam.rules.agree': 'Đồng ý & Bắt đầu làm bài',
+    'exam.rules.cameraCheck': 'Kiểm tra Camera:',
+    
+    // Anti-cheat alerts
+    'anticheat.multiScreen': 'PHÁT HIỆN 2 MÀN HÌNH! Vui lòng ngắt kết nối màn hình phụ để thi.',
+    'anticheat.remoteDesktop': 'PHÁT HIỆN PHẦN MỀM ĐIỀU KHIỂN TỪ XA',
+    'anticheat.tabSwitch': 'CẢNH BÁO: Phát hiện rời tab {count} lần! Hành vi này được ghi lại.',
+    'anticheat.fullscreenExit': 'CẢNH BÁO: Bạn đã thoát toàn màn hình {count} lần!',
+    'anticheat.fullscreenRequired': 'Bạn phải bật chế độ Toàn màn hình để thi!',
+    'anticheat.fullscreenReturn': 'Quay lại bài thi',
+    'anticheat.violation': 'CẢNH BÁO VI PHẠM',
+    'anticheat.returnFullscreen': 'Vui lòng quay lại chế độ toàn màn hình để tiếp tục!',
+    'anticheat.keyboardBlocked': 'Phím tắt bị vô hiệu hóa trong phòng thi!',
+    'anticheat.rightClickBlocked': 'Click chuột phải bị vô hiệu hóa!',
+    'anticheat.networkOffline': 'MẤT KẾT NỐI MẠNG - Bài thi sẽ không được lưu!',
+    'anticheat.networkOnline': 'Đã kết nối lại mạng.',
+    'anticheat.cameraAccess': 'Không thể truy cập camera. Vui lòng cấp quyền camera để thi.',
+    
+    // AI Proctoring
+    'ai.loading': 'Đang tải model AI...',
+    'ai.loadingYolo': 'Đang tải YOLO...',
+    'ai.ready': 'Hệ thống giám sát đã sẵn sàng.',
+    'ai.faceOnly': 'Giám sát khuôn mặt đang hoạt động.',
+    'ai.error': 'Lỗi khởi tạo AI - Sử dụng chế độ cơ bản',
+    'ai.monitoring': 'Đang giám sát...',
+    'ai.lookStraight': 'Vui lòng nhìn thẳng vào màn hình.',
+    'ai.noFace': 'Không phát hiện khuôn mặt',
+    'ai.lookRight': 'Nhìn sang phải',
+    'ai.lookLeft': 'Nhìn sang trái',
+    'ai.lookDown': 'Cúi đầu xuống',
+    'ai.lookUp': 'Ngẩng đầu lên',
+    'ai.phoneDetected': 'Phát hiện điện thoại!',
+    'ai.materialDetected': 'Phát hiện tài liệu!',
+    'ai.headphonesDetected': 'Phát hiện tai nghe!',
+    
+    // Proctoring stats
+    'proctoring.camera': 'Camera Giám Sát',
+    'proctoring.recording': 'REC',
+    'proctoring.aiAlerts': 'AI Phát hiện',
+    'proctoring.tabSwitches': 'Rời tab',
+    'proctoring.fullscreenExits': 'Thoát fullscreen',
+    'proctoring.gazeAway': 'Nhìn ra ngoài',
+    
+    // Instructor Dashboard
+    'instructor.title': 'Instructor',
+    'instructor.classes': 'Lớp học',
+    'instructor.createClass': 'Tạo lớp mới',
+    'instructor.noClasses': 'Chưa có lớp học nào',
+    'instructor.createFirstClass': 'Tạo lớp học đầu tiên',
+    'instructor.classCode': 'Mã lớp',
+    'instructor.welcome': 'Chào mừng bạn đến với SmartExamPro',
+    'instructor.welcomeDesc': 'Hãy tạo lớp học đầu tiên để bắt đầu',
+    
+    // Class management
+    'class.name': 'Tên lớp học',
+    'class.code': 'Mã lớp',
+    'class.description': 'Mô tả',
+    'class.semester': 'Học kỳ',
+    'class.semester1': 'Học kỳ 1',
+    'class.semester2': 'Học kỳ 2',
+    'class.semesterSummer': 'Học kỳ hè',
+    'class.year': 'Năm học',
+    'class.createSuccess': 'Tạo lớp học thành công!',
+    'class.createError': 'Không thể tạo lớp học. Vui lòng thử lại sau.',
+    'class.duplicateCode': 'Mã lớp này đã tồn tại. Vui lòng chọn mã khác.',
+    'class.noPermission': 'Bạn không có quyền tạo lớp học. Vui lòng liên hệ quản trị viên.',
+    
+    // Stats
+    'stats.students': 'Sinh viên',
+    'stats.exams': 'Bài thi',
+    'stats.active': 'Đang diễn ra',
+    'stats.suspicious': 'Nghi vấn',
+    
+    // Tabs
+    'tabs.exams': 'Bài thi',
+    'tabs.students': 'Sinh viên',
+    
+    // Exam management
+    'exam.create': 'Tạo bài thi mới',
+    'exam.createFirst': 'Tạo bài thi đầu tiên',
+    'exam.noExams': 'Chưa có bài thi nào',
+    'exam.publish': 'Công bố',
+    'exam.published': 'Đã công bố bài thi!',
+    'exam.title': 'Tên bài thi',
+    'exam.basicInfo': 'Thông tin cơ bản',
+    'exam.timeSettings': 'Thời gian thi',
+    'exam.antiCheatSettings': 'Cài đặt chống gian lận',
+    'exam.passingScore': 'Điểm đạt (%)',
+    'exam.requireCamera': 'Yêu cầu Camera',
+    'exam.requireFullscreen': 'Yêu cầu Fullscreen',
+    'exam.shuffleQuestions': 'Xáo trộn câu hỏi',
+    'exam.showResultImmediately': 'Hiển thị kết quả ngay',
+    'exam.maxTabViolations': 'Số lần rời tab tối đa',
+    'exam.maxFullscreenViolations': 'Số lần thoát fullscreen tối đa',
+    'exam.createSuccess': 'Tạo bài thi thành công!',
+    'exam.createError': 'Không thể tạo bài thi. Vui lòng thử lại sau.',
+    
+    // Student management
+    'student.add': 'Thêm sinh viên',
+    'student.addSingle': 'Thêm 1 sinh viên',
+    'student.addBulk': 'Thêm nhiều',
+    'student.email': 'Email sinh viên',
+    'student.emailList': 'Danh sách email (mỗi email một dòng)',
+    'student.emailNote': 'Sinh viên cần đăng ký tài khoản trước khi được thêm vào lớp',
+    'student.addSuccess': 'Đã thêm {count} sinh viên vào lớp!',
+    'student.notRegistered': 'Chưa đăng ký tài khoản',
+    'student.alreadyInClass': 'Đã có trong lớp',
+    'student.addError': 'Lỗi thêm',
+    'student.noStudents': 'Chưa có sinh viên nào trong lớp',
+    'student.remove': 'Xóa khỏi lớp',
+    'student.removeConfirm': 'Bạn có chắc muốn xóa sinh viên này khỏi lớp?',
+    'student.removeSuccess': 'Đã xóa sinh viên khỏi lớp',
+    'student.status': 'Trạng thái',
+    'student.statusActive': 'Đang học',
+    'student.searchPlaceholder': 'Tìm kiếm theo tên hoặc email...',
+    
+    // Table headers
+    'table.number': '#',
+    'table.name': 'Họ tên',
+    'table.email': 'Email',
+    'table.studentId': 'MSSV',
+    'table.status': 'Trạng thái',
+    'table.actions': 'Thao tác',
+    
+    // Validation
+    'validation.required': 'Trường này là bắt buộc',
+    'validation.invalidEmail': 'Email không hợp lệ',
+    'validation.minLength': 'Phải có ít nhất {min} ký tự',
+    'validation.maxLength': 'Không được vượt quá {max} ký tự',
+    'validation.passwordMismatch': 'Mật khẩu xác nhận không khớp',
+    'validation.invalidClassCode': 'Mã lớp chỉ được chứa chữ cái, số, dấu gạch ngang (-) và gạch dưới (_)',
+    'validation.enterExamTitle': 'Vui lòng nhập tên bài thi',
+    'validation.examTitleTooLong': 'Tên bài thi không được vượt quá 200 ký tự',
+    'validation.selectTime': 'Vui lòng chọn thời gian bắt đầu và kết thúc',
+    'validation.endAfterStart': 'Thời gian kết thúc phải sau thời gian bắt đầu',
+    'validation.durationRange': 'Thời lượng thi phải từ 5 đến 480 phút',
+    'validation.enterNameAndCode': 'Vui lòng nhập tên và mã lớp',
+    'validation.classNameTooLong': 'Tên lớp không được vượt quá 100 ký tự',
+    'validation.enterStudentEmail': 'Vui lòng nhập email sinh viên',
+    'validation.maxEmails': 'Chỉ có thể thêm tối đa 100 email một lần',
+    'validation.invalidEmails': 'Email không hợp lệ: {emails}',
+    
+    // Network/Error
+    'error.network': 'Lỗi kết nối mạng. Vui lòng kiểm tra và thử lại.',
+    'error.timeout': 'Kết nối chậm. Vui lòng kiểm tra mạng và thử lại.',
+    'error.retrying': 'Đang thử lại... ({attempt}/{max})',
+    'error.permission': 'Bạn không có quyền thực hiện thao tác này.',
+    'error.general': 'Có lỗi xảy ra. Vui lòng thử lại sau.',
+    
+    // Language
+    'language.select': 'Ngôn ngữ',
+    'language.vi': 'Tiếng Việt',
+    'language.en': 'English',
+  },
+  
+  en: {
+    // App branding
+    'app.name': 'SmartExamPro',
+    'app.subtitle': 'Smart Examination Platform',
+    
+    // Common
+    'common.loading': 'Loading...',
+    'common.save': 'Save',
+    'common.cancel': 'Cancel',
+    'common.delete': 'Delete',
+    'common.edit': 'Edit',
+    'common.create': 'Create',
+    'common.search': 'Search',
+    'common.filter': 'Filter',
+    'common.confirm': 'Confirm',
+    'common.yes': 'Yes',
+    'common.no': 'No',
+    'common.error': 'Error',
+    'common.success': 'Success',
+    'common.warning': 'Warning',
+    'common.info': 'Info',
+    'common.close': 'Close',
+    'common.back': 'Back',
+    'common.next': 'Next',
+    'common.previous': 'Previous',
+    'common.submit': 'Submit',
+    'common.download': 'Download',
+    'common.upload': 'Upload',
+    
+    // Auth
+    'auth.login': 'Login',
+    'auth.logout': 'Logout',
+    'auth.register': 'Register',
+    'auth.email': 'Email',
+    'auth.password': 'Password',
+    'auth.confirmPassword': 'Confirm Password',
+    'auth.fullName': 'Full Name',
+    'auth.studentId': 'Student ID',
+    'auth.role': 'Role',
+    'auth.student': 'Student',
+    'auth.instructor': 'Instructor',
+    'auth.admin': 'Administrator',
+    'auth.loginSuccess': 'Login successful!',
+    'auth.loginFailed': 'Login failed',
+    'auth.registerSuccess': 'Registration successful! You can login now.',
+    'auth.registerFailed': 'Registration failed',
+    'auth.invalidCredentials': 'Invalid email or password. Please check and try again.',
+    'auth.emailNotConfirmed': 'Email not confirmed. Please check your inbox.',
+    'auth.emailExists': 'This email is already registered. Please login or use a different email.',
+    'auth.tooManyRequests': 'Too many requests. Please wait 1 minute and try again.',
+    'auth.networkError': 'Network error. Please check your internet connection and try again.',
+    'auth.noAccount': 'Don\'t have an account?',
+    'auth.hasAccount': 'Already have an account?',
+    'auth.registerNow': 'Register now',
+    'auth.loginNow': 'Login now',
+    'auth.optional': 'optional',
+    'auth.processing': 'Processing...',
+    
+    // Dashboard - Student
+    'dashboard.hello': 'Hello',
+    'dashboard.selectExam': 'Select an exam below to start. Ensure stable internet connection.',
+    'dashboard.noExams': 'No exams available',
+    'dashboard.noExamsDesc': 'You are not enrolled in any class or no exams are ready yet.',
+    'dashboard.demoExam': 'Demo exam for testing:',
+    'dashboard.enterExam': 'Enter Exam',
+    'dashboard.reviewExam': 'Review',
+    'dashboard.notStarted': 'Not started yet',
+    'dashboard.expired': 'Expired',
+    'dashboard.notAvailable': 'Not available',
+    
+    // Exam Status
+    'exam.status.completed': 'Completed',
+    'exam.status.upcoming': 'Upcoming',
+    'exam.status.ended': 'Ended',
+    'exam.status.active': 'In Progress',
+    'exam.status.draft': 'Draft',
+    'exam.status.published': 'Published',
+    
+    // Exam
+    'exam.course': 'Course',
+    'exam.code': 'Code',
+    'exam.duration': 'Duration',
+    'exam.minutes': 'minutes',
+    'exam.score': 'Score',
+    'exam.startTime': 'Start',
+    'exam.endTime': 'End',
+    'exam.passing': 'Pass',
+    'exam.failed': 'Fail',
+    'exam.question': 'Question',
+    'exam.of': '/',
+    'exam.points': 'points',
+    'exam.flagged': 'Flagged',
+    'exam.flag': 'Flag',
+    'exam.notes': 'Scratch Notes',
+    'exam.notesPlaceholder': 'Personal notes for this question... (only you can see)',
+    'exam.previousQuestion': 'Previous',
+    'exam.nextQuestion': 'Next',
+    'exam.submitExam': 'Submit',
+    'exam.submitConfirm': 'Are you sure you want to submit?',
+    'exam.unansweredWarning': 'questions unanswered!',
+    'exam.flaggedWarning': 'questions flagged!',
+    'exam.submitSuccess': 'Submission successful!',
+    'exam.submitError': 'Error submitting. Please try again.',
+    'exam.timeUp': 'Time\'s up! Auto-submitting...',
+    'exam.timeWarning5': '5 minutes left! Please review your answers.',
+    'exam.timeWarning1': '1 minute left!',
+    'exam.answered': 'Answered',
+    'exam.unanswered': 'Unanswered',
+    'exam.questionList': 'Question List',
+    
+    // Exam Rules
+    'exam.rules.title': 'Exam Rules',
+    'exam.rules.camera': 'Keep Camera & Microphone on during the exam',
+    'exam.rules.fullscreen': 'Use Fullscreen mode',
+    'exam.rules.noMultiScreen': 'No secondary monitors (HDMI/Projector)',
+    'exam.rules.noTabSwitch': 'Do not switch tabs (Alt+Tab)',
+    'exam.rules.noRemoteDesktop': 'No remote desktop software (TeamViewer, AnyDesk, UltraViewer...)',
+    'exam.rules.agree': 'Agree & Start Exam',
+    'exam.rules.cameraCheck': 'Camera Check:',
+    
+    // Anti-cheat alerts
+    'anticheat.multiScreen': 'MULTIPLE MONITORS DETECTED! Please disconnect secondary monitor.',
+    'anticheat.remoteDesktop': 'REMOTE DESKTOP SOFTWARE DETECTED',
+    'anticheat.tabSwitch': 'WARNING: Tab switch detected {count} times! This is being logged.',
+    'anticheat.fullscreenExit': 'WARNING: You exited fullscreen {count} times!',
+    'anticheat.fullscreenRequired': 'You must enable Fullscreen mode to take the exam!',
+    'anticheat.fullscreenReturn': 'Return to Exam',
+    'anticheat.violation': 'VIOLATION WARNING',
+    'anticheat.returnFullscreen': 'Please return to fullscreen mode to continue!',
+    'anticheat.keyboardBlocked': 'Keyboard shortcuts are disabled during exam!',
+    'anticheat.rightClickBlocked': 'Right-click is disabled!',
+    'anticheat.networkOffline': 'NETWORK DISCONNECTED - Exam will not be saved!',
+    'anticheat.networkOnline': 'Network reconnected.',
+    'anticheat.cameraAccess': 'Cannot access camera. Please grant camera permission.',
+    
+    // AI Proctoring
+    'ai.loading': 'Loading AI model...',
+    'ai.loadingYolo': 'Loading YOLO...',
+    'ai.ready': 'Proctoring system is ready.',
+    'ai.faceOnly': 'Face monitoring is active.',
+    'ai.error': 'AI initialization error - Using basic mode',
+    'ai.monitoring': 'Monitoring...',
+    'ai.lookStraight': 'Please look at the screen.',
+    'ai.noFace': 'Face not detected',
+    'ai.lookRight': 'Looking right',
+    'ai.lookLeft': 'Looking left',
+    'ai.lookDown': 'Looking down',
+    'ai.lookUp': 'Looking up',
+    'ai.phoneDetected': 'Phone detected!',
+    'ai.materialDetected': 'Materials detected!',
+    'ai.headphonesDetected': 'Headphones detected!',
+    
+    // Proctoring stats
+    'proctoring.camera': 'Proctoring Camera',
+    'proctoring.recording': 'REC',
+    'proctoring.aiAlerts': 'AI Alerts',
+    'proctoring.tabSwitches': 'Tab Switches',
+    'proctoring.fullscreenExits': 'Fullscreen Exits',
+    'proctoring.gazeAway': 'Gaze Away',
+    
+    // Instructor Dashboard
+    'instructor.title': 'Instructor',
+    'instructor.classes': 'Classes',
+    'instructor.createClass': 'Create Class',
+    'instructor.noClasses': 'No classes yet',
+    'instructor.createFirstClass': 'Create your first class',
+    'instructor.classCode': 'Class Code',
+    'instructor.welcome': 'Welcome to SmartExamPro',
+    'instructor.welcomeDesc': 'Create your first class to get started',
+    
+    // Class management
+    'class.name': 'Class Name',
+    'class.code': 'Class Code',
+    'class.description': 'Description',
+    'class.semester': 'Semester',
+    'class.semester1': 'Semester 1',
+    'class.semester2': 'Semester 2',
+    'class.semesterSummer': 'Summer Semester',
+    'class.year': 'Academic Year',
+    'class.createSuccess': 'Class created successfully!',
+    'class.createError': 'Cannot create class. Please try again later.',
+    'class.duplicateCode': 'This class code already exists. Please choose another.',
+    'class.noPermission': 'You don\'t have permission to create classes. Please contact administrator.',
+    
+    // Stats
+    'stats.students': 'Students',
+    'stats.exams': 'Exams',
+    'stats.active': 'Active',
+    'stats.suspicious': 'Suspicious',
+    
+    // Tabs
+    'tabs.exams': 'Exams',
+    'tabs.students': 'Students',
+    
+    // Exam management
+    'exam.create': 'Create Exam',
+    'exam.createFirst': 'Create your first exam',
+    'exam.noExams': 'No exams yet',
+    'exam.publish': 'Publish',
+    'exam.published': 'Exam published!',
+    'exam.title': 'Exam Title',
+    'exam.basicInfo': 'Basic Information',
+    'exam.timeSettings': 'Time Settings',
+    'exam.antiCheatSettings': 'Anti-Cheat Settings',
+    'exam.passingScore': 'Passing Score (%)',
+    'exam.requireCamera': 'Require Camera',
+    'exam.requireFullscreen': 'Require Fullscreen',
+    'exam.shuffleQuestions': 'Shuffle Questions',
+    'exam.showResultImmediately': 'Show Result Immediately',
+    'exam.maxTabViolations': 'Max Tab Violations',
+    'exam.maxFullscreenViolations': 'Max Fullscreen Violations',
+    'exam.createSuccess': 'Exam created successfully!',
+    'exam.createError': 'Cannot create exam. Please try again later.',
+    
+    // Student management
+    'student.add': 'Add Student',
+    'student.addSingle': 'Add Single',
+    'student.addBulk': 'Add Multiple',
+    'student.email': 'Student Email',
+    'student.emailList': 'Email List (one per line)',
+    'student.emailNote': 'Students must register an account before being added to class',
+    'student.addSuccess': 'Added {count} students to class!',
+    'student.notRegistered': 'Not registered',
+    'student.alreadyInClass': 'Already in class',
+    'student.addError': 'Add error',
+    'student.noStudents': 'No students in class yet',
+    'student.remove': 'Remove from class',
+    'student.removeConfirm': 'Are you sure you want to remove this student from class?',
+    'student.removeSuccess': 'Student removed from class',
+    'student.status': 'Status',
+    'student.statusActive': 'Active',
+    'student.searchPlaceholder': 'Search by name or email...',
+    
+    // Table headers
+    'table.number': '#',
+    'table.name': 'Name',
+    'table.email': 'Email',
+    'table.studentId': 'Student ID',
+    'table.status': 'Status',
+    'table.actions': 'Actions',
+    
+    // Validation
+    'validation.required': 'This field is required',
+    'validation.invalidEmail': 'Invalid email',
+    'validation.minLength': 'Must be at least {min} characters',
+    'validation.maxLength': 'Cannot exceed {max} characters',
+    'validation.passwordMismatch': 'Passwords do not match',
+    'validation.invalidClassCode': 'Class code can only contain letters, numbers, hyphens (-) and underscores (_)',
+    'validation.enterExamTitle': 'Please enter exam title',
+    'validation.examTitleTooLong': 'Exam title cannot exceed 200 characters',
+    'validation.selectTime': 'Please select start and end time',
+    'validation.endAfterStart': 'End time must be after start time',
+    'validation.durationRange': 'Duration must be between 5 and 480 minutes',
+    'validation.enterNameAndCode': 'Please enter class name and code',
+    'validation.classNameTooLong': 'Class name cannot exceed 100 characters',
+    'validation.enterStudentEmail': 'Please enter student email',
+    'validation.maxEmails': 'Can only add maximum 100 emails at once',
+    'validation.invalidEmails': 'Invalid emails: {emails}',
+    
+    // Network/Error
+    'error.network': 'Network error. Please check connection and try again.',
+    'error.timeout': 'Connection slow. Please check network and try again.',
+    'error.retrying': 'Retrying... ({attempt}/{max})',
+    'error.permission': 'You don\'t have permission for this action.',
+    'error.general': 'An error occurred. Please try again later.',
+    
+    // Language
+    'language.select': 'Language',
+    'language.vi': 'Tiếng Việt',
+    'language.en': 'English',
+  }
+};
+
+// Get stored language or default to Vietnamese
+const getStoredLanguage = () => {
+  if (typeof window !== 'undefined') {
+    return localStorage.getItem('language') || 'vi';
+  }
+  return 'vi';
+};
+
+// Store language preference
+const setStoredLanguage = (lang) => {
+  if (typeof window !== 'undefined') {
+    localStorage.setItem('language', lang);
+  }
+};
+
+// Current language state
+let currentLanguage = getStoredLanguage();
+
+// Get translation
+export const t = (key, params = {}) => {
+  const translation = translations[currentLanguage]?.[key] || translations['vi'][key] || key;
+  
+  // Replace placeholders like {count}, {min}, {max}
+  return translation.replace(/\{(\w+)\}/g, (_, param) => {
+    return params[param] !== undefined ? params[param] : `{${param}}`;
+  });
+};
+
+// Get current language
+export const getLanguage = () => currentLanguage;
+
+// Set language
+export const setLanguage = (lang) => {
+  if (translations[lang]) {
+    currentLanguage = lang;
+    setStoredLanguage(lang);
+    return true;
+  }
+  return false;
+};
+
+// Get available languages
+export const getAvailableLanguages = () => [
+  { code: 'vi', name: 'Tiếng Việt', flag: '🇻🇳' },
+  { code: 'en', name: 'English', flag: '🇺🇸' }
+];
+
+// Export translations for direct access if needed
+export { translations };
