@@ -69,9 +69,12 @@ export default function Login() {
     } catch (error) {
       let errorMessage = "Đăng nhập thất bại";
       
-      if (error.message === 'Invalid login credentials') {
-        errorMessage = 'Email hoặc mật khẩu không đúng';
-      } else if (error.message === 'Email not confirmed') {
+      // User-friendly error messages
+      const errorMsg = error.message?.toLowerCase() || '';
+      
+      if (errorMsg.includes('invalid login credentials') || errorMsg.includes('invalid password')) {
+        errorMessage = 'Email hoặc mật khẩu không đúng. Vui lòng kiểm tra lại.';
+      } else if (errorMsg.includes('email not confirmed')) {
         errorMessage = 'Email chưa được xác nhận. Vui lòng kiểm tra hộp thư để xác nhận.';
         // Try to auto-confirm email via backend (only if API configured)
         const apiUrl = import.meta.env.VITE_API_URL;
@@ -92,8 +95,14 @@ export default function Login() {
             // Silent fail - user will see the original error message
           }
         }
+      } else if (errorMsg.includes('too many requests') || errorMsg.includes('rate limit')) {
+        errorMessage = 'Quá nhiều yêu cầu. Vui lòng đợi 1 phút và thử lại.';
+      } else if (errorMsg.includes('network') || errorMsg.includes('fetch') || errorMsg.includes('failed to fetch')) {
+        errorMessage = 'Lỗi kết nối mạng. Vui lòng kiểm tra internet và thử lại.';
+      } else if (errorMsg.includes('user not found')) {
+        errorMessage = 'Tài khoản không tồn tại. Vui lòng đăng ký mới.';
       } else {
-        errorMessage = error.message || "Đăng nhập thất bại";
+        errorMessage = 'Đăng nhập thất bại. Vui lòng thử lại sau.';
       }
       
       toast.error(errorMessage);
@@ -121,9 +130,24 @@ export default function Login() {
       setIsRegister(false);
       resetForm();
     } catch (error) {
-      const errorMessage = error.message?.includes('already registered') || error.message?.includes('đã được đăng ký')
-        ? 'Email này đã được đăng ký'
-        : error.message || "Đăng ký thất bại";
+      const errorMsg = error.message?.toLowerCase() || '';
+      let errorMessage;
+      
+      // User-friendly error messages
+      if (errorMsg.includes('already registered') || errorMsg.includes('đã được đăng ký') || errorMsg.includes('already exists')) {
+        errorMessage = 'Email này đã được đăng ký. Vui lòng đăng nhập hoặc dùng email khác.';
+      } else if (errorMsg.includes('invalid email') || errorMsg.includes('email')) {
+        errorMessage = 'Email không hợp lệ. Vui lòng kiểm tra lại.';
+      } else if (errorMsg.includes('password') && errorMsg.includes('weak')) {
+        errorMessage = 'Mật khẩu quá yếu. Vui lòng chọn mật khẩu mạnh hơn.';
+      } else if (errorMsg.includes('network') || errorMsg.includes('fetch') || errorMsg.includes('failed to fetch')) {
+        errorMessage = 'Lỗi kết nối mạng. Vui lòng kiểm tra internet và thử lại.';
+      } else if (errorMsg.includes('too many requests') || errorMsg.includes('rate limit')) {
+        errorMessage = 'Quá nhiều yêu cầu. Vui lòng đợi 1 phút và thử lại.';
+      } else {
+        errorMessage = 'Đăng ký thất bại. Vui lòng thử lại sau.';
+      }
+      
       toast.error(errorMessage);
     } finally {
       setLoading(false);

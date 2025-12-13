@@ -99,29 +99,55 @@ function CreateExamForm({ classId, onClose, onSuccess }) {
     }
 
     setLoading(true);
-    try {
-      const { data, error } = await supabase
-        .from('exams')
-        .insert({
-          ...formData,
-          class_id: classId,
-          created_by: user.id,
-          status: 'draft'
-        })
-        .select()
-        .single();
+    
+    const createExam = async (attempt = 0) => {
+      const MAX_RETRIES = 3;
+      try {
+        // Add timeout to prevent infinite loading
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 15000);
 
-      if (error) throw error;
+        const { data, error } = await supabase
+          .from('exams')
+          .insert({
+            ...formData,
+            class_id: classId,
+            created_by: user.id,
+            status: 'draft'
+          })
+          .select()
+          .single();
 
-      toast.success('Tạo bài thi thành công!');
-      onSuccess?.(data);
-      onClose();
-    } catch (error) {
-      console.error('Create exam error:', error);
-      toast.error(error.message || 'Có lỗi xảy ra khi tạo bài thi');
-    } finally {
-      setLoading(false);
-    }
+        clearTimeout(timeoutId);
+
+        if (error) throw error;
+
+        toast.success('Tạo bài thi thành công!');
+        onSuccess?.(data);
+        onClose();
+      } catch (error) {
+        console.error('Create exam error:', error);
+        
+        if (error.name === 'AbortError' || error.message?.includes('timeout')) {
+          if (attempt < MAX_RETRIES) {
+            toast.info(`Đang thử lại... (${attempt + 1}/${MAX_RETRIES})`);
+            await new Promise(resolve => setTimeout(resolve, 1000));
+            return createExam(attempt + 1);
+          }
+          toast.error('Kết nối chậm. Vui lòng kiểm tra mạng và thử lại.');
+        } else if (error.code === '42501' || error.message?.includes('permission')) {
+          toast.error('Bạn không có quyền tạo bài thi. Vui lòng kiểm tra lại.');
+        } else if (error.message?.includes('network') || error.message?.includes('fetch')) {
+          toast.error('Lỗi kết nối mạng. Vui lòng kiểm tra và thử lại.');
+        } else {
+          toast.error('Không thể tạo bài thi. Vui lòng thử lại sau.');
+        }
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    await createExam(0);
   };
 
   return (
@@ -353,13 +379,22 @@ function AddStudentForm({ classId, onClose, onSuccess }) {
       return;
     }
 
+    // Validate email format
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    const invalidEmails = emails.filter(e => !emailRegex.test(e));
+    if (invalidEmails.length > 0) {
+      toast.error(`Email không hợp lệ: ${invalidEmails.slice(0, 3).join(', ')}${invalidEmails.length > 3 ? '...' : ''}`);
+      return;
+    }
+
     setLoading(true);
     let successCount = 0;
     let errorCount = 0;
+    const errorMessages = [];
 
     for (const studentEmail of emails) {
       try {
-        // Find user by email
+        // Find user by email with timeout
         const { data: profile, error: profileError } = await supabase
           .from('profiles')
           .select('id')
@@ -367,7 +402,7 @@ function AddStudentForm({ classId, onClose, onSuccess }) {
           .single();
 
         if (profileError || !profile) {
-          toast.warning(`Không tìm thấy tài khoản: ${studentEmail}`);
+          errorMessages.push(`${studentEmail}: Chưa đăng ký tài khoản`);
           errorCount++;
           continue;
         }
@@ -383,9 +418,9 @@ function AddStudentForm({ classId, onClose, onSuccess }) {
 
         if (enrollError) {
           if (enrollError.code === '23505') {
-            toast.warning(`Sinh viên đã có trong lớp: ${studentEmail}`);
+            errorMessages.push(`${studentEmail}: Đã có trong lớp`);
           } else {
-            toast.error(`Lỗi thêm ${studentEmail}: ${enrollError.message}`);
+            errorMessages.push(`${studentEmail}: Lỗi thêm`);
           }
           errorCount++;
         } else {
@@ -393,6 +428,7 @@ function AddStudentForm({ classId, onClose, onSuccess }) {
         }
       } catch (err) {
         console.error('Add student error:', err);
+        errorMessages.push(`${studentEmail}: Lỗi kết nối`);
         errorCount++;
       }
     }
@@ -402,7 +438,17 @@ function AddStudentForm({ classId, onClose, onSuccess }) {
     if (successCount > 0) {
       toast.success(`Đã thêm ${successCount} sinh viên vào lớp!`);
       onSuccess?.();
-      if (errorCount === 0) onClose();
+    }
+    
+    if (errorCount > 0) {
+      // Show first 3 error messages
+      const displayErrors = errorMessages.slice(0, 3).join('\n');
+      const moreErrors = errorMessages.length > 3 ? `\n... và ${errorMessages.length - 3} lỗi khác` : '';
+      toast.warning(`Một số sinh viên không thể thêm:\n${displayErrors}${moreErrors}`, { autoClose: 8000 });
+    }
+
+    if (successCount > 0 && errorCount === 0) {
+      onClose();
     }
   };
 
@@ -485,6 +531,8 @@ function AddStudentForm({ classId, onClose, onSuccess }) {
 function CreateClassForm({ onClose, onSuccess }) {
   const { user } = useAuth();
   const [loading, setLoading] = useState(false);
+  const [retryCount, setRetryCount] = useState(0);
+  const MAX_RETRIES = 3;
   const [formData, setFormData] = useState({
     name: '',
     code: '',
@@ -507,32 +555,58 @@ function CreateClassForm({ onClose, onSuccess }) {
     }
 
     setLoading(true);
-    try {
-      const { data, error } = await supabase
-        .from('classes')
-        .insert({
-          ...formData,
-          instructor_id: user.id,
-          is_active: true
-        })
-        .select()
-        .single();
+    
+    const createClass = async (attempt = 0) => {
+      try {
+        // Add timeout to prevent infinite loading
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 15000); // 15s timeout
 
-      if (error) throw error;
+        const { data, error } = await supabase
+          .from('classes')
+          .insert({
+            ...formData,
+            instructor_id: user.id,
+            is_active: true
+          })
+          .select()
+          .single();
 
-      toast.success('Tạo lớp học thành công!');
-      onSuccess?.(data);
-      onClose();
-    } catch (error) {
-      console.error('Create class error:', error);
-      if (error.code === '23505') {
-        toast.error('Mã lớp đã tồn tại');
-      } else {
-        toast.error(error.message || 'Có lỗi xảy ra');
+        clearTimeout(timeoutId);
+
+        if (error) throw error;
+
+        toast.success('Tạo lớp học thành công!');
+        onSuccess?.(data);
+        onClose();
+      } catch (error) {
+        console.error('Create class error:', error);
+        
+        // Handle specific error cases with user-friendly messages
+        if (error.name === 'AbortError' || error.message?.includes('timeout')) {
+          if (attempt < MAX_RETRIES) {
+            setRetryCount(attempt + 1);
+            toast.info(`Đang thử lại... (${attempt + 1}/${MAX_RETRIES})`);
+            await new Promise(resolve => setTimeout(resolve, 1000)); // Wait 1s before retry
+            return createClass(attempt + 1);
+          }
+          toast.error('Kết nối chậm. Vui lòng kiểm tra mạng và thử lại.');
+        } else if (error.code === '23505') {
+          toast.error('Mã lớp này đã tồn tại. Vui lòng chọn mã khác.');
+        } else if (error.code === '42501' || error.message?.includes('permission')) {
+          toast.error('Bạn không có quyền tạo lớp học. Vui lòng liên hệ quản trị viên.');
+        } else if (error.message?.includes('network') || error.message?.includes('fetch')) {
+          toast.error('Lỗi kết nối mạng. Vui lòng kiểm tra và thử lại.');
+        } else {
+          toast.error('Không thể tạo lớp học. Vui lòng thử lại sau.');
+        }
+        setRetryCount(0);
+      } finally {
+        setLoading(false);
       }
-    } finally {
-      setLoading(false);
-    }
+    };
+
+    await createClass(0);
   };
 
   return (
