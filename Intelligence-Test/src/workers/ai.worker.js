@@ -75,14 +75,23 @@ async function initializeAI() {
     // Load YOLO ONNX model
     try {
       ort.env.wasm.wasmPaths = 'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.20.1/dist/';
+      
+      // Try to load the model
       yoloSession = await ort.InferenceSession.create(CONFIG.YOLO.MODEL_PATH, {
         executionProviders: ['wasm'],
         graphOptimizationLevel: 'all'
       });
-      self.postMessage({ type: 'STATUS', payload: 'Hệ thống giám sát đã sẵn sàng.' });
+      
+      // Log input/output names for debugging
+      console.log('YOLO model loaded successfully');
+      console.log('Input names:', yoloSession.inputNames);
+      console.log('Output names:', yoloSession.outputNames);
+      
+      self.postMessage({ type: 'STATUS', payload: 'Hệ thống giám sát đầy đủ đã sẵn sàng.' });
     } catch (yoloError) {
-      console.warn('YOLO model not available, using face detection only:', yoloError);
-      self.postMessage({ type: 'STATUS', payload: 'Giám sát khuôn mặt đang hoạt động.' });
+      console.warn('YOLO model not available at', CONFIG.YOLO.MODEL_PATH);
+      console.warn('Error:', yoloError.message);
+      self.postMessage({ type: 'STATUS', payload: 'Giám sát khuôn mặt đang hoạt động. (YOLO không khả dụng)' });
     }
 
     isInitialized = true;
@@ -210,37 +219,39 @@ async function processFrame(imageData) {
   }
 
   // ============================================
-  // STAGE 2: YOLO DETECTION (Cascade Trigger)
+  // STAGE 2: YOLO DETECTION
   // ============================================
-  if (isSuspicious && yoloSession) {
-    // Activate YOLO for the next few seconds
-    yoloActiveUntil = now + CONFIG.CASCADE.YOLO_ACTIVATION_SECONDS * 1000;
-  }
-
-  if (yoloSession && now < yoloActiveUntil) {
-    try {
-      const detections = await runYoloInference(imageData);
-      
-      for (const detection of detections) {
-        if (CONFIG.YOLO.ALERT_CLASSES.includes(detection.class)) {
-          // Throttle alerts (max once per 5 seconds per class)
-          if (now - lastAlertTime > 5000) {
-            const alertMessages = {
-              'phone': 'Phát hiện điện thoại!',
-              'material': 'Phát hiện tài liệu!',
-              'headphones': 'Phát hiện tai nghe!'
-            };
-            self.postMessage({ 
-              type: 'ALERT', 
-              payload: alertMessages[detection.class] || `Phát hiện ${detection.class}!`
-            });
-            lastAlertTime = now;
+  // Run YOLO detection continuously but throttled (every 500ms instead of every frame)
+  // This ensures objects like phones/headphones are always detected
+  if (yoloSession) {
+    // Run YOLO at a lower rate to save resources (about every 2-3 frames at 5fps = ~500ms)
+    const shouldRunYolo = Math.random() < 0.4; // ~40% chance per frame
+    
+    if (shouldRunYolo) {
+      try {
+        const detections = await runYoloInference(imageData);
+        
+        for (const detection of detections) {
+          if (CONFIG.YOLO.ALERT_CLASSES.includes(detection.class)) {
+            // Throttle alerts (max once per 5 seconds per class)
+            if (now - lastAlertTime > 5000) {
+              const alertMessages = {
+                'phone': 'Phát hiện điện thoại!',
+                'material': 'Phát hiện tài liệu!',
+                'headphones': 'Phát hiện tai nghe!'
+              };
+              self.postMessage({ 
+                type: 'ALERT', 
+                payload: alertMessages[detection.class] || `Phát hiện ${detection.class}!`
+              });
+              lastAlertTime = now;
+            }
+            break;
           }
-          break;
         }
+      } catch (error) {
+        console.warn('YOLO inference error:', error);
       }
-    } catch (error) {
-      console.warn('YOLO inference error:', error);
     }
   }
 
@@ -294,15 +305,23 @@ async function runYoloInference(imageData) {
       }
     }
 
-    // Create tensor and run inference
+    // Create tensor with dynamic input name
     const tensor = new ort.Tensor('float32', input, [1, 3, inputSize, inputSize]);
-    const results = await yoloSession.run({ images: tensor });
+    const inputName = yoloSession.inputNames[0] || 'images';
+    const feeds = { [inputName]: tensor };
+    
+    const results = await yoloSession.run(feeds);
 
-    // Parse YOLO output
-    const output = results.output0?.data || results[Object.keys(results)[0]]?.data;
-    if (!output) return [];
+    // Get first output
+    const outputName = yoloSession.outputNames[0] || 'output0';
+    const outputTensor = results[outputName];
+    
+    if (!outputTensor) {
+      console.warn('No output tensor found');
+      return [];
+    }
 
-    const detections = parseYoloOutput(output, width, height);
+    const detections = parseYoloOutput(outputTensor.data, outputTensor.dims, width, height);
     return detections;
   } catch (error) {
     console.error('YOLO inference error:', error);
@@ -310,46 +329,86 @@ async function runYoloInference(imageData) {
   }
 }
 
-function parseYoloOutput(output, originalWidth, originalHeight) {
+function parseYoloOutput(output, dims, originalWidth, originalHeight) {
   const detections = [];
   const numClasses = CONFIG.YOLO.CLASSES.length;
   const inputSize = CONFIG.YOLO.INPUT_SIZE;
-
-  // YOLO output format: [batch, num_boxes, 4 + num_classes]
-  // Or for segmentation: [batch, 4 + num_classes + mask_channels, num_boxes]
   
-  // Assuming output shape [1, numBoxes, 4 + numClasses]
-  const numBoxes = output.length / (4 + numClasses);
+  // Determine output format based on dimensions
+  // YOLOv8/v11 outputs: [1, 4+numClasses, numBoxes] (need transpose)
+  // Older format: [1, numBoxes, 4+numClasses]
+  
+  let numBoxes, stride;
+  let isTransposed = false;
+  
+  if (dims.length === 3) {
+    // [batch, channels/boxes, boxes/channels]
+    if (dims[1] === 4 + numClasses) {
+      // Transposed format: [1, 4+numClasses, numBoxes]
+      numBoxes = dims[2];
+      stride = 4 + numClasses;
+      isTransposed = true;
+    } else {
+      // Standard format: [1, numBoxes, 4+numClasses]
+      numBoxes = dims[1];
+      stride = 4 + numClasses;
+    }
+  } else {
+    // Flat array - assume standard format
+    numBoxes = Math.floor(output.length / (4 + numClasses));
+    stride = 4 + numClasses;
+  }
   
   for (let i = 0; i < numBoxes; i++) {
-    const baseIdx = i * (4 + numClasses);
+    let cx, cy, w, h;
+    let classScores = [];
     
-    // Get box coordinates
-    const cx = output[baseIdx];
-    const cy = output[baseIdx + 1];
-    const w = output[baseIdx + 2];
-    const h = output[baseIdx + 3];
+    if (isTransposed) {
+      // Transposed: data is arranged [cx0, cx1, ..., cxN, cy0, cy1, ..., cyN, ...]
+      cx = output[0 * numBoxes + i];
+      cy = output[1 * numBoxes + i];
+      w = output[2 * numBoxes + i];
+      h = output[3 * numBoxes + i];
+      
+      for (let c = 0; c < numClasses; c++) {
+        classScores.push(output[(4 + c) * numBoxes + i]);
+      }
+    } else {
+      // Standard: data is arranged [cx0, cy0, w0, h0, class0_0, class0_1, ..., cx1, cy1, ...]
+      const baseIdx = i * stride;
+      cx = output[baseIdx];
+      cy = output[baseIdx + 1];
+      w = output[baseIdx + 2];
+      h = output[baseIdx + 3];
+      
+      for (let c = 0; c < numClasses; c++) {
+        classScores.push(output[baseIdx + 4 + c]);
+      }
+    }
 
-    // Get class scores
+    // Get max class score
     let maxScore = 0;
     let maxClass = 0;
     for (let c = 0; c < numClasses; c++) {
-      const score = output[baseIdx + 4 + c];
-      if (score > maxScore) {
-        maxScore = score;
+      if (classScores[c] > maxScore) {
+        maxScore = classScores[c];
         maxClass = c;
       }
     }
 
     if (maxScore >= CONFIG.YOLO.CONFIDENCE_THRESHOLD) {
+      // Scale coordinates back to original image size
+      const scaleX = originalWidth / inputSize;
+      const scaleY = originalHeight / inputSize;
+      
       detections.push({
         class: CONFIG.YOLO.CLASSES[maxClass],
         confidence: maxScore,
         box: {
-          x: (cx - w / 2) * originalWidth / inputSize,
-          y: (cy - h / 2) * originalHeight / inputSize,
-          width: w * originalWidth / inputSize,
-          height: h * originalHeight / inputSize
+          x: (cx - w / 2) * scaleX,
+          y: (cy - h / 2) * scaleY,
+          width: w * scaleX,
+          height: h * scaleY
         }
       });
     }

@@ -589,6 +589,438 @@ function AddStudentForm({ classId, onClose, onSuccess }) {
 }
 
 // ============================================
+// MANAGE QUESTIONS FORM
+// ============================================
+
+function ManageQuestionsForm({ examId, examTitle, onClose }) {
+  const { t } = useLanguage();
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [questions, setQuestions] = useState([]);
+  const [editingQuestion, setEditingQuestion] = useState(null);
+  const [showAddForm, setShowAddForm] = useState(false);
+
+  // Load questions
+  useEffect(() => {
+    const loadQuestions = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('questions')
+          .select('*')
+          .eq('exam_id', examId)
+          .order('order_index');
+
+        if (error) throw error;
+        setQuestions(data || []);
+      } catch (err) {
+        console.error('Load questions error:', err);
+        toast.error(t('error.general'));
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadQuestions();
+  }, [examId, t]);
+
+  const handleDeleteQuestion = async (questionId) => {
+    if (!window.confirm(t('question.deleteConfirm'))) return;
+
+    try {
+      const { error } = await supabase
+        .from('questions')
+        .delete()
+        .eq('id', questionId);
+
+      if (error) throw error;
+      setQuestions(prev => prev.filter(q => q.id !== questionId));
+      toast.success(t('common.success'));
+    } catch (err) {
+      toast.error(t('error.general'));
+    }
+  };
+
+  const handleSaveQuestion = async (questionData) => {
+    setSaving(true);
+    try {
+      if (editingQuestion) {
+        // Update existing question
+        const { error } = await supabase
+          .from('questions')
+          .update({
+            question_text: questionData.question_text,
+            question_type: questionData.question_type,
+            options: questionData.options,
+            correct_answer: questionData.correct_answer,
+            points: questionData.points,
+            difficulty: questionData.difficulty,
+            explanation: questionData.explanation
+          })
+          .eq('id', editingQuestion.id);
+
+        if (error) throw error;
+        setQuestions(prev => prev.map(q => 
+          q.id === editingQuestion.id ? { ...q, ...questionData } : q
+        ));
+      } else {
+        // Create new question
+        const { data, error } = await supabase
+          .from('questions')
+          .insert({
+            exam_id: examId,
+            question_text: questionData.question_text,
+            question_type: questionData.question_type,
+            options: questionData.options,
+            correct_answer: questionData.correct_answer,
+            points: questionData.points,
+            difficulty: questionData.difficulty,
+            explanation: questionData.explanation,
+            order_index: questions.length
+          })
+          .select()
+          .single();
+
+        if (error) throw error;
+        setQuestions(prev => [...prev, data]);
+      }
+
+      toast.success(t('question.saveSuccess'));
+      setEditingQuestion(null);
+      setShowAddForm(false);
+    } catch (err) {
+      console.error('Save question error:', err);
+      toast.error(t('question.saveError'));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center p-12">
+        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h3 className="font-semibold text-gray-900">{examTitle}</h3>
+          <p className="text-sm text-gray-500">{t('exam.questionsCount', { count: questions.length })}</p>
+        </div>
+        <button
+          onClick={() => { setEditingQuestion(null); setShowAddForm(true); }}
+          className="btn-primary"
+        >
+          <Plus className="w-5 h-5 mr-2" />
+          {t('question.add')}
+        </button>
+      </div>
+
+      {/* Question Form */}
+      {(showAddForm || editingQuestion) && (
+        <QuestionForm
+          question={editingQuestion}
+          onSave={handleSaveQuestion}
+          onCancel={() => { setEditingQuestion(null); setShowAddForm(false); }}
+          saving={saving}
+        />
+      )}
+
+      {/* Question List */}
+      {questions.length > 0 ? (
+        <div className="space-y-3">
+          {questions.map((question, idx) => (
+            <div key={question.id} className="p-4 border border-gray-200 rounded-lg hover:border-primary-300 transition-colors">
+              <div className="flex items-start justify-between">
+                <div className="flex-1">
+                  <div className="flex items-center space-x-2 mb-2">
+                    <span className="w-6 h-6 bg-primary-100 text-primary text-sm font-bold rounded-full flex items-center justify-center">
+                      {idx + 1}
+                    </span>
+                    <span className="text-xs px-2 py-0.5 bg-gray-100 text-gray-600 rounded">
+                      {question.question_type === 'multiple_choice' ? t('question.multipleChoice') :
+                       question.question_type === 'true_false' ? t('question.trueFalse') :
+                       question.question_type === 'short_answer' ? t('question.shortAnswer') : t('question.essay')}
+                    </span>
+                    <span className="text-xs text-gray-500">{question.points} {t('exam.points')}</span>
+                  </div>
+                  <p className="text-gray-800">{question.question_text}</p>
+                  {question.options && question.options.length > 0 && (
+                    <div className="mt-2 space-y-1">
+                      {question.options.map((opt, optIdx) => (
+                        <div key={opt.id || optIdx} className={`text-sm px-2 py-1 rounded ${
+                          JSON.stringify(question.correct_answer) === JSON.stringify(opt.id) 
+                            ? 'bg-success-50 text-success-700' 
+                            : 'text-gray-600'
+                        }`}>
+                          {opt.id}. {opt.text}
+                          {JSON.stringify(question.correct_answer) === JSON.stringify(opt.id) && ' ✓'}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+                <div className="flex items-center space-x-1 ml-4">
+                  <button
+                    onClick={() => { setEditingQuestion(question); setShowAddForm(false); }}
+                    className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                    title={t('question.edit')}
+                  >
+                    <Edit2 className="w-4 h-4 text-gray-500" />
+                  </button>
+                  <button
+                    onClick={() => handleDeleteQuestion(question.id)}
+                    className="p-2 hover:bg-danger-50 rounded-lg transition-colors"
+                    title={t('question.delete')}
+                  >
+                    <Trash2 className="w-4 h-4 text-danger" />
+                  </button>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : !showAddForm && (
+        <div className="text-center py-12 bg-gray-50 rounded-xl">
+          <ClipboardList className="w-16 h-16 mx-auto mb-4 text-gray-300" />
+          <p className="text-gray-500 mb-2">{t('question.noQuestions')}</p>
+          <p className="text-sm text-gray-400 mb-4">{t('question.noQuestionsDesc')}</p>
+          <button
+            onClick={() => { setEditingQuestion(null); setShowAddForm(true); }}
+            className="btn-primary"
+          >
+            <Plus className="w-5 h-5 mr-2" />
+            {t('question.add')}
+          </button>
+        </div>
+      )}
+
+      {/* Close button */}
+      <div className="flex justify-end pt-4 border-t border-gray-200">
+        <button onClick={onClose} className="btn-secondary">
+          {t('common.close')}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ============================================
+// QUESTION FORM (for add/edit)
+// ============================================
+
+function QuestionForm({ question, onSave, onCancel, saving }) {
+  const { t } = useLanguage();
+  const [formData, setFormData] = useState({
+    question_text: question?.question_text || '',
+    question_type: question?.question_type || 'multiple_choice',
+    options: question?.options || [
+      { id: 'A', text: '' },
+      { id: 'B', text: '' },
+      { id: 'C', text: '' },
+      { id: 'D', text: '' }
+    ],
+    correct_answer: question?.correct_answer || 'A',
+    points: question?.points || 1,
+    difficulty: question?.difficulty || 'medium',
+    explanation: question?.explanation || ''
+  });
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    if (!formData.question_text.trim()) {
+      toast.error(t('validation.required'));
+      return;
+    }
+    onSave(formData);
+  };
+
+  const handleOptionChange = (index, value) => {
+    const newOptions = [...formData.options];
+    newOptions[index] = { ...newOptions[index], text: value };
+    setFormData(prev => ({ ...prev, options: newOptions }));
+  };
+
+  const addOption = () => {
+    const nextLetter = String.fromCharCode(65 + formData.options.length);
+    setFormData(prev => ({
+      ...prev,
+      options: [...prev.options, { id: nextLetter, text: '' }]
+    }));
+  };
+
+  const removeOption = (index) => {
+    if (formData.options.length <= 2) return;
+    const newOptions = formData.options.filter((_, i) => i !== index);
+    // Re-assign letters
+    const reorderedOptions = newOptions.map((opt, i) => ({
+      ...opt,
+      id: String.fromCharCode(65 + i)
+    }));
+    setFormData(prev => ({
+      ...prev,
+      options: reorderedOptions,
+      correct_answer: reorderedOptions[0]?.id || 'A'
+    }));
+  };
+
+  return (
+    <form onSubmit={handleSubmit} className="p-4 bg-gray-50 rounded-xl space-y-4">
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-1">
+          {t('question.text')} <span className="text-danger">*</span>
+        </label>
+        <textarea
+          value={formData.question_text}
+          onChange={(e) => setFormData(prev => ({ ...prev, question_text: e.target.value }))}
+          placeholder={t('question.textPlaceholder')}
+          rows={3}
+          className="input resize-none"
+        />
+      </div>
+
+      <div className="grid grid-cols-3 gap-4">
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">{t('question.type')}</label>
+          <select
+            value={formData.question_type}
+            onChange={(e) => setFormData(prev => ({ ...prev, question_type: e.target.value }))}
+            className="input"
+          >
+            <option value="multiple_choice">{t('question.multipleChoice')}</option>
+            <option value="true_false">{t('question.trueFalse')}</option>
+          </select>
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">{t('question.points')}</label>
+          <input
+            type="number"
+            value={formData.points}
+            onChange={(e) => setFormData(prev => ({ ...prev, points: parseFloat(e.target.value) || 1 }))}
+            min={0.5}
+            step={0.5}
+            className="input"
+          />
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">{t('question.difficulty')}</label>
+          <select
+            value={formData.difficulty}
+            onChange={(e) => setFormData(prev => ({ ...prev, difficulty: e.target.value }))}
+            className="input"
+          >
+            <option value="easy">{t('question.difficultyEasy')}</option>
+            <option value="medium">{t('question.difficultyMedium')}</option>
+            <option value="hard">{t('question.difficultyHard')}</option>
+          </select>
+        </div>
+      </div>
+
+      {formData.question_type === 'multiple_choice' && (
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-2">{t('question.options')}</label>
+          <div className="space-y-2">
+            {formData.options.map((option, idx) => (
+              <div key={idx} className="flex items-center space-x-2">
+                <input
+                  type="radio"
+                  name="correct_answer"
+                  checked={formData.correct_answer === option.id}
+                  onChange={() => setFormData(prev => ({ ...prev, correct_answer: option.id }))}
+                  className="w-4 h-4 text-primary"
+                />
+                <span className="w-6 h-6 bg-gray-200 rounded-full flex items-center justify-center text-sm font-medium">
+                  {option.id}
+                </span>
+                <input
+                  type="text"
+                  value={option.text}
+                  onChange={(e) => handleOptionChange(idx, e.target.value)}
+                  placeholder={t('question.optionPlaceholder')}
+                  className="input flex-1"
+                />
+                {formData.options.length > 2 && (
+                  <button
+                    type="button"
+                    onClick={() => removeOption(idx)}
+                    className="p-2 hover:bg-danger-50 rounded-lg transition-colors text-danger"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                )}
+              </div>
+            ))}
+          </div>
+          {formData.options.length < 6 && (
+            <button
+              type="button"
+              onClick={addOption}
+              className="mt-2 text-sm text-primary hover:text-primary-700 flex items-center"
+            >
+              <Plus className="w-4 h-4 mr-1" />
+              {t('question.addOption')}
+            </button>
+          )}
+        </div>
+      )}
+
+      {formData.question_type === 'true_false' && (
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-2">{t('question.correctAnswer')}</label>
+          <div className="flex space-x-4">
+            <label className="flex items-center space-x-2">
+              <input
+                type="radio"
+                name="tf_answer"
+                checked={formData.correct_answer === true || formData.correct_answer === 'true'}
+                onChange={() => setFormData(prev => ({ ...prev, correct_answer: true }))}
+                className="w-4 h-4 text-primary"
+              />
+              <span>{t('common.yes')}</span>
+            </label>
+            <label className="flex items-center space-x-2">
+              <input
+                type="radio"
+                name="tf_answer"
+                checked={formData.correct_answer === false || formData.correct_answer === 'false'}
+                onChange={() => setFormData(prev => ({ ...prev, correct_answer: false }))}
+                className="w-4 h-4 text-primary"
+              />
+              <span>{t('common.no')}</span>
+            </label>
+          </div>
+        </div>
+      )}
+
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-1">{t('question.explanation')}</label>
+        <textarea
+          value={formData.explanation}
+          onChange={(e) => setFormData(prev => ({ ...prev, explanation: e.target.value }))}
+          placeholder={t('question.explanationPlaceholder')}
+          rows={2}
+          className="input resize-none"
+        />
+      </div>
+
+      <div className="flex items-center justify-end space-x-3">
+        <button type="button" onClick={onCancel} className="btn-secondary">
+          {t('common.cancel')}
+        </button>
+        <button type="submit" disabled={saving} className="btn-primary">
+          {saving && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+          {t('common.save')}
+        </button>
+      </div>
+    </form>
+  );
+}
+
+// ============================================
 // CREATE CLASS FORM
 // ============================================
 
@@ -818,6 +1250,8 @@ export default function InstructorDashboard() {
   const [showCreateExam, setShowCreateExam] = useState(false);
   const [showAddStudent, setShowAddStudent] = useState(false);
   const [showCreateClass, setShowCreateClass] = useState(false);
+  const [showManageQuestions, setShowManageQuestions] = useState(false);
+  const [selectedExam, setSelectedExam] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
 
   // Load classes
@@ -1163,11 +1597,16 @@ export default function InstructorDashboard() {
                                     {t('exam.publish')}
                                   </button>
                                 )}
-                                <button className="p-2 hover:bg-gray-100 rounded-lg transition-colors">
-                                  <Eye className="w-5 h-5 text-gray-500" />
-                                </button>
-                                <button className="p-2 hover:bg-gray-100 rounded-lg transition-colors">
-                                  <Edit2 className="w-5 h-5 text-gray-500" />
+                                <button 
+                                  onClick={() => {
+                                    setSelectedExam(exam);
+                                    setShowManageQuestions(true);
+                                  }}
+                                  className="btn-secondary text-sm"
+                                  title={t('exam.manageQuestions')}
+                                >
+                                  <ClipboardList className="w-4 h-4 mr-1" />
+                                  {t('exam.manageQuestions')}
                                 </button>
                               </div>
                             </div>
@@ -1365,6 +1804,20 @@ export default function InstructorDashboard() {
             }
           }}
         />
+      </Modal>
+
+      <Modal
+        isOpen={showManageQuestions}
+        onClose={() => { setShowManageQuestions(false); setSelectedExam(null); }}
+        title={t('exam.manageQuestions')}
+      >
+        {selectedExam && (
+          <ManageQuestionsForm
+            examId={selectedExam.id}
+            examTitle={selectedExam.title}
+            onClose={() => { setShowManageQuestions(false); setSelectedExam(null); }}
+          />
+        )}
       </Modal>
     </div>
   );
