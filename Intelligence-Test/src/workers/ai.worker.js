@@ -40,10 +40,13 @@ const CONFIG = {
 // ============================================
 let faceLandmarker = null;
 let yoloSession = null;
-let yoloActiveUntil = 0;
 let suspiciousFrameCount = 0;
 let lastAlertTime = 0;
+let lastYoloRunTime = 0;
 let isInitialized = false;
+
+// YOLO throttle interval (run every 500ms)
+const YOLO_THROTTLE_MS = 500;
 
 // ============================================
 // INITIALIZATION
@@ -221,37 +224,34 @@ async function processFrame(imageData) {
   // ============================================
   // STAGE 2: YOLO DETECTION
   // ============================================
-  // Run YOLO detection continuously but throttled (every 500ms instead of every frame)
+  // Run YOLO detection continuously but throttled (every YOLO_THROTTLE_MS)
   // This ensures objects like phones/headphones are always detected
-  if (yoloSession) {
-    // Run YOLO at a lower rate to save resources (about every 2-3 frames at 5fps = ~500ms)
-    const shouldRunYolo = Math.random() < 0.4; // ~40% chance per frame
+  if (yoloSession && (now - lastYoloRunTime >= YOLO_THROTTLE_MS)) {
+    lastYoloRunTime = now;
     
-    if (shouldRunYolo) {
-      try {
-        const detections = await runYoloInference(imageData);
-        
-        for (const detection of detections) {
-          if (CONFIG.YOLO.ALERT_CLASSES.includes(detection.class)) {
-            // Throttle alerts (max once per 5 seconds per class)
-            if (now - lastAlertTime > 5000) {
-              const alertMessages = {
-                'phone': 'Phát hiện điện thoại!',
-                'material': 'Phát hiện tài liệu!',
-                'headphones': 'Phát hiện tai nghe!'
-              };
-              self.postMessage({ 
-                type: 'ALERT', 
-                payload: alertMessages[detection.class] || `Phát hiện ${detection.class}!`
-              });
-              lastAlertTime = now;
-            }
-            break;
+    try {
+      const detections = await runYoloInference(imageData);
+      
+      for (const detection of detections) {
+        if (CONFIG.YOLO.ALERT_CLASSES.includes(detection.class)) {
+          // Throttle alerts (max once per 5 seconds per class)
+          if (now - lastAlertTime > 5000) {
+            const alertMessages = {
+              'phone': 'Phát hiện điện thoại!',
+              'material': 'Phát hiện tài liệu!',
+              'headphones': 'Phát hiện tai nghe!'
+            };
+            self.postMessage({ 
+              type: 'ALERT', 
+              payload: alertMessages[detection.class] || `Phát hiện ${detection.class}!`
+            });
+            lastAlertTime = now;
           }
+          break;
         }
-      } catch (error) {
-        console.warn('YOLO inference error:', error);
       }
+    } catch (error) {
+      console.warn('YOLO inference error:', error);
     }
   }
 
@@ -354,9 +354,14 @@ function parseYoloOutput(output, dims, originalWidth, originalHeight) {
       stride = 4 + numClasses;
     }
   } else {
-    // Flat array - assume standard format
-    numBoxes = Math.floor(output.length / (4 + numClasses));
+    // Flat array - assume standard format with validation
     stride = 4 + numClasses;
+    if (output.length % stride !== 0) {
+      console.warn('YOLO output length not divisible by stride, possible format mismatch');
+      // Try to infer correct format
+      return [];
+    }
+    numBoxes = output.length / stride;
   }
   
   for (let i = 0; i < numBoxes; i++) {

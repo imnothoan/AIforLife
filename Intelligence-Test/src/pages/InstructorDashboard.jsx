@@ -458,37 +458,63 @@ function AddStudentForm({ classId, onClose, onSuccess }) {
 
     for (const studentEmail of emails) {
       try {
-        // Find user by email with timeout
-        const { data: profile, error: profileError } = await supabase
-          .from('profiles')
-          .select('id')
-          .eq('email', studentEmail)
-          .single();
-
-        if (profileError || !profile) {
-          errorMessages.push(`${studentEmail}: ${t('student.notRegistered')}`);
-          errorCount++;
-          continue;
-        }
-
-        // Add enrollment
-        const { error: enrollError } = await supabase
-          .from('enrollments')
-          .insert({
-            class_id: classId,
-            student_id: profile.id,
-            status: 'active'
+        // Use RPC function to add student (bypasses RLS restrictions)
+        const { data: result, error: rpcError } = await supabase
+          .rpc('add_student_to_class', {
+            p_class_id: classId,
+            p_student_email: studentEmail.toLowerCase().trim()
           });
 
-        if (enrollError) {
-          if (enrollError.code === '23505') {
+        if (rpcError) {
+          // RPC function doesn't exist - fallback to direct method
+          console.warn('RPC not available, using direct method:', rpcError);
+          
+          // Fallback: Find user by email directly
+          const { data: profile, error: profileError } = await supabase
+            .from('profiles')
+            .select('id')
+            .eq('email', studentEmail.toLowerCase().trim())
+            .single();
+
+          if (profileError || !profile) {
+            errorMessages.push(`${studentEmail}: ${t('student.notRegistered')}`);
+            errorCount++;
+            continue;
+          }
+
+          // Add enrollment directly
+          const { error: enrollError } = await supabase
+            .from('enrollments')
+            .insert({
+              class_id: classId,
+              student_id: profile.id,
+              status: 'active'
+            });
+
+          if (enrollError) {
+            if (enrollError.code === '23505') {
+              errorMessages.push(`${studentEmail}: ${t('student.alreadyInClass')}`);
+            } else {
+              console.error('Enroll error:', enrollError);
+              errorMessages.push(`${studentEmail}: ${t('student.addError')}`);
+            }
+            errorCount++;
+          } else {
+            successCount++;
+          }
+        } else if (result && result.success) {
+          successCount++;
+        } else if (result) {
+          // Handle RPC error responses
+          const errorKey = result.error;
+          if (errorKey === 'student_not_found') {
+            errorMessages.push(`${studentEmail}: ${t('student.notRegistered')}`);
+          } else if (errorKey === 'already_enrolled') {
             errorMessages.push(`${studentEmail}: ${t('student.alreadyInClass')}`);
           } else {
             errorMessages.push(`${studentEmail}: ${t('student.addError')}`);
           }
           errorCount++;
-        } else {
-          successCount++;
         }
       } catch (err) {
         console.error('Add student error:', err);
@@ -507,7 +533,7 @@ function AddStudentForm({ classId, onClose, onSuccess }) {
     if (errorCount > 0) {
       // Show first 3 error messages
       const displayErrors = errorMessages.slice(0, 3).join('\n');
-      const moreErrors = errorMessages.length > 3 ? `\n... ${errorMessages.length - 3} more` : '';
+      const moreErrors = errorMessages.length > 3 ? `\n... ${errorMessages.length - 3} ${t('common.more')}` : '';
       toast.warning(`${displayErrors}${moreErrors}`, { autoClose: 8000 });
     }
 
@@ -813,6 +839,10 @@ function ManageQuestionsForm({ examId, examTitle, onClose }) {
 // QUESTION FORM (for add/edit)
 // ============================================
 
+// Minimum number of options for multiple choice questions
+const MIN_QUESTION_OPTIONS = 2;
+const MAX_QUESTION_OPTIONS = 6;
+
 function QuestionForm({ question, onSave, onCancel, saving }) {
   const { t } = useLanguage();
   const [formData, setFormData] = useState({
@@ -854,7 +884,7 @@ function QuestionForm({ question, onSave, onCancel, saving }) {
   };
 
   const removeOption = (index) => {
-    if (formData.options.length <= 2) return;
+    if (formData.options.length <= MIN_QUESTION_OPTIONS) return;
     const newOptions = formData.options.filter((_, i) => i !== index);
     // Re-assign letters
     const reorderedOptions = newOptions.map((opt, i) => ({
@@ -943,7 +973,7 @@ function QuestionForm({ question, onSave, onCancel, saving }) {
                   placeholder={t('question.optionPlaceholder')}
                   className="input flex-1"
                 />
-                {formData.options.length > 2 && (
+                {formData.options.length > MIN_QUESTION_OPTIONS && (
                   <button
                     type="button"
                     onClick={() => removeOption(idx)}
@@ -955,7 +985,7 @@ function QuestionForm({ question, onSave, onCancel, saving }) {
               </div>
             ))}
           </div>
-          {formData.options.length < 6 && (
+          {formData.options.length < MAX_QUESTION_OPTIONS && (
             <button
               type="button"
               onClick={addOption}

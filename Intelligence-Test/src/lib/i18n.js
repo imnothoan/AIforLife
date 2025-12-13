@@ -34,6 +34,7 @@ const translations = {
     'common.upload': 'Tải lên',
     'common.yes': 'Đúng',
     'common.no': 'Sai',
+    'common.more': 'lỗi khác',
     
     // Auth
     'auth.login': 'Đăng nhập',
@@ -415,6 +416,7 @@ const translations = {
     'common.submit': 'Submit',
     'common.download': 'Download',
     'common.upload': 'Upload',
+    'common.more': 'more errors',
     
     // Auth
     'auth.login': 'Login',
