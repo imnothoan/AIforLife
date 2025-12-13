@@ -1351,7 +1351,7 @@ export default function Exam() {
                   className="btn-secondary disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   <ChevronLeft className="w-5 h-5 mr-1" />
-                  Câu trước
+                  {t('common.previous')}
                 </button>
 
                 {currentQuestionIndex === questions.length - 1 ? (
@@ -1365,14 +1365,14 @@ export default function Exam() {
                     ) : (
                       <Send className="w-5 h-5 mr-2" />
                     )}
-                    Nộp bài
+                    {t('common.submit')}
                   </button>
                 ) : (
                   <button
                     onClick={goNext}
                     className="btn-primary"
                   >
-                    Câu sau
+                    {t('common.next')}
                     <ChevronRight className="w-5 h-5 ml-1" />
                   </button>
                 )}
@@ -1389,35 +1389,35 @@ export default function Exam() {
           <div className="flex items-center justify-between mb-2">
             <h3 className="font-bold text-gray-700 flex items-center space-x-2">
               <Camera className="w-4 h-4" />
-              <span>Camera Giám Sát</span>
+              <span>{t('proctoring.camera')}</span>
             </h3>
             <div className="flex items-center space-x-1">
               <div className="w-2 h-2 bg-danger rounded-full animate-pulse" />
-              <span className="text-xs text-danger font-bold">REC</span>
+              <span className="text-xs text-danger font-bold">{t('proctoring.recording')}</span>
             </div>
           </div>
           <div className="relative bg-gray-900 rounded-lg overflow-hidden aspect-video">
             <video ref={videoRef} autoPlay playsInline muted className="w-full h-full object-cover" />
           </div>
-          <p className="text-xs mt-2 text-gray-500 text-center">{status}</p>
+          <p className="text-xs mt-2 text-gray-500 text-center">{status || t('common.loading')}</p>
         </div>
 
         {/* Violation Stats */}
         <div className="p-4 border-b border-gray-200 space-y-2">
           <div className="flex items-center justify-between p-2 bg-danger-50 rounded-lg">
-            <span className="text-xs text-gray-600">AI Phát hiện</span>
+            <span className="text-xs text-gray-600">{t('proctoring.aiDetection')}</span>
             <span className="font-bold text-danger">{cheatCount}</span>
           </div>
           <div className="flex items-center justify-between p-2 bg-warning-50 rounded-lg">
-            <span className="text-xs text-gray-600">Rời tab</span>
+            <span className="text-xs text-gray-600">{t('proctoring.tabViolations')}</span>
             <span className="font-bold text-warning">{tabViolations}</span>
           </div>
           <div className="flex items-center justify-between p-2 bg-warning-50 rounded-lg">
-            <span className="text-xs text-gray-600">Thoát fullscreen</span>
+            <span className="text-xs text-gray-600">{t('proctoring.fullscreenViolations')}</span>
             <span className="font-bold text-warning">{fullscreenViolations}</span>
           </div>
           <div className="flex items-center justify-between p-2 bg-gray-50 rounded-lg">
-            <span className="text-xs text-gray-600">Nhìn ra ngoài</span>
+            <span className="text-xs text-gray-600">{t('proctoring.gazeAway')}</span>
             <span className="font-bold text-gray-600">{gazeAwayCount}</span>
           </div>
         </div>
@@ -1425,7 +1425,7 @@ export default function Exam() {
         {/* Question Navigation */}
         <div className="flex-1 overflow-y-auto p-4">
           <div className="flex items-center justify-between mb-3">
-            <h3 className="font-bold text-gray-700">Danh sách câu hỏi</h3>
+            <h3 className="font-bold text-gray-700">{t('proctoring.questionList')}</h3>
             <button
               onClick={() => setShowQuestionNav(!showQuestionNav)}
               className="text-gray-400 hover:text-gray-600"
@@ -1467,15 +1467,15 @@ export default function Exam() {
           <div className="mt-4 space-y-1 text-xs text-gray-500">
             <div className="flex items-center space-x-2">
               <div className="w-4 h-4 bg-success-100 rounded" />
-              <span>Đã trả lời</span>
+              <span>{t('proctoring.answered')}</span>
             </div>
             <div className="flex items-center space-x-2">
               <div className="w-4 h-4 bg-gray-100 rounded" />
-              <span>Chưa trả lời</span>
+              <span>{t('proctoring.unanswered')}</span>
             </div>
             <div className="flex items-center space-x-2">
               <Flag className="w-4 h-4 text-warning fill-warning" />
-              <span>Đã gắn cờ</span>
+              <span>{t('proctoring.flagged')}</span>
             </div>
           </div>
         </div>
@@ -1492,7 +1492,7 @@ export default function Exam() {
             ) : (
               <Send className="w-5 h-5 mr-2" />
             )}
-            Nộp bài ({Object.keys(answers).length}/{questions.length})
+            {t('common.submit')} ({Object.keys(answers).length}/{questions.length})
           </button>
         </div>
       </div>
