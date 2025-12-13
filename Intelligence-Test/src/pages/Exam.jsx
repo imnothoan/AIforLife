@@ -3,12 +3,14 @@ import { toast } from 'react-toastify';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { useLanguage } from '../context/LanguageContext';
 import { supabase } from '../lib/supabase';
 import { 
   Flag, FlagOff, StickyNote, ChevronLeft, ChevronRight, 
   Clock, Camera, AlertTriangle, Send, Monitor, Wifi, WifiOff,
-  Eye, EyeOff, Shield, XCircle, CheckCircle, Loader2
+  Eye, EyeOff, Shield, XCircle, CheckCircle, Loader2, User
 } from 'lucide-react';
+import FaceVerification from '../components/FaceVerification';
 
 // Remote desktop detection signatures
 const REMOTE_DESKTOP_SIGNATURES = [
@@ -20,9 +22,11 @@ const REMOTE_DESKTOP_SIGNATURES = [
 export default function Exam() {
   const { id: examId } = useParams();
   const { user, profile } = useAuth();
+  const { t } = useLanguage();
   const videoRef = useRef(null);
   const workerRef = useRef(null);
   const timerRef = useRef(null);
+  const randomVerifyRef = useRef(null);
   const navigate = useNavigate();
 
   // Exam State
@@ -39,11 +43,18 @@ export default function Exam() {
   const [isTimerWarning, setIsTimerWarning] = useState(false);
 
   // Anti-cheat State
-  const [status, setStatus] = useState("Đang khởi tạo hệ thống...");
+  const [status, setStatus] = useState(null);
   const [cheatCount, setCheatCount] = useState(0);
   const [tabViolations, setTabViolations] = useState(0);
   const [fullscreenViolations, setFullscreenViolations] = useState(0);
   const [gazeAwayCount, setGazeAwayCount] = useState(0);
+
+  // Face Verification State
+  const [showFaceVerification, setShowFaceVerification] = useState(false);
+  const [faceVerificationMode, setFaceVerificationMode] = useState('verify'); // 'enroll' | 'verify' | 'random'
+  const [storedFaceEmbedding, setStoredFaceEmbedding] = useState(null);
+  const [faceVerificationCount, setFaceVerificationCount] = useState(0);
+  const [pendingVerificationCallback, setPendingVerificationCallback] = useState(null);
 
   // Environment State
   const [isOffline, setIsOffline] = useState(!navigator.onLine);
@@ -578,6 +589,154 @@ export default function Exam() {
   };
 
   // ============================================
+  // FACE VERIFICATION HANDLERS
+  // ============================================
+  
+  // Load stored face embedding from profile
+  useEffect(() => {
+    const loadFaceEmbedding = async () => {
+      if (!user?.id) return;
+      
+      try {
+        const { data: profileData } = await supabase
+          .from('profiles')
+          .select('face_embedding')
+          .eq('id', user.id)
+          .single();
+        
+        if (profileData?.face_embedding) {
+          setStoredFaceEmbedding(profileData.face_embedding);
+        }
+      } catch (error) {
+        console.warn('Could not load face embedding:', error);
+      }
+    };
+    
+    loadFaceEmbedding();
+  }, [user?.id]);
+
+  // Schedule random face verifications during exam
+  useEffect(() => {
+    if (!examStarted || !sessionId) return;
+    
+    // Skip random verification in demo mode
+    const isDemo = examId === 'demo' || examId === '1';
+    if (isDemo) return;
+    
+    // Schedule 2-3 random verifications during exam
+    const examDuration = (examData?.duration_minutes || 60) * 60 * 1000;
+    const numChecks = Math.floor(Math.random() * 2) + 2; // 2-3 checks
+    const intervals = [];
+    
+    for (let i = 0; i < numChecks; i++) {
+      // Random time between 20% and 80% of exam duration
+      const minTime = examDuration * 0.2;
+      const maxTime = examDuration * 0.8;
+      const checkTime = minTime + Math.random() * (maxTime - minTime);
+      
+      const timeout = setTimeout(() => {
+        // Only trigger if exam is still in progress
+        if (examStarted && !isSubmitting && !showFaceVerification) {
+          triggerRandomVerification();
+        }
+      }, checkTime);
+      
+      intervals.push(timeout);
+    }
+    
+    randomVerifyRef.current = intervals;
+    
+    return () => {
+      intervals.forEach(clearTimeout);
+    };
+  }, [examStarted, sessionId, examId, examData?.duration_minutes]);
+
+  const triggerRandomVerification = () => {
+    setFaceVerificationMode('random');
+    setShowFaceVerification(true);
+    logProctoring('face_verification_triggered', { type: 'random' });
+  };
+
+  const handleFaceVerificationSuccess = async (similarity) => {
+    setShowFaceVerification(false);
+    setFaceVerificationCount(prev => prev + 1);
+    
+    // Log successful verification
+    if (sessionId && sessionId !== 'demo-session-id') {
+      try {
+        await supabase.rpc('log_face_verification', {
+          p_session_id: sessionId,
+          p_verification_type: faceVerificationMode,
+          p_similarity_score: similarity || 1.0,
+          p_is_match: true
+        });
+      } catch (error) {
+        console.warn('Could not log face verification:', error);
+      }
+    }
+    
+    toast.success(t('face.success'));
+    
+    // Execute pending callback if any
+    if (pendingVerificationCallback) {
+      pendingVerificationCallback();
+      setPendingVerificationCallback(null);
+    }
+  };
+
+  const handleFaceVerificationFailure = async (reason, similarity) => {
+    // Log failed verification
+    if (sessionId && sessionId !== 'demo-session-id') {
+      try {
+        await supabase.rpc('log_face_verification', {
+          p_session_id: sessionId,
+          p_verification_type: faceVerificationMode,
+          p_similarity_score: similarity || 0,
+          p_is_match: false,
+          p_error_reason: reason
+        });
+      } catch (error) {
+        console.warn('Could not log face verification:', error);
+      }
+    }
+    
+    logProctoring('face_verification_failed', { reason, similarity, type: faceVerificationMode });
+    
+    // For random checks, just warn but don't block
+    if (faceVerificationMode === 'random') {
+      toast.warning(t('face.mismatch'));
+      setCheatCount(prev => prev + 1);
+      setShowFaceVerification(false);
+    }
+    // For start/submit verifications, they can retry (handled in FaceVerification component)
+  };
+
+  const handleFaceEnrollComplete = async (embedding, imageUrl) => {
+    setStoredFaceEmbedding(embedding);
+    setShowFaceVerification(false);
+    
+    // Save embedding to profile
+    if (user?.id) {
+      try {
+        await supabase.rpc('update_face_embedding', {
+          p_embedding: embedding,
+          p_image_url: imageUrl
+        });
+      } catch (error) {
+        console.warn('Could not save face embedding:', error);
+      }
+    }
+    
+    toast.success(t('face.enrollSuccess'));
+    
+    // Execute pending callback
+    if (pendingVerificationCallback) {
+      pendingVerificationCallback();
+      setPendingVerificationCallback(null);
+    }
+  };
+
+  // ============================================
   // ANSWER HANDLING
   // ============================================
   const handleAnswer = (questionId, answer) => {
@@ -803,7 +962,7 @@ export default function Exam() {
     // Check remote desktop
     if (detectRemoteDesktop()) {
       setRemoteDesktopDetected(true);
-      toast.error("PHÁT HIỆN PHẦN MỀM ĐIỀU KHIỂN TỪ XA! Không thể bắt đầu thi.", { autoClose: false });
+      toast.error(t('anticheat.remoteDesktop'), { autoClose: false });
       return;
     }
 
@@ -814,6 +973,31 @@ export default function Exam() {
     // Enter fullscreen
     await enterFullscreen();
     
+    const isDemo = examId === 'demo' || examId === '1';
+    
+    // For production mode, require face verification before starting
+    if (!isDemo && examData?.require_camera !== false) {
+      // Check if user has enrolled face
+      if (!storedFaceEmbedding) {
+        // Need to enroll face first
+        setFaceVerificationMode('enroll');
+        setPendingVerificationCallback(() => proceedWithExamStart);
+        setShowFaceVerification(true);
+        return;
+      } else {
+        // Verify face before starting
+        setFaceVerificationMode('verify');
+        setPendingVerificationCallback(() => proceedWithExamStart);
+        setShowFaceVerification(true);
+        return;
+      }
+    }
+    
+    // Demo mode or camera not required - start directly
+    await proceedWithExamStart();
+  };
+
+  const proceedWithExamStart = async () => {
     const isDemo = examId === 'demo' || examId === '1';
     
     if (isDemo) {
@@ -832,11 +1016,11 @@ export default function Exam() {
         if (error) {
           console.error('Failed to create session:', error);
           if (error.message.includes('Maximum attempts')) {
-            toast.error('Bạn đã hết lượt thi cho bài này');
+            toast.error(t('error.general'));
           } else if (error.message.includes('not enrolled')) {
-            toast.error('Bạn chưa đăng ký lớp học này');
+            toast.error(t('error.permission'));
           } else {
-            toast.error('Không thể bắt đầu bài thi: ' + error.message);
+            toast.error(t('error.general'));
           }
           return;
         }
@@ -844,13 +1028,13 @@ export default function Exam() {
         setSessionId(newSessionId);
       } catch (err) {
         console.error('Session creation error:', err);
-        toast.error('Có lỗi xảy ra khi bắt đầu bài thi');
+        toast.error(t('error.general'));
         return;
       }
     }
     
     setExamStarted(true);
-    toast.info("Bài thi bắt đầu! Chúc bạn làm bài tốt.");
+    toast.info(t('common.success'));
   };
 
   // ============================================
@@ -877,30 +1061,30 @@ export default function Exam() {
             <div className="inline-flex items-center justify-center w-16 h-16 bg-primary-100 rounded-full mb-4">
               <Shield className="w-8 h-8 text-primary" />
             </div>
-            <h2 className="text-2xl font-bold text-text-main">Quy định phòng thi</h2>
-            <p className="text-gray-500 mt-1">{examData?.title || 'Đang tải...'}</p>
+            <h2 className="text-2xl font-bold text-text-main">{t('exam.rules.title')}</h2>
+            <p className="text-gray-500 mt-1">{examData?.title || t('common.loading')}</p>
           </div>
 
           <div className="space-y-3 mb-6">
             <div className="flex items-start space-x-3 p-3 bg-success-50 rounded-lg">
               <CheckCircle className="w-5 h-5 text-success mt-0.5 flex-shrink-0" />
-              <span className="text-sm text-gray-700">Bật Camera & Micro trong suốt thời gian thi</span>
+              <span className="text-sm text-gray-700">{t('exam.rules.camera')}</span>
             </div>
             <div className="flex items-start space-x-3 p-3 bg-success-50 rounded-lg">
               <CheckCircle className="w-5 h-5 text-success mt-0.5 flex-shrink-0" />
-              <span className="text-sm text-gray-700">Sử dụng chế độ Toàn màn hình (Fullscreen)</span>
+              <span className="text-sm text-gray-700">{t('exam.rules.fullscreen')}</span>
             </div>
             <div className="flex items-start space-x-3 p-3 bg-danger-50 rounded-lg">
               <XCircle className="w-5 h-5 text-danger mt-0.5 flex-shrink-0" />
-              <span className="text-sm text-gray-700">Nghiêm cấm sử dụng màn hình phụ (HDMI/Projector)</span>
+              <span className="text-sm text-gray-700">{t('exam.rules.noMultiScreen')}</span>
             </div>
             <div className="flex items-start space-x-3 p-3 bg-danger-50 rounded-lg">
               <XCircle className="w-5 h-5 text-danger mt-0.5 flex-shrink-0" />
-              <span className="text-sm text-gray-700">Nghiêm cấm rời khỏi tab thi (Alt+Tab)</span>
+              <span className="text-sm text-gray-700">{t('exam.rules.noTabSwitch')}</span>
             </div>
             <div className="flex items-start space-x-3 p-3 bg-danger-50 rounded-lg">
               <XCircle className="w-5 h-5 text-danger mt-0.5 flex-shrink-0" />
-              <span className="text-sm text-gray-700">Nghiêm cấm sử dụng TeamViewer, AnyDesk, UltraViewer...</span>
+              <span className="text-sm text-gray-700">{t('exam.rules.noRemoteDesktop')}</span>
             </div>
           </div>
 
@@ -908,25 +1092,25 @@ export default function Exam() {
           {hasMultiScreen && (
             <div className="p-4 bg-danger-100 border border-danger-200 rounded-lg mb-4 flex items-center space-x-3">
               <Monitor className="w-6 h-6 text-danger" />
-              <span className="text-sm font-bold text-danger">PHÁT HIỆN NHIỀU MÀN HÌNH - Vui lòng ngắt kết nối</span>
+              <span className="text-sm font-bold text-danger">{t('anticheat.multiScreen')}</span>
             </div>
           )}
 
           {remoteDesktopDetected && (
             <div className="p-4 bg-danger-100 border border-danger-200 rounded-lg mb-4 flex items-center space-x-3">
               <AlertTriangle className="w-6 h-6 text-danger" />
-              <span className="text-sm font-bold text-danger">PHÁT HIỆN PHẦN MỀM ĐIỀU KHIỂN TỪ XA</span>
+              <span className="text-sm font-bold text-danger">{t('anticheat.remoteDesktop')}</span>
             </div>
           )}
 
           {/* Camera preview */}
           <div className="mb-6">
-            <p className="text-sm font-medium text-gray-700 mb-2">Kiểm tra Camera:</p>
+            <p className="text-sm font-medium text-gray-700 mb-2">{t('exam.rules.cameraCheck')}</p>
             <div className="relative bg-gray-900 rounded-lg overflow-hidden aspect-video">
               <video ref={videoRef} autoPlay playsInline muted className="w-full h-full object-cover" />
               <div className="absolute bottom-2 left-2 flex items-center space-x-1 bg-black/50 text-white text-xs px-2 py-1 rounded">
                 <Camera className="w-3 h-3" />
-                <span>Camera Preview</span>
+                <span>{t('proctoring.camera')}</span>
               </div>
             </div>
           </div>
@@ -937,9 +1121,29 @@ export default function Exam() {
             className="btn-primary w-full py-3 text-lg disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <Shield className="w-5 h-5 mr-2" />
-            Đồng ý & Bắt đầu làm bài
+            {t('exam.rules.agree')}
           </button>
         </motion.div>
+        
+        {/* Face Verification Modal */}
+        <AnimatePresence>
+          {showFaceVerification && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4"
+            >
+              <FaceVerification
+                mode={faceVerificationMode}
+                storedEmbedding={storedFaceEmbedding}
+                onSuccess={handleFaceVerificationSuccess}
+                onFailure={handleFaceVerificationFailure}
+                onEnrollComplete={handleFaceEnrollComplete}
+              />
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
     );
   }
@@ -949,6 +1153,26 @@ export default function Exam() {
   // ============================================
   return (
     <div className="flex h-screen bg-background no-select">
+      {/* Face Verification Modal for random checks */}
+      <AnimatePresence>
+        {showFaceVerification && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/70 z-[100] flex items-center justify-center p-4"
+          >
+            <FaceVerification
+              mode={faceVerificationMode}
+              storedEmbedding={storedFaceEmbedding}
+              onSuccess={handleFaceVerificationSuccess}
+              onFailure={handleFaceVerificationFailure}
+              onEnrollComplete={handleFaceEnrollComplete}
+            />
+          </motion.div>
+        )}
+      </AnimatePresence>
+      
       {/* Network Alert Overlay */}
       <AnimatePresence>
         {isOffline && (
@@ -960,7 +1184,7 @@ export default function Exam() {
           >
             <div className="flex items-center justify-center space-x-2 p-2">
               <WifiOff className="w-5 h-5" />
-              <span>MẤT KẾT NỐI MẠNG - Bài thi sẽ không được lưu!</span>
+              <span>{t('anticheat.networkOffline')}</span>
             </div>
           </motion.div>
         )}
@@ -1127,7 +1351,7 @@ export default function Exam() {
                   className="btn-secondary disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   <ChevronLeft className="w-5 h-5 mr-1" />
-                  Câu trước
+                  {t('common.previous')}
                 </button>
 
                 {currentQuestionIndex === questions.length - 1 ? (
@@ -1141,14 +1365,14 @@ export default function Exam() {
                     ) : (
                       <Send className="w-5 h-5 mr-2" />
                     )}
-                    Nộp bài
+                    {t('common.submit')}
                   </button>
                 ) : (
                   <button
                     onClick={goNext}
                     className="btn-primary"
                   >
-                    Câu sau
+                    {t('common.next')}
                     <ChevronRight className="w-5 h-5 ml-1" />
                   </button>
                 )}
@@ -1165,35 +1389,35 @@ export default function Exam() {
           <div className="flex items-center justify-between mb-2">
             <h3 className="font-bold text-gray-700 flex items-center space-x-2">
               <Camera className="w-4 h-4" />
-              <span>Camera Giám Sát</span>
+              <span>{t('proctoring.camera')}</span>
             </h3>
             <div className="flex items-center space-x-1">
               <div className="w-2 h-2 bg-danger rounded-full animate-pulse" />
-              <span className="text-xs text-danger font-bold">REC</span>
+              <span className="text-xs text-danger font-bold">{t('proctoring.recording')}</span>
             </div>
           </div>
           <div className="relative bg-gray-900 rounded-lg overflow-hidden aspect-video">
             <video ref={videoRef} autoPlay playsInline muted className="w-full h-full object-cover" />
           </div>
-          <p className="text-xs mt-2 text-gray-500 text-center">{status}</p>
+          <p className="text-xs mt-2 text-gray-500 text-center">{status || t('common.loading')}</p>
         </div>
 
         {/* Violation Stats */}
         <div className="p-4 border-b border-gray-200 space-y-2">
           <div className="flex items-center justify-between p-2 bg-danger-50 rounded-lg">
-            <span className="text-xs text-gray-600">AI Phát hiện</span>
+            <span className="text-xs text-gray-600">{t('proctoring.aiDetection')}</span>
             <span className="font-bold text-danger">{cheatCount}</span>
           </div>
           <div className="flex items-center justify-between p-2 bg-warning-50 rounded-lg">
-            <span className="text-xs text-gray-600">Rời tab</span>
+            <span className="text-xs text-gray-600">{t('proctoring.tabViolations')}</span>
             <span className="font-bold text-warning">{tabViolations}</span>
           </div>
           <div className="flex items-center justify-between p-2 bg-warning-50 rounded-lg">
-            <span className="text-xs text-gray-600">Thoát fullscreen</span>
+            <span className="text-xs text-gray-600">{t('proctoring.fullscreenViolations')}</span>
             <span className="font-bold text-warning">{fullscreenViolations}</span>
           </div>
           <div className="flex items-center justify-between p-2 bg-gray-50 rounded-lg">
-            <span className="text-xs text-gray-600">Nhìn ra ngoài</span>
+            <span className="text-xs text-gray-600">{t('proctoring.gazeAway')}</span>
             <span className="font-bold text-gray-600">{gazeAwayCount}</span>
           </div>
         </div>
@@ -1201,7 +1425,7 @@ export default function Exam() {
         {/* Question Navigation */}
         <div className="flex-1 overflow-y-auto p-4">
           <div className="flex items-center justify-between mb-3">
-            <h3 className="font-bold text-gray-700">Danh sách câu hỏi</h3>
+            <h3 className="font-bold text-gray-700">{t('proctoring.questionList')}</h3>
             <button
               onClick={() => setShowQuestionNav(!showQuestionNav)}
               className="text-gray-400 hover:text-gray-600"
@@ -1243,15 +1467,15 @@ export default function Exam() {
           <div className="mt-4 space-y-1 text-xs text-gray-500">
             <div className="flex items-center space-x-2">
               <div className="w-4 h-4 bg-success-100 rounded" />
-              <span>Đã trả lời</span>
+              <span>{t('proctoring.answered')}</span>
             </div>
             <div className="flex items-center space-x-2">
               <div className="w-4 h-4 bg-gray-100 rounded" />
-              <span>Chưa trả lời</span>
+              <span>{t('proctoring.unanswered')}</span>
             </div>
             <div className="flex items-center space-x-2">
               <Flag className="w-4 h-4 text-warning fill-warning" />
-              <span>Đã gắn cờ</span>
+              <span>{t('proctoring.flagged')}</span>
             </div>
           </div>
         </div>
@@ -1268,7 +1492,7 @@ export default function Exam() {
             ) : (
               <Send className="w-5 h-5 mr-2" />
             )}
-            Nộp bài ({Object.keys(answers).length}/{questions.length})
+            {t('common.submit')} ({Object.keys(answers).length}/{questions.length})
           </button>
         </div>
       </div>

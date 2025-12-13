@@ -1,13 +1,16 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
+import { useLanguage } from '../context/LanguageContext';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { motion } from 'framer-motion';
 import { toast } from 'react-toastify';
 import { LogOut, FileText, User, PlayCircle, Clock, CheckCircle, AlertCircle, Loader2 } from 'lucide-react';
+import LanguageSwitcher from '../components/LanguageSwitcher';
 
 export default function Dashboard() {
   const { user, profile, logout, isInstructor } = useAuth();
+  const { t } = useLanguage();
   const navigate = useNavigate();
 
   const [exams, setExams] = useState([]);
@@ -105,7 +108,7 @@ export default function Dashboard() {
     if (exam.session?.status === 'submitted' || exam.session?.status === 'auto_submitted') {
       return {
         type: 'completed',
-        label: 'Đã hoàn thành',
+        label: t('exam.status.completed'),
         color: 'bg-success-100 text-success-700',
         icon: CheckCircle,
         canTake: false
@@ -115,7 +118,7 @@ export default function Dashboard() {
     if (now < start) {
       return {
         type: 'upcoming',
-        label: 'Sắp diễn ra',
+        label: t('exam.status.upcoming'),
         color: 'bg-gray-100 text-gray-600',
         icon: Clock,
         canTake: false
@@ -125,7 +128,7 @@ export default function Dashboard() {
     if (now > end) {
       return {
         type: 'ended',
-        label: 'Đã kết thúc',
+        label: t('exam.status.ended'),
         color: 'bg-gray-100 text-gray-500',
         icon: AlertCircle,
         canTake: false
@@ -134,7 +137,7 @@ export default function Dashboard() {
 
     return {
       type: 'active',
-      label: 'Đang diễn ra',
+      label: t('exam.status.active'),
       color: 'bg-primary-100 text-primary-700',
       icon: PlayCircle,
       canTake: true
@@ -185,6 +188,7 @@ export default function Dashboard() {
           </span>
         </div>
         <div className="flex items-center space-x-6">
+          <LanguageSwitcher compact />
           <div className="flex items-center space-x-2 text-sm font-medium text-gray-600 bg-gray-100 px-3 py-1.5 rounded-full">
             <User className="w-4 h-4" />
             <span>{profile?.full_name || user?.email}</span>
@@ -194,7 +198,7 @@ export default function Dashboard() {
             className="flex items-center space-x-2 text-danger hover:bg-danger-50 px-4 py-2 rounded-lg transition-colors text-sm font-semibold"
           >
             <LogOut className="w-4 h-4" />
-            <span>Đăng xuất</span>
+            <span>{t('auth.logout')}</span>
           </button>
         </div>
       </nav>
@@ -208,10 +212,10 @@ export default function Dashboard() {
       >
         <div className="mb-8">
           <h1 className="text-3xl font-bold text-text-main">
-            Xin chào, {profile?.full_name?.split(' ').pop() || 'thí sinh'}! 👋
+            {t('dashboard.hello')}, {profile?.full_name?.split(' ').pop() || t('auth.student')}! 👋
           </h1>
           <p className="text-gray-500 mt-2">
-            Chọn bài thi bên dưới để bắt đầu. Hãy đảm bảo đường truyền mạng ổn định.
+            {t('dashboard.selectExam')}
           </p>
         </div>
 
@@ -246,18 +250,18 @@ export default function Dashboard() {
                   </h3>
 
                   <div className="space-y-1 text-sm text-gray-500 mb-4">
-                    <p>Môn: {exam.class?.name || 'N/A'}</p>
-                    <p>Mã môn: {exam.class?.code || 'N/A'}</p>
+                    <p>{t('exam.course')}: {exam.class?.name || 'N/A'}</p>
+                    <p>{t('exam.code')}: {exam.class?.code || 'N/A'}</p>
                     <p className="flex items-center space-x-1">
                       <Clock className="w-4 h-4" />
-                      <span>Thời gian: {exam.duration_minutes} phút</span>
+                      <span>{t('exam.duration')}: {exam.duration_minutes} {t('exam.minutes')}</span>
                     </p>
                   </div>
 
                   {status.type === 'completed' && exam.session?.percentage !== null && (
                     <div className="mb-4 p-3 bg-success-50 rounded-lg">
                       <p className="text-sm text-gray-600">
-                        Điểm số: <span className="font-bold text-success-700">
+                        {t('exam.score')}: <span className="font-bold text-success-700">
                           {exam.session.percentage.toFixed(1)}%
                         </span>
                       </p>
@@ -266,7 +270,7 @@ export default function Dashboard() {
 
                   {status.type === 'upcoming' && (
                     <div className="mb-4 p-3 bg-gray-50 rounded-lg text-xs text-gray-500">
-                      <p>Bắt đầu: {formatDateTime(exam.start_time)}</p>
+                      <p>{t('exam.startTime')}: {formatDateTime(exam.start_time)}</p>
                     </div>
                   )}
 
@@ -276,16 +280,16 @@ export default function Dashboard() {
                       className="w-full flex items-center justify-center space-x-2 btn-primary py-3"
                     >
                       <PlayCircle className="w-5 h-5" />
-                      <span>Vào phòng thi</span>
+                      <span>{t('dashboard.enterExam')}</span>
                     </button>
                   ) : status.type === 'completed' && exam.allow_review ? (
                     <button className="w-full btn-secondary py-3">
-                      Xem lại bài
+                      {t('dashboard.reviewExam')}
                     </button>
                   ) : (
                     <button disabled className="w-full bg-gray-200 text-gray-500 py-3 rounded-xl font-semibold cursor-not-allowed">
-                      {status.type === 'upcoming' ? 'Chưa đến giờ' : 
-                       status.type === 'ended' ? 'Đã hết hạn' : 'Không khả dụng'}
+                      {status.type === 'upcoming' ? t('dashboard.notStarted') : 
+                       status.type === 'ended' ? t('dashboard.expired') : t('dashboard.notAvailable')}
                     </button>
                   )}
                 </motion.div>
@@ -295,9 +299,9 @@ export default function Dashboard() {
         ) : (
           <div className="text-center py-16 bg-paper rounded-2xl border border-gray-100">
             <FileText className="w-20 h-20 mx-auto mb-4 text-gray-300" />
-            <h2 className="text-xl font-bold text-gray-700 mb-2">Chưa có bài thi nào</h2>
+            <h2 className="text-xl font-bold text-gray-700 mb-2">{t('dashboard.noExams')}</h2>
             <p className="text-gray-500">
-              Bạn chưa được đăng ký vào lớp học nào hoặc chưa có bài thi sẵn sàng.
+              {t('dashboard.noExamsDesc')}
             </p>
           </div>
         )}
@@ -305,7 +309,7 @@ export default function Dashboard() {
         {/* Demo exams for testing */}
         {exams.length === 0 && (
           <div className="mt-8">
-            <p className="text-sm text-gray-500 mb-4">Bài thi mẫu để thử nghiệm:</p>
+            <p className="text-sm text-gray-500 mb-4">{t('dashboard.demoExam')}</p>
             <motion.div 
               variants={itemVariants}
               className="card hover:shadow-soft transition-all group max-w-md"
@@ -319,13 +323,13 @@ export default function Dashboard() {
               <h3 className="text-xl font-bold text-text-main mb-2 group-hover:text-primary transition-colors">
                 Trí tuệ nhân tạo (AI)
               </h3>
-              <p className="text-gray-500 text-sm mb-6">Mã môn: INT3401 • Thời gian: 45 phút</p>
+              <p className="text-gray-500 text-sm mb-6">{t('exam.code')}: INT3401 • {t('exam.duration')}: 45 {t('exam.minutes')}</p>
               <button
                 onClick={() => navigate('/exam/demo')}
                 className="w-full flex items-center justify-center space-x-2 btn-primary py-3"
               >
                 <PlayCircle className="w-5 h-5" />
-                <span>Vào phòng thi</span>
+                <span>{t('dashboard.enterExam')}</span>
               </button>
             </motion.div>
           </div>

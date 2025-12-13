@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
+import { useLanguage } from '../context/LanguageContext';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -10,6 +11,7 @@ import {
   Calendar, Search, Filter, Download, Settings, ChevronRight,
   GraduationCap, ClipboardList, Shield, Activity, X, Save, Loader2
 } from 'lucide-react';
+import LanguageSwitcher from '../components/LanguageSwitcher';
 
 // ============================================
 // UTILITY FUNCTIONS
@@ -70,6 +72,7 @@ function Modal({ isOpen, onClose, title, children }) {
 
 function CreateExamForm({ classId, onClose, onSuccess }) {
   const { user } = useAuth();
+  const { t } = useLanguage();
   const [loading, setLoading] = useState(false);
   const [formData, setFormData] = useState({
     title: '',
@@ -106,17 +109,17 @@ function CreateExamForm({ classId, onClose, onSuccess }) {
     
     // Validate title
     if (!trimmedTitle) {
-      toast.error('Vui lòng nhập tên bài thi');
+      toast.error(t('validation.enterExamTitle'));
       return;
     }
     if (trimmedTitle.length > 200) {
-      toast.error('Tên bài thi không được vượt quá 200 ký tự');
+      toast.error(t('validation.examTitleTooLong'));
       return;
     }
     
     // Validate time
     if (!formData.start_time || !formData.end_time) {
-      toast.error('Vui lòng chọn thời gian bắt đầu và kết thúc');
+      toast.error(t('validation.selectTime'));
       return;
     }
     
@@ -124,14 +127,14 @@ function CreateExamForm({ classId, onClose, onSuccess }) {
     const endTime = new Date(formData.end_time);
     
     if (endTime <= startTime) {
-      toast.error('Thời gian kết thúc phải sau thời gian bắt đầu');
+      toast.error(t('validation.endAfterStart'));
       return;
     }
     
     // Validate duration
     const durationMinutes = parseInt(formData.duration_minutes);
     if (isNaN(durationMinutes) || durationMinutes < 5 || durationMinutes > 480) {
-      toast.error('Thời lượng thi phải từ 5 đến 480 phút');
+      toast.error(t('validation.durationRange'));
       return;
     }
 
@@ -149,7 +152,20 @@ function CreateExamForm({ classId, onClose, onSuccess }) {
         const supabasePromise = supabase
           .from('exams')
           .insert({
-            ...formData,
+            title: trimmedTitle,
+            description: formData.description?.trim() || null,
+            duration_minutes: durationMinutes,
+            start_time: formData.start_time,
+            end_time: formData.end_time,
+            is_shuffled: formData.is_shuffled,
+            show_result_immediately: formData.show_result_immediately,
+            allow_review: formData.allow_review,
+            passing_score: parseFloat(formData.passing_score) || 50,
+            max_attempts: parseInt(formData.max_attempts) || 1,
+            require_camera: formData.require_camera,
+            require_fullscreen: formData.require_fullscreen,
+            max_tab_violations: parseInt(formData.max_tab_violations) || 3,
+            max_fullscreen_violations: parseInt(formData.max_fullscreen_violations) || 3,
             class_id: classId,
             created_by: user.id,
             status: 'draft'
@@ -161,7 +177,7 @@ function CreateExamForm({ classId, onClose, onSuccess }) {
 
         if (error) throw error;
 
-        toast.success('Tạo bài thi thành công!');
+        toast.success(t('exam.createSuccess'));
         onSuccess?.(data);
         onClose();
       } catch (error) {
@@ -169,17 +185,17 @@ function CreateExamForm({ classId, onClose, onSuccess }) {
         
         if (error.message === 'REQUEST_TIMEOUT') {
           if (attempt < MAX_RETRIES) {
-            toast.info(`Đang thử lại... (${attempt + 1}/${MAX_RETRIES})`);
+            toast.info(t('error.retrying', { attempt: attempt + 1, max: MAX_RETRIES }));
             await new Promise(resolve => setTimeout(resolve, 1000));
             return createExam(attempt + 1);
           }
-          toast.error('Kết nối chậm. Vui lòng kiểm tra mạng và thử lại.');
+          toast.error(t('error.timeout'));
         } else if (error.code === '42501' || error.message?.includes('permission')) {
-          toast.error('Bạn không có quyền tạo bài thi. Vui lòng kiểm tra lại.');
+          toast.error(t('error.permission'));
         } else if (error.message?.includes('network') || error.message?.includes('fetch')) {
-          toast.error('Lỗi kết nối mạng. Vui lòng kiểm tra và thử lại.');
+          toast.error(t('error.network'));
         } else {
-          toast.error('Không thể tạo bài thi. Vui lòng thử lại sau.');
+          toast.error(t('exam.createError'));
         }
       } finally {
         setLoading(false);
@@ -577,6 +593,7 @@ function AddStudentForm({ classId, onClose, onSuccess }) {
 
 function CreateClassForm({ onClose, onSuccess }) {
   const { user } = useAuth();
+  const { t } = useLanguage();
   const [loading, setLoading] = useState(false);
   const [retryCount, setRetryCount] = useState(0);
   const MAX_RETRIES = 3;
@@ -603,19 +620,19 @@ function CreateClassForm({ onClose, onSuccess }) {
     const trimmedCode = formData.code.trim();
 
     if (!trimmedName || !trimmedCode) {
-      toast.error('Vui lòng nhập tên và mã lớp');
+      toast.error(t('validation.enterNameAndCode'));
       return;
     }
 
     // Validate class code format
     if (!isValidClassCode(trimmedCode)) {
-      toast.error('Mã lớp chỉ được chứa chữ cái, số, dấu gạch ngang (-) và gạch dưới (_)');
+      toast.error(t('validation.invalidClassCode'));
       return;
     }
 
     // Validate name length
     if (trimmedName.length > 100) {
-      toast.error('Tên lớp không được vượt quá 100 ký tự');
+      toast.error(t('validation.classNameTooLong'));
       return;
     }
 
@@ -632,7 +649,11 @@ function CreateClassForm({ onClose, onSuccess }) {
         const supabasePromise = supabase
           .from('classes')
           .insert({
-            ...formData,
+            name: trimmedName,
+            code: trimmedCode,
+            description: formData.description?.trim() || null,
+            semester: formData.semester || null,
+            academic_year: formData.academic_year || null,
             instructor_id: user.id,
             is_active: true
           })
@@ -643,7 +664,7 @@ function CreateClassForm({ onClose, onSuccess }) {
 
         if (error) throw error;
 
-        toast.success('Tạo lớp học thành công!');
+        toast.success(t('class.createSuccess'));
         onSuccess?.(data);
         onClose();
       } catch (error) {
@@ -653,19 +674,19 @@ function CreateClassForm({ onClose, onSuccess }) {
         if (error.message === 'REQUEST_TIMEOUT') {
           if (attempt < MAX_RETRIES) {
             setRetryCount(attempt + 1);
-            toast.info(`Đang thử lại... (${attempt + 1}/${MAX_RETRIES})`);
+            toast.info(t('error.retrying', { attempt: attempt + 1, max: MAX_RETRIES }));
             await new Promise(resolve => setTimeout(resolve, 1000)); // Wait 1s before retry
             return createClass(attempt + 1);
           }
-          toast.error('Kết nối chậm. Vui lòng kiểm tra mạng và thử lại.');
+          toast.error(t('error.timeout'));
         } else if (error.code === '23505') {
-          toast.error('Mã lớp này đã tồn tại. Vui lòng chọn mã khác.');
+          toast.error(t('class.duplicateCode'));
         } else if (error.code === '42501' || error.message?.includes('permission')) {
-          toast.error('Bạn không có quyền tạo lớp học. Vui lòng liên hệ quản trị viên.');
+          toast.error(t('class.noPermission'));
         } else if (error.message?.includes('network') || error.message?.includes('fetch')) {
-          toast.error('Lỗi kết nối mạng. Vui lòng kiểm tra và thử lại.');
+          toast.error(t('error.network'));
         } else {
-          toast.error('Không thể tạo lớp học. Vui lòng thử lại sau.');
+          toast.error(t('class.createError'));
         }
         setRetryCount(0);
       } finally {
@@ -775,6 +796,7 @@ function CreateClassForm({ onClose, onSuccess }) {
 
 export default function InstructorDashboard() {
   const { user, profile, logout } = useAuth();
+  const { t } = useLanguage();
   const navigate = useNavigate();
   
   // Data state
@@ -947,11 +969,12 @@ export default function InstructorDashboard() {
             <span className="text-xl font-bold text-text-main tracking-tight">
               SmartExam<span className="text-primary">Pro</span>
             </span>
-            <span className="text-xs text-gray-500 ml-2">Instructor</span>
+            <span className="text-xs text-gray-500 ml-2">{t('instructor.title')}</span>
           </div>
         </div>
         
         <div className="flex items-center space-x-4">
+          <LanguageSwitcher compact />
           <div className="flex items-center space-x-2 text-sm font-medium text-gray-600 bg-gray-100 px-3 py-1.5 rounded-full">
             <GraduationCap className="w-4 h-4" />
             <span>{profile?.full_name || user?.email}</span>
@@ -961,7 +984,7 @@ export default function InstructorDashboard() {
             className="flex items-center space-x-2 text-danger hover:bg-danger-50 px-4 py-2 rounded-lg transition-colors text-sm font-semibold"
           >
             <LogOut className="w-4 h-4" />
-            <span>Đăng xuất</span>
+            <span>{t('auth.logout')}</span>
           </button>
         </div>
       </nav>
@@ -970,11 +993,11 @@ export default function InstructorDashboard() {
         {/* Sidebar - Class List */}
         <aside className="w-64 bg-paper border-r border-gray-200 min-h-[calc(100vh-65px)] p-4">
           <div className="flex items-center justify-between mb-4">
-            <h2 className="font-bold text-gray-700">Lớp học</h2>
+            <h2 className="font-bold text-gray-700">{t('instructor.classes')}</h2>
             <button
               onClick={() => setShowCreateClass(true)}
               className="p-1.5 hover:bg-primary-50 rounded-lg transition-colors"
-              title="Tạo lớp mới"
+              title={t('instructor.createClass')}
             >
               <Plus className="w-5 h-5 text-primary" />
             </button>
@@ -1003,12 +1026,12 @@ export default function InstructorDashboard() {
             {classes.length === 0 && (
               <div className="text-center py-8 text-gray-500">
                 <BookOpen className="w-12 h-12 mx-auto mb-2 opacity-50" />
-                <p className="text-sm">Chưa có lớp học nào</p>
+                <p className="text-sm">{t('instructor.noClasses')}</p>
                 <button
                   onClick={() => setShowCreateClass(true)}
                   className="text-primary text-sm mt-2 hover:underline"
                 >
-                  Tạo lớp học đầu tiên
+                  {t('instructor.createFirstClass')}
                 </button>
               </div>
             )}
@@ -1022,7 +1045,7 @@ export default function InstructorDashboard() {
               {/* Class Header */}
               <div className="mb-6">
                 <h1 className="text-2xl font-bold text-text-main">{selectedClass.name}</h1>
-                <p className="text-gray-500">Mã lớp: {selectedClass.code}</p>
+                <p className="text-gray-500">{t('instructor.classCode')}: {selectedClass.code}</p>
               </div>
 
               {/* Stats Cards */}
@@ -1033,7 +1056,7 @@ export default function InstructorDashboard() {
                   </div>
                   <div>
                     <p className="text-2xl font-bold text-text-main">{stats.totalStudents}</p>
-                    <p className="text-sm text-gray-500">Sinh viên</p>
+                    <p className="text-sm text-gray-500">{t('stats.students')}</p>
                   </div>
                 </div>
                 
@@ -1043,7 +1066,7 @@ export default function InstructorDashboard() {
                   </div>
                   <div>
                     <p className="text-2xl font-bold text-text-main">{stats.totalExams}</p>
-                    <p className="text-sm text-gray-500">Bài thi</p>
+                    <p className="text-sm text-gray-500">{t('stats.exams')}</p>
                   </div>
                 </div>
 
@@ -1053,7 +1076,7 @@ export default function InstructorDashboard() {
                   </div>
                   <div>
                     <p className="text-2xl font-bold text-text-main">{stats.activeExams}</p>
-                    <p className="text-sm text-gray-500">Đang diễn ra</p>
+                    <p className="text-sm text-gray-500">{t('stats.active')}</p>
                   </div>
                 </div>
 
@@ -1063,7 +1086,7 @@ export default function InstructorDashboard() {
                   </div>
                   <div>
                     <p className="text-2xl font-bold text-text-main">{stats.flaggedSessions}</p>
-                    <p className="text-sm text-gray-500">Nghi vấn</p>
+                    <p className="text-sm text-gray-500">{t('stats.suspicious')}</p>
                   </div>
                 </div>
               </div>
@@ -1071,8 +1094,8 @@ export default function InstructorDashboard() {
               {/* Tabs */}
               <div className="flex space-x-1 p-1 bg-gray-100 rounded-xl mb-6 w-fit">
                 {[
-                  { id: 'exams', label: 'Bài thi', icon: ClipboardList },
-                  { id: 'students', label: 'Sinh viên', icon: Users },
+                  { id: 'exams', label: t('tabs.exams'), icon: ClipboardList },
+                  { id: 'students', label: t('tabs.students'), icon: Users },
                 ].map((tab) => (
                   <button
                     key={tab.id}
@@ -1093,13 +1116,13 @@ export default function InstructorDashboard() {
               {activeTab === 'exams' && (
                 <div>
                   <div className="flex items-center justify-between mb-4">
-                    <h2 className="text-lg font-bold text-text-main">Danh sách bài thi</h2>
+                    <h2 className="text-lg font-bold text-text-main">{t('tabs.exams')}</h2>
                     <button
                       onClick={() => setShowCreateExam(true)}
                       className="btn-primary"
                     >
                       <Plus className="w-5 h-5 mr-2" />
-                      Tạo bài thi mới
+                      {t('exam.create')}
                     </button>
                   </div>
 
@@ -1120,7 +1143,7 @@ export default function InstructorDashboard() {
                                 <div className="flex items-center space-x-4 mt-2 text-sm text-gray-500">
                                   <span className="flex items-center space-x-1">
                                     <Clock className="w-4 h-4" />
-                                    <span>{exam.duration_minutes} phút</span>
+                                    <span>{exam.duration_minutes} {t('exam.minutes')}</span>
                                   </span>
                                   <span className="flex items-center space-x-1">
                                     <Calendar className="w-4 h-4" />
@@ -1136,7 +1159,7 @@ export default function InstructorDashboard() {
                                     className="btn-success text-sm"
                                   >
                                     <CheckCircle className="w-4 h-4 mr-1" />
-                                    Công bố
+                                    {t('exam.publish')}
                                   </button>
                                 )}
                                 <button className="p-2 hover:bg-gray-100 rounded-lg transition-colors">
@@ -1154,13 +1177,13 @@ export default function InstructorDashboard() {
                   ) : (
                     <div className="text-center py-12 bg-gray-50 rounded-xl">
                       <ClipboardList className="w-16 h-16 mx-auto mb-4 text-gray-300" />
-                      <p className="text-gray-500 mb-4">Chưa có bài thi nào</p>
+                      <p className="text-gray-500 mb-4">{t('exam.noExams')}</p>
                       <button
                         onClick={() => setShowCreateExam(true)}
                         className="btn-primary"
                       >
                         <Plus className="w-5 h-5 mr-2" />
-                        Tạo bài thi đầu tiên
+                        {t('exam.createFirst')}
                       </button>
                     </div>
                   )}
@@ -1170,7 +1193,7 @@ export default function InstructorDashboard() {
               {activeTab === 'students' && (
                 <div>
                   <div className="flex items-center justify-between mb-4">
-                    <h2 className="text-lg font-bold text-text-main">Danh sách sinh viên</h2>
+                    <h2 className="text-lg font-bold text-text-main">{t('tabs.students')}</h2>
                     <button
                       onClick={() => setShowAddStudent(true)}
                       className="btn-primary"
