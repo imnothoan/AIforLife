@@ -29,7 +29,8 @@ export default function Dashboard() {
   // Load available exams for student
   useEffect(() => {
     const loadExams = async () => {
-      if (!user || isInstructor()) return;
+      // Don't load exams for instructors or if profile indicates instructor role
+      if (!user || profile?.role === 'instructor' || profile?.role === 'admin') return;
 
       try {
         // Get enrolled classes
@@ -96,7 +97,7 @@ export default function Dashboard() {
     };
 
     loadExams();
-  }, [user, isInstructor]);
+  }, [user, profile]);
 
   const handleLogout = async () => {
     await logout();

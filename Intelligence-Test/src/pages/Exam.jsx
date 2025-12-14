@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState, useCallback } from 'react';
+import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import { toast } from 'react-toastify';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate, useParams } from 'react-router-dom';
@@ -18,6 +18,9 @@ const REMOTE_DESKTOP_SIGNATURES = [
   'remotedesktop', 'citrix', 'logmein', 'splashtop', 'chrome remote',
   'microsoft remote', 'rdp', 'ammyy', 'supremo'
 ];
+
+// Detect Safari browser (computed once at module level for performance)
+const IS_SAFARI = typeof navigator !== 'undefined' && /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
 
 export default function Exam() {
   const { id: examId } = useParams();
@@ -155,9 +158,6 @@ export default function Exam() {
   // FULLSCREEN MANAGEMENT
   // ============================================
   
-  // Detect Safari browser
-  const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
-  
   const enterFullscreen = async () => {
     try {
       const docEl = document.documentElement;
@@ -174,7 +174,7 @@ export default function Exam() {
       setIsFullscreen(true);
     } catch (e) {
       // Safari may not fully support fullscreen API - allow exam to continue
-      if (isSafari) {
+      if (IS_SAFARI) {
         console.warn("Safari fullscreen not fully supported, continuing without fullscreen requirement");
         setIsFullscreen(true); // Treat as fullscreen on Safari
       } else {
@@ -193,7 +193,7 @@ export default function Exam() {
       // Don't trigger violation if submitting or on Safari (which has limited support)
       if (!isFull && examStarted && !isSubmitting) {
         // On Safari, fullscreen exit may happen during submit - ignore it
-        if (isSafari) {
+        if (IS_SAFARI) {
           console.warn("Safari fullscreen state change - continuing without violation");
           return;
         }
@@ -219,7 +219,7 @@ export default function Exam() {
       document.removeEventListener('mozfullscreenchange', handleFullscreenChange);
       document.removeEventListener('MSFullscreenChange', handleFullscreenChange);
     };
-  }, [examStarted, isSubmitting, isSafari]);
+  }, [examStarted, isSubmitting]);
 
   // ============================================
   // TAB VISIBILITY DETECTION
@@ -1232,7 +1232,7 @@ export default function Exam() {
         )}
 
         {/* Fullscreen Exit Warning - Don't show when submitting or on Safari */}
-        {!isFullscreen && !isSubmitting && !isSafari && (
+        {!isFullscreen && !isSubmitting && !IS_SAFARI && (
           <motion.div 
             initial={{ opacity: 0 }} 
             animate={{ opacity: 1 }} 

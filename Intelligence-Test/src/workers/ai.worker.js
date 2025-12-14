@@ -52,6 +52,9 @@ let isInitialized = false;
 // YOLO throttle interval (run every 500ms)
 const YOLO_THROTTLE_MS = 500;
 
+// Track max scores per class for debugging (persistent across inference runs)
+let maxScorePerClassPersistent = null;
+
 // ============================================
 // INITIALIZATION
 // ============================================
@@ -270,9 +273,10 @@ async function processFrame(imageData) {
             lastAlertTime = now;
             
             // Also update status to show detection
+            const statusMsg = alertMessages[detection.class] || `Phát hiện ${detection.class}!`;
             self.postMessage({ 
               type: 'STATUS', 
-              payload: `⚠️ ${alertMessages[detection.class]} (${(detection.confidence * 100).toFixed(0)}%)` 
+              payload: `⚠️ ${statusMsg} (${(detection.confidence * 100).toFixed(0)}%)` 
             });
           }
           break;
@@ -371,8 +375,10 @@ function parseYoloOutput(output, dims, originalWidth, originalHeight) {
     self.loggedDims = true;
   }
   
-  // Track max scores per class for debugging (log every 10 seconds)
-  let maxScorePerClass = new Array(numClasses).fill(0);
+  // Initialize persistent max score tracking if not done
+  if (!maxScorePerClassPersistent) {
+    maxScorePerClassPersistent = new Array(numClasses).fill(0);
+  }
   
   // Handle different output formats
   // YOLO11 can output in different formats depending on export options
@@ -459,9 +465,9 @@ function parseYoloOutput(output, dims, originalWidth, originalHeight) {
           maxScore = classScores[c];
           maxClass = c;
         }
-        // Track max per class for debugging
-        if (classScores[c] > maxScorePerClass[c]) {
-          maxScorePerClass[c] = classScores[c];
+        // Track max per class for debugging (persistent)
+        if (classScores[c] > maxScorePerClassPersistent[c]) {
+          maxScorePerClassPersistent[c] = classScores[c];
         }
       }
 
@@ -486,7 +492,7 @@ function parseYoloOutput(output, dims, originalWidth, originalHeight) {
     // Log max scores per class periodically for debugging
     if (!self.lastMaxScoreLog || (Date.now() - self.lastMaxScoreLog > 10000)) {
       self.lastMaxScoreLog = Date.now();
-      const maxScoreInfo = CONFIG.YOLO.CLASSES.map((cls, i) => `${cls}: ${(maxScorePerClass[i] * 100).toFixed(1)}%`).join(', ');
+      const maxScoreInfo = CONFIG.YOLO.CLASSES.map((cls, i) => `${cls}: ${(maxScorePerClassPersistent[i] * 100).toFixed(1)}%`).join(', ');
       console.log('YOLO Max scores per class:', maxScoreInfo);
     }
   } else if (dims.length === 2) {
