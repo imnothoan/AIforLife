@@ -154,20 +154,50 @@ export default function Exam() {
   // ============================================
   // FULLSCREEN MANAGEMENT
   // ============================================
+  
+  // Detect Safari browser
+  const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
+  
   const enterFullscreen = async () => {
     try {
-      await document.documentElement.requestFullscreen();
+      const docEl = document.documentElement;
+      if (docEl.requestFullscreen) {
+        await docEl.requestFullscreen();
+      } else if (docEl.webkitRequestFullscreen) {
+        // Safari
+        await docEl.webkitRequestFullscreen();
+      } else if (docEl.mozRequestFullScreen) {
+        await docEl.mozRequestFullScreen();
+      } else if (docEl.msRequestFullscreen) {
+        await docEl.msRequestFullscreen();
+      }
       setIsFullscreen(true);
     } catch (e) {
-      toast.error("Bạn phải bật chế độ Toàn màn hình để thi!");
+      // Safari may not fully support fullscreen API - allow exam to continue
+      if (isSafari) {
+        console.warn("Safari fullscreen not fully supported, continuing without fullscreen requirement");
+        setIsFullscreen(true); // Treat as fullscreen on Safari
+      } else {
+        toast.error("Bạn phải bật chế độ Toàn màn hình để thi!");
+      }
     }
   };
 
   useEffect(() => {
     const handleFullscreenChange = () => {
-      const isFull = !!document.fullscreenElement;
+      // Check for different browsers
+      const isFull = !!(document.fullscreenElement || document.webkitFullscreenElement || 
+                        document.mozFullScreenElement || document.msFullscreenElement);
       setIsFullscreen(isFull);
-      if (!isFull && examStarted) {
+      
+      // Don't trigger violation if submitting or on Safari (which has limited support)
+      if (!isFull && examStarted && !isSubmitting) {
+        // On Safari, fullscreen exit may happen during submit - ignore it
+        if (isSafari) {
+          console.warn("Safari fullscreen state change - continuing without violation");
+          return;
+        }
+        
         setFullscreenViolations(prev => {
           const newVal = prev + 1;
           toast.error(`CẢNH BÁO: Bạn đã thoát toàn màn hình ${newVal} lần!`);
@@ -176,16 +206,28 @@ export default function Exam() {
         });
       }
     };
+    
+    // Listen to both standard and webkit (Safari) events
     document.addEventListener('fullscreenchange', handleFullscreenChange);
-    return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
-  }, [examStarted]);
+    document.addEventListener('webkitfullscreenchange', handleFullscreenChange);
+    document.addEventListener('mozfullscreenchange', handleFullscreenChange);
+    document.addEventListener('MSFullscreenChange', handleFullscreenChange);
+    
+    return () => {
+      document.removeEventListener('fullscreenchange', handleFullscreenChange);
+      document.removeEventListener('webkitfullscreenchange', handleFullscreenChange);
+      document.removeEventListener('mozfullscreenchange', handleFullscreenChange);
+      document.removeEventListener('MSFullscreenChange', handleFullscreenChange);
+    };
+  }, [examStarted, isSubmitting, isSafari]);
 
   // ============================================
   // TAB VISIBILITY DETECTION
   // ============================================
   useEffect(() => {
     const handleVisibilityChange = () => {
-      if (document.hidden && examStarted) {
+      // Don't trigger violation if submitting
+      if (document.hidden && examStarted && !isSubmitting) {
         setTabViolations(prev => {
           const newVal = prev + 1;
           toast.warning(`CẢNH BÁO: Phát hiện rời tab ${newVal} lần! Hành vi này được ghi lại.`);
@@ -196,7 +238,7 @@ export default function Exam() {
     };
     document.addEventListener('visibilitychange', handleVisibilityChange);
     return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
-  }, [examStarted]);
+  }, [examStarted, isSubmitting]);
 
   // ============================================
   // KEYBOARD SHORTCUTS PREVENTION
@@ -1189,8 +1231,8 @@ export default function Exam() {
           </motion.div>
         )}
 
-        {/* Fullscreen Exit Warning */}
-        {!isFullscreen && (
+        {/* Fullscreen Exit Warning - Don't show when submitting or on Safari */}
+        {!isFullscreen && !isSubmitting && !isSafari && (
           <motion.div 
             initial={{ opacity: 0 }} 
             animate={{ opacity: 1 }} 

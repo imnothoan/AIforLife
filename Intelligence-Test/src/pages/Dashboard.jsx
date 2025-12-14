@@ -18,10 +18,13 @@ export default function Dashboard() {
 
   // If instructor, redirect to instructor dashboard
   useEffect(() => {
-    if (isInstructor()) {
-      navigate('/instructor');
+    // Wait for profile to be loaded before checking role
+    if (profile && profile.role) {
+      if (profile.role === 'instructor' || profile.role === 'admin') {
+        navigate('/instructor');
+      }
     }
-  }, [profile, isInstructor, navigate]);
+  }, [profile, navigate]);
 
   // Load available exams for student
   useEffect(() => {
