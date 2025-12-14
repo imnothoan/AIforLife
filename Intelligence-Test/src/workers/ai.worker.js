@@ -1,5 +1,13 @@
-// AI Worker - Implements the Cascade Strategy (MediaPipe Face Mesh → YOLO)
+// AI Worker - Implements Advanced Cascade Strategy (MediaPipe Face Mesh → YOLO)
 // This worker runs in a separate thread to avoid blocking the main UI
+// 
+// Features:
+// - Face detection and head pose estimation
+// - Eye gaze tracking (iris position analysis)
+// - Lip movement detection (speech detection)
+// - Multi-person detection (second person alert)
+// - Object detection (phone, headphones, materials)
+// - Blink rate analysis (fatigue/stress detection)
 
 import { FaceLandmarker, FilesetResolver } from "@mediapipe/tasks-vision";
 import * as ort from 'onnxruntime-web';
@@ -19,6 +27,18 @@ const CONFIG = {
     // MediaPipe Face Landmarker returns 478 landmarks (468 face mesh + 10 iris)
     // We require at least 468 for full face mesh detection
     MIN_LANDMARKS_FOR_POSE: 468,
+    // Eye tracking landmarks (iris)
+    LEFT_IRIS: [468, 469, 470, 471, 472], // Left iris landmarks
+    RIGHT_IRIS: [473, 474, 475, 476, 477], // Right iris landmarks
+    LEFT_EYE: [33, 7, 163, 144, 145, 153, 154, 155, 133, 173, 157, 158, 159, 160, 161, 246],
+    RIGHT_EYE: [362, 382, 381, 380, 374, 373, 390, 249, 263, 466, 388, 387, 386, 385, 384, 398],
+    // Lip landmarks for speech detection
+    UPPER_LIP: [61, 185, 40, 39, 37, 0, 267, 269, 270, 409, 291],
+    LOWER_LIP: [146, 91, 181, 84, 17, 314, 405, 321, 375, 291],
+    // Thresholds
+    EYE_GAZE_THRESHOLD: 0.15,     // How far iris can deviate from center
+    LIP_MOVEMENT_THRESHOLD: 0.02, // Threshold for detecting speech
+    BLINK_THRESHOLD: 0.2,         // Eye aspect ratio for blink detection
   },
   // YOLO settings - Custom trained model for anti-cheat detection
   YOLO: {
@@ -32,10 +52,20 @@ const CONFIG = {
     CLASSES: ['person', 'phone', 'material', 'headphones'], // Must match training classes
     ALERT_CLASSES: ['phone', 'material', 'headphones'], // Classes that trigger alerts
     MASK_COEFFICIENTS: 32, // Number of mask coefficients for segmentation models
+    // Multi-person detection
+    MULTI_PERSON_ALERT: true, // Alert if more than 1 person detected
   },
   // Cascade timing
   CASCADE: {
     YOLO_ACTIVATION_SECONDS: 3, // Activate YOLO for N seconds after suspicious activity
+  },
+  // Advanced detection settings
+  ADVANCED: {
+    LIP_MOVEMENT_FRAMES: 10,    // Number of frames to track lip movement
+    LIP_ALERT_THRESHOLD: 5,    // Alert after this many frames of speaking
+    BLINK_RATE_WINDOW: 30000,  // 30 seconds window for blink rate
+    ABNORMAL_BLINK_RATE_LOW: 5,  // Too few blinks (staring at notes?)
+    ABNORMAL_BLINK_RATE_HIGH: 40, // Too many blinks (stress?)
   }
 };
 
@@ -54,6 +84,16 @@ const YOLO_THROTTLE_MS = 500;
 
 // Track max scores per class for debugging (persistent across inference runs)
 let maxScorePerClassPersistent = null;
+
+// Advanced detection state
+let lipMovementHistory = [];
+let lastLipDistance = 0;
+let speakingFrameCount = 0;
+let blinkHistory = [];
+let lastBlinkTime = 0;
+let lastEyeAspectRatio = 0;
+let multiPersonAlertTime = 0;
+let lastEyeGazeAlert = 0;
 
 // ============================================
 // INITIALIZATION
@@ -176,6 +216,155 @@ function extractHeadPose(faceLandmarks, transformMatrix) {
 }
 
 // ============================================
+// EYE GAZE TRACKING
+// ============================================
+function analyzeEyeGaze(faceLandmarks) {
+  if (!faceLandmarks || faceLandmarks.length < 478) {
+    return { isLookingAway: false, direction: null };
+  }
+
+  // Get iris centers
+  const leftIrisCenter = faceLandmarks[468]; // Left iris center
+  const rightIrisCenter = faceLandmarks[473]; // Right iris center
+  
+  // Get eye corners for reference
+  const leftEyeInner = faceLandmarks[133];
+  const leftEyeOuter = faceLandmarks[33];
+  const rightEyeInner = faceLandmarks[362];
+  const rightEyeOuter = faceLandmarks[263];
+  
+  // Calculate eye width
+  const leftEyeWidth = Math.abs(leftEyeOuter.x - leftEyeInner.x);
+  const rightEyeWidth = Math.abs(rightEyeOuter.x - rightEyeInner.x);
+  
+  // Calculate iris position relative to eye center
+  const leftEyeCenter = (leftEyeInner.x + leftEyeOuter.x) / 2;
+  const rightEyeCenter = (rightEyeInner.x + rightEyeOuter.x) / 2;
+  
+  const leftGazeOffset = (leftIrisCenter.x - leftEyeCenter) / leftEyeWidth;
+  const rightGazeOffset = (rightIrisCenter.x - rightEyeCenter) / rightEyeWidth;
+  
+  const avgGazeOffset = (leftGazeOffset + rightGazeOffset) / 2;
+  
+  let direction = null;
+  let isLookingAway = false;
+  
+  if (avgGazeOffset > CONFIG.FACE.EYE_GAZE_THRESHOLD) {
+    direction = 'right';
+    isLookingAway = true;
+  } else if (avgGazeOffset < -CONFIG.FACE.EYE_GAZE_THRESHOLD) {
+    direction = 'left';
+    isLookingAway = true;
+  }
+  
+  return { isLookingAway, direction, gazeOffset: avgGazeOffset };
+}
+
+// ============================================
+// LIP MOVEMENT DETECTION (SPEECH DETECTION)
+// ============================================
+function analyzeLipMovement(faceLandmarks) {
+  if (!faceLandmarks || faceLandmarks.length < 400) {
+    return { isSpeaking: false, lipDistance: 0 };
+  }
+
+  // Upper lip center (point 13) and lower lip center (point 14)
+  const upperLip = faceLandmarks[13];
+  const lowerLip = faceLandmarks[14];
+  
+  // Calculate vertical distance between lips
+  const lipDistance = Math.abs(upperLip.y - lowerLip.y);
+  
+  // Track lip movement over time
+  lipMovementHistory.push(lipDistance);
+  if (lipMovementHistory.length > CONFIG.ADVANCED.LIP_MOVEMENT_FRAMES) {
+    lipMovementHistory.shift();
+  }
+  
+  // Calculate movement variance
+  if (lipMovementHistory.length >= 3) {
+    const avgDistance = lipMovementHistory.reduce((a, b) => a + b, 0) / lipMovementHistory.length;
+    const variance = lipMovementHistory.reduce((acc, val) => acc + Math.pow(val - avgDistance, 2), 0) / lipMovementHistory.length;
+    
+    // High variance indicates speaking
+    if (variance > CONFIG.FACE.LIP_MOVEMENT_THRESHOLD) {
+      speakingFrameCount++;
+    } else {
+      speakingFrameCount = Math.max(0, speakingFrameCount - 1);
+    }
+  }
+  
+  const isSpeaking = speakingFrameCount >= CONFIG.ADVANCED.LIP_ALERT_THRESHOLD;
+  
+  return { isSpeaking, lipDistance, speakingFrameCount };
+}
+
+// ============================================
+// BLINK DETECTION
+// ============================================
+function analyzeBlinking(faceLandmarks) {
+  if (!faceLandmarks || faceLandmarks.length < 400) {
+    return { isBlink: false, eyeAspectRatio: 0 };
+  }
+
+  // Eye Aspect Ratio (EAR) calculation
+  // Using 6 points around each eye
+  
+  // Left eye points
+  const leftP1 = faceLandmarks[33];  // outer corner
+  const leftP2 = faceLandmarks[160]; // top outer
+  const leftP3 = faceLandmarks[158]; // top inner
+  const leftP4 = faceLandmarks[133]; // inner corner
+  const leftP5 = faceLandmarks[153]; // bottom inner
+  const leftP6 = faceLandmarks[144]; // bottom outer
+  
+  // Right eye points
+  const rightP1 = faceLandmarks[362]; // outer corner
+  const rightP2 = faceLandmarks[385]; // top outer
+  const rightP3 = faceLandmarks[387]; // top inner
+  const rightP4 = faceLandmarks[263]; // inner corner
+  const rightP5 = faceLandmarks[373]; // bottom inner
+  const rightP6 = faceLandmarks[380]; // bottom outer
+  
+  // Calculate EAR for each eye
+  const leftEAR = calculateEAR(leftP1, leftP2, leftP3, leftP4, leftP5, leftP6);
+  const rightEAR = calculateEAR(rightP1, rightP2, rightP3, rightP4, rightP5, rightP6);
+  
+  const avgEAR = (leftEAR + rightEAR) / 2;
+  const isBlink = avgEAR < CONFIG.FACE.BLINK_THRESHOLD && lastEyeAspectRatio >= CONFIG.FACE.BLINK_THRESHOLD;
+  
+  // Track blink history
+  const now = Date.now();
+  if (isBlink) {
+    blinkHistory.push(now);
+    // Remove old blinks
+    blinkHistory = blinkHistory.filter(t => now - t < CONFIG.ADVANCED.BLINK_RATE_WINDOW);
+  }
+  
+  lastEyeAspectRatio = avgEAR;
+  
+  // Calculate blink rate (blinks per minute)
+  const blinkRate = (blinkHistory.length / CONFIG.ADVANCED.BLINK_RATE_WINDOW) * 60000;
+  
+  return { 
+    isBlink, 
+    eyeAspectRatio: avgEAR, 
+    blinkRate,
+    isAbnormalBlinkRate: blinkRate < CONFIG.ADVANCED.ABNORMAL_BLINK_RATE_LOW || blinkRate > CONFIG.ADVANCED.ABNORMAL_BLINK_RATE_HIGH
+  };
+}
+
+function calculateEAR(p1, p2, p3, p4, p5, p6) {
+  // Eye Aspect Ratio = (|p2-p6| + |p3-p5|) / (2 * |p1-p4|)
+  const verticalDist1 = Math.sqrt(Math.pow(p2.x - p6.x, 2) + Math.pow(p2.y - p6.y, 2));
+  const verticalDist2 = Math.sqrt(Math.pow(p3.x - p5.x, 2) + Math.pow(p3.y - p5.y, 2));
+  const horizontalDist = Math.sqrt(Math.pow(p1.x - p4.x, 2) + Math.pow(p1.y - p4.y, 2));
+  
+  if (horizontalDist === 0) return 0;
+  return (verticalDist1 + verticalDist2) / (2 * horizontalDist);
+}
+
+// ============================================
 // FRAME PROCESSING
 // ============================================
 async function processFrame(imageData) {
@@ -192,7 +381,7 @@ async function processFrame(imageData) {
   let suspicionReason = '';
 
   // ============================================
-  // STAGE 1: FACE MESH DETECTION
+  // STAGE 1: FACE MESH DETECTION WITH ADVANCED ANALYTICS
   // ============================================
   if (faceLandmarker) {
     try {
@@ -214,7 +403,7 @@ async function processFrame(imageData) {
         const pose = extractHeadPose(landmarks, transformMatrix);
 
         if (pose.isValid) {
-          // Check for looking away
+          // Check for looking away (head pose)
           if (Math.abs(pose.yaw) > CONFIG.FACE.YAW_THRESHOLD) {
             suspiciousFrameCount++;
             if (suspiciousFrameCount >= CONFIG.FACE.CONSECUTIVE_FRAMES) {
@@ -231,6 +420,40 @@ async function processFrame(imageData) {
             // Reset counter if looking at screen
             suspiciousFrameCount = Math.max(0, suspiciousFrameCount - 1);
           }
+        }
+        
+        // ============================================
+        // ADVANCED DETECTION: Eye Gaze Tracking
+        // ============================================
+        const eyeGaze = analyzeEyeGaze(landmarks);
+        if (eyeGaze.isLookingAway && now - lastEyeGazeAlert > 8000) {
+          self.postMessage({ 
+            type: 'GAZE_AWAY', 
+            payload: `Mắt nhìn ${eyeGaze.direction === 'left' ? 'sang trái' : 'sang phải'}` 
+          });
+          lastEyeGazeAlert = now;
+        }
+        
+        // ============================================
+        // ADVANCED DETECTION: Lip Movement (Speaking)
+        // ============================================
+        const lipAnalysis = analyzeLipMovement(landmarks);
+        if (lipAnalysis.isSpeaking && now - lastAlertTime > 10000) {
+          self.postMessage({ 
+            type: 'ALERT', 
+            payload: '⚠️ Phát hiện đang nói chuyện!' 
+          });
+          lastAlertTime = now;
+        }
+        
+        // ============================================
+        // ADVANCED DETECTION: Blink Analysis
+        // ============================================
+        const blinkAnalysis = analyzeBlinking(landmarks);
+        // Only report abnormal blink rate periodically (every 30 seconds)
+        if (blinkAnalysis.isAbnormalBlinkRate && blinkHistory.length > 10) {
+          // Log for instructor review but don't alert student
+          console.log('Abnormal blink rate detected:', blinkAnalysis.blinkRate, 'bpm');
         }
       }
     } catch (error) {
@@ -254,6 +477,21 @@ async function processFrame(imageData) {
         const alertableDetections = detections.filter(d => CONFIG.YOLO.ALERT_CLASSES.includes(d.class));
         if (alertableDetections.length > 0) {
           console.log('🚨 YOLO Alert Detections:', alertableDetections.map(d => `${d.class} (${(d.confidence * 100).toFixed(1)}%)`));
+        }
+      }
+      
+      // ============================================
+      // MULTI-PERSON DETECTION
+      // ============================================
+      if (CONFIG.YOLO.MULTI_PERSON_ALERT) {
+        const personDetections = detections.filter(d => d.class === 'person' && d.confidence > 0.3);
+        if (personDetections.length > 1 && now - multiPersonAlertTime > 10000) {
+          self.postMessage({ 
+            type: 'ALERT', 
+            payload: `⚠️ Phát hiện ${personDetections.length} người trong khung hình!`
+          });
+          multiPersonAlertTime = now;
+          console.log('🚨 Multi-person detected:', personDetections.length, 'people');
         }
       }
       

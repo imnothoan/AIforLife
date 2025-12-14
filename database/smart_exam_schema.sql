@@ -1137,3 +1137,145 @@ END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
 GRANT EXECUTE ON FUNCTION public.calculate_exam_analytics(UUID) TO authenticated;
+
+-- ================================================
+-- SECTION 13: ADDITIONAL PERFORMANCE INDEXES
+-- ================================================
+-- These indexes optimize common query patterns for high concurrency
+
+-- Profiles indexes
+CREATE INDEX IF NOT EXISTS idx_profiles_email ON public.profiles(email);
+CREATE INDEX IF NOT EXISTS idx_profiles_role ON public.profiles(role);
+CREATE INDEX IF NOT EXISTS idx_profiles_student_id ON public.profiles(student_id) WHERE student_id IS NOT NULL;
+
+-- Classes indexes  
+CREATE INDEX IF NOT EXISTS idx_classes_instructor ON public.classes(instructor_id);
+CREATE INDEX IF NOT EXISTS idx_classes_code ON public.classes(code);
+CREATE INDEX IF NOT EXISTS idx_classes_active ON public.classes(is_active) WHERE is_active = true;
+CREATE INDEX IF NOT EXISTS idx_classes_semester ON public.classes(academic_year, semester);
+
+-- Enrollments indexes (critical for high-traffic)
+CREATE INDEX IF NOT EXISTS idx_enrollments_student ON public.enrollments(student_id);
+CREATE INDEX IF NOT EXISTS idx_enrollments_class ON public.enrollments(class_id);
+CREATE INDEX IF NOT EXISTS idx_enrollments_status ON public.enrollments(status) WHERE status = 'active';
+
+-- Exams indexes
+CREATE INDEX IF NOT EXISTS idx_exams_class ON public.exams(class_id);
+CREATE INDEX IF NOT EXISTS idx_exams_status ON public.exams(status);
+CREATE INDEX IF NOT EXISTS idx_exams_time_range ON public.exams(start_time, end_time);
+CREATE INDEX IF NOT EXISTS idx_exams_published ON public.exams(class_id, status) WHERE status = 'published';
+
+-- Questions indexes
+CREATE INDEX IF NOT EXISTS idx_questions_exam ON public.questions(exam_id);
+CREATE INDEX IF NOT EXISTS idx_questions_order ON public.questions(exam_id, order_index);
+CREATE INDEX IF NOT EXISTS idx_questions_difficulty ON public.questions(difficulty);
+
+-- Exam sessions indexes (critical for concurrent exam taking)
+CREATE INDEX IF NOT EXISTS idx_sessions_exam ON public.exam_sessions(exam_id);
+CREATE INDEX IF NOT EXISTS idx_sessions_student ON public.exam_sessions(student_id);
+CREATE INDEX IF NOT EXISTS idx_sessions_status ON public.exam_sessions(status);
+CREATE INDEX IF NOT EXISTS idx_sessions_active ON public.exam_sessions(exam_id, student_id, status) 
+  WHERE status = 'in_progress';
+CREATE INDEX IF NOT EXISTS idx_sessions_flagged ON public.exam_sessions(is_flagged) 
+  WHERE is_flagged = true;
+
+-- Answers indexes
+CREATE INDEX IF NOT EXISTS idx_answers_session ON public.answers(session_id);
+CREATE INDEX IF NOT EXISTS idx_answers_question ON public.answers(question_id);
+
+-- ================================================
+-- SECTION 14: MATERIALIZED VIEW FOR ANALYTICS
+-- ================================================
+-- This view pre-computes expensive analytics queries
+
+CREATE MATERIALIZED VIEW IF NOT EXISTS public.exam_statistics AS
+SELECT 
+  e.id as exam_id,
+  e.title as exam_title,
+  e.class_id,
+  c.name as class_name,
+  COUNT(DISTINCT es.id) as total_sessions,
+  COUNT(DISTINCT CASE WHEN es.status IN ('submitted', 'auto_submitted') THEN es.id END) as completed_sessions,
+  COUNT(DISTINCT CASE WHEN es.passed = true THEN es.id END) as passed_count,
+  COUNT(DISTINCT CASE WHEN es.is_flagged = true THEN es.id END) as flagged_count,
+  ROUND(AVG(es.percentage), 2) as avg_score,
+  ROUND(MIN(es.percentage), 2) as min_score,
+  ROUND(MAX(es.percentage), 2) as max_score,
+  ROUND(AVG(EXTRACT(EPOCH FROM (es.submitted_at - es.started_at)) / 60), 2) as avg_duration_minutes
+FROM public.exams e
+JOIN public.classes c ON c.id = e.class_id
+LEFT JOIN public.exam_sessions es ON es.exam_id = e.id AND es.status IN ('submitted', 'auto_submitted')
+GROUP BY e.id, e.title, e.class_id, c.name;
+
+-- Create index on materialized view
+CREATE UNIQUE INDEX IF NOT EXISTS idx_exam_statistics_exam ON public.exam_statistics(exam_id);
+
+-- Function to refresh materialized view
+CREATE OR REPLACE FUNCTION public.refresh_exam_statistics()
+RETURNS void AS $$
+BEGIN
+  REFRESH MATERIALIZED VIEW CONCURRENTLY public.exam_statistics;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+GRANT EXECUTE ON FUNCTION public.refresh_exam_statistics() TO authenticated;
+
+-- ================================================
+-- SECTION 15: AUDIT TRAIL TABLE
+-- ================================================
+-- Track all important changes for compliance
+
+CREATE TABLE IF NOT EXISTS public.audit_logs (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  table_name TEXT NOT NULL,
+  record_id UUID NOT NULL,
+  action TEXT NOT NULL CHECK (action IN ('INSERT', 'UPDATE', 'DELETE')),
+  old_values JSONB,
+  new_values JSONB,
+  changed_by UUID REFERENCES public.profiles(id),
+  changed_at TIMESTAMPTZ DEFAULT NOW(),
+  ip_address TEXT,
+  user_agent TEXT
+);
+
+-- Index for efficient querying
+CREATE INDEX IF NOT EXISTS idx_audit_table ON public.audit_logs(table_name, record_id);
+CREATE INDEX IF NOT EXISTS idx_audit_time ON public.audit_logs(changed_at DESC);
+CREATE INDEX IF NOT EXISTS idx_audit_user ON public.audit_logs(changed_by);
+
+-- Enable RLS
+ALTER TABLE public.audit_logs ENABLE ROW LEVEL SECURITY;
+
+-- Only admins can view audit logs
+CREATE POLICY "Admins can view audit logs"
+  ON public.audit_logs FOR SELECT
+  USING (
+    EXISTS (
+      SELECT 1 FROM public.profiles
+      WHERE id = auth.uid() AND role = 'admin'
+    )
+  );
+
+-- ================================================
+-- SECTION 16: DEADLOCK PREVENTION HELPERS
+-- ================================================
+-- Advisory locks for critical operations
+
+CREATE OR REPLACE FUNCTION public.acquire_exam_lock(p_exam_id UUID)
+RETURNS BOOLEAN AS $$
+BEGIN
+  -- Use advisory lock based on exam_id hash
+  RETURN pg_try_advisory_xact_lock(hashtext(p_exam_id::text));
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE OR REPLACE FUNCTION public.acquire_session_lock(p_session_id UUID)
+RETURNS BOOLEAN AS $$
+BEGIN
+  -- Use advisory lock based on session_id hash
+  RETURN pg_try_advisory_xact_lock(hashtext(p_session_id::text));
+END;
+$$ LANGUAGE plpgsql;
+
+GRANT EXECUTE ON FUNCTION public.acquire_exam_lock(UUID) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.acquire_session_lock(UUID) TO authenticated;
