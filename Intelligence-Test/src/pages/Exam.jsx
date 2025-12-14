@@ -8,7 +8,7 @@ import { supabase } from '../lib/supabase';
 import { 
   Flag, FlagOff, StickyNote, ChevronLeft, ChevronRight, 
   Clock, Camera, AlertTriangle, Send, Wifi, WifiOff,
-  Shield, Loader2, CheckCircle, XCircle
+  Shield, Loader2, CheckCircle, XCircle, Eye, EyeOff, Monitor
 } from 'lucide-react';
 import FaceVerification from '../components/FaceVerification';
 

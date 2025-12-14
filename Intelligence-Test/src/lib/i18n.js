@@ -163,9 +163,16 @@ const translations = {
     'proctoring.camera': 'Camera Giám Sát',
     'proctoring.recording': 'REC',
     'proctoring.aiAlerts': 'AI Phát hiện',
+    'proctoring.aiDetection': 'AI Phát hiện',
     'proctoring.tabSwitches': 'Rời tab',
+    'proctoring.tabViolations': 'Rời tab',
     'proctoring.fullscreenExits': 'Thoát fullscreen',
+    'proctoring.fullscreenViolations': 'Thoát fullscreen',
     'proctoring.gazeAway': 'Nhìn ra ngoài',
+    'proctoring.questionList': 'Danh sách câu hỏi',
+    'proctoring.answered': 'Đã trả lời',
+    'proctoring.unanswered': 'Chưa trả lời',
+    'proctoring.flagged': 'Đã gắn cờ',
     
     // Instructor Dashboard
     'instructor.title': 'Instructor',
@@ -340,6 +347,14 @@ const translations = {
     'error.retrying': 'Đang thử lại... ({attempt}/{max})',
     'error.permission': 'Bạn không có quyền thực hiện thao tác này.',
     'error.general': 'Có lỗi xảy ra. Vui lòng thử lại sau.',
+    
+    // Error Boundary
+    'errorBoundary.title': 'Oops! Đã xảy ra lỗi',
+    'errorBoundary.description': 'Ứng dụng gặp sự cố không mong muốn. Đừng lo lắng, dữ liệu của bạn vẫn an toàn.',
+    'errorBoundary.reload': 'Tải lại trang',
+    'errorBoundary.home': 'Về trang chủ',
+    'errorBoundary.technicalDetails': 'Chi tiết kỹ thuật (chỉ hiển thị khi phát triển)',
+    'errorBoundary.contactSupport': 'Nếu lỗi tiếp tục xảy ra, vui lòng liên hệ hỗ trợ kỹ thuật.',
     
     // Face Verification
     'face.title': 'Xác minh danh tính',
@@ -534,9 +549,16 @@ const translations = {
     'proctoring.camera': 'Proctoring Camera',
     'proctoring.recording': 'REC',
     'proctoring.aiAlerts': 'AI Alerts',
+    'proctoring.aiDetection': 'AI Detection',
     'proctoring.tabSwitches': 'Tab Switches',
+    'proctoring.tabViolations': 'Tab Violations',
     'proctoring.fullscreenExits': 'Fullscreen Exits',
+    'proctoring.fullscreenViolations': 'Fullscreen Violations',
     'proctoring.gazeAway': 'Gaze Away',
+    'proctoring.questionList': 'Question List',
+    'proctoring.answered': 'Answered',
+    'proctoring.unanswered': 'Unanswered',
+    'proctoring.flagged': 'Flagged',
     
     // Instructor Dashboard
     'instructor.title': 'Instructor',
@@ -711,6 +733,14 @@ const translations = {
     'error.retrying': 'Retrying... ({attempt}/{max})',
     'error.permission': 'You don\'t have permission for this action.',
     'error.general': 'An error occurred. Please try again later.',
+    
+    // Error Boundary
+    'errorBoundary.title': 'Oops! Something went wrong',
+    'errorBoundary.description': 'The application encountered an unexpected error. Don\'t worry, your data is safe.',
+    'errorBoundary.reload': 'Reload Page',
+    'errorBoundary.home': 'Go Home',
+    'errorBoundary.technicalDetails': 'Technical Details (development only)',
+    'errorBoundary.contactSupport': 'If the error persists, please contact technical support.',
     
     // Face Verification
     'face.title': 'Identity Verification',
