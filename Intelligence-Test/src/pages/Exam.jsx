@@ -8,7 +8,7 @@ import { supabase } from '../lib/supabase';
 import { 
   Flag, FlagOff, StickyNote, ChevronLeft, ChevronRight, 
   Clock, Camera, AlertTriangle, Send, Wifi, WifiOff,
-  Shield, Loader2
+  Shield, Loader2, CheckCircle, XCircle
 } from 'lucide-react';
 import FaceVerification from '../components/FaceVerification';
 
@@ -30,6 +30,7 @@ export default function Exam() {
   const workerRef = useRef(null);
   const timerRef = useRef(null);
   const randomVerifyRef = useRef(null);
+  const isSubmittingRef = useRef(false); // Track submitting state for event handlers
   const navigate = useNavigate();
 
   // Exam State
@@ -191,7 +192,8 @@ export default function Exam() {
       setIsFullscreen(isFull);
       
       // Don't trigger violation if submitting or on Safari (which has limited support)
-      if (!isFull && examStarted && !isSubmitting) {
+      // Use ref instead of state because event handlers have stale closure
+      if (!isFull && examStarted && !isSubmittingRef.current) {
         // On Safari, fullscreen exit may happen during submit - ignore it
         if (IS_SAFARI) {
           console.warn("Safari fullscreen state change - continuing without violation");
@@ -219,7 +221,7 @@ export default function Exam() {
       document.removeEventListener('mozfullscreenchange', handleFullscreenChange);
       document.removeEventListener('MSFullscreenChange', handleFullscreenChange);
     };
-  }, [examStarted, isSubmitting]);
+  }, [examStarted]);
 
   // ============================================
   // TAB VISIBILITY DETECTION
@@ -905,6 +907,7 @@ export default function Exam() {
     }
 
     setIsSubmitting(true);
+    isSubmittingRef.current = true; // Update ref for event handlers
 
     try {
       const isDemo = examId === 'demo' || examId === '1';
@@ -994,6 +997,7 @@ export default function Exam() {
       toast.error("Có lỗi xảy ra khi nộp bài. Vui lòng thử lại.");
     } finally {
       setIsSubmitting(false);
+      isSubmittingRef.current = false; // Reset ref
     }
   };
 
