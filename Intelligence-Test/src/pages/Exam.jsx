@@ -187,7 +187,7 @@ export default function Exam() {
         console.warn("Safari fullscreen not fully supported, continuing without fullscreen requirement");
         setIsFullscreen(true); // Treat as fullscreen on Safari
       } else {
-        toast.error("Bạn phải bật chế độ Toàn màn hình để thi!");
+        toast.error(t('anticheat.fullscreenRequired'));
       }
     }
   };
@@ -345,7 +345,7 @@ export default function Exam() {
         }
       } catch (err) {
         console.error(err);
-        toast.error("Không thể truy cập camera. Vui lòng cấp quyền camera để thi.");
+        toast.error(t('anticheat.cameraAccess'));
       }
     };
     startCamera();

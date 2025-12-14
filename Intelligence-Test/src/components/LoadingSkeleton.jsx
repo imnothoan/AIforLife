@@ -112,7 +112,8 @@ export function SkeletonExamCard({ className = '' }) {
 }
 
 // Full page loading overlay
-export function LoadingOverlay({ message = 'Đang tải...' }) {
+export function LoadingOverlay({ message = '' }) {
+  const displayMessage = message || 'Loading...';
   return (
     <motion.div
       initial={{ opacity: 0 }}
