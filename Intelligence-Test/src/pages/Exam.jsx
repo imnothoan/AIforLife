@@ -199,15 +199,15 @@ export default function Exam() {
                         document.mozFullScreenElement || document.msFullscreenElement);
       setIsFullscreen(isFull);
       
-      // Don't trigger violation if submitting or on Safari (which has limited support)
+      // On Safari, fullscreen API has limited support - skip violations
+      if (IS_SAFARI) {
+        console.log("Safari fullscreen state change - skipping violation check");
+        return;
+      }
+      
+      // Don't trigger violation if submitting or not in exam
       // Use ref instead of state because event handlers have stale closure
       if (!isFull && examStarted && !isSubmittingRef.current) {
-        // On Safari, fullscreen exit may happen during submit - ignore it
-        if (IS_SAFARI) {
-          console.warn("Safari fullscreen state change - continuing without violation");
-          return;
-        }
-        
         setFullscreenViolations(prev => {
           const newVal = prev + 1;
           toast.error(`CẢNH BÁO: Bạn đã thoát toàn màn hình ${newVal} lần!`);
@@ -236,8 +236,8 @@ export default function Exam() {
   // ============================================
   useEffect(() => {
     const handleVisibilityChange = () => {
-      // Don't trigger violation if submitting
-      if (document.hidden && examStarted && !isSubmitting) {
+      // Don't trigger violation if submitting (use ref for current value)
+      if (document.hidden && examStarted && !isSubmittingRef.current) {
         setTabViolations(prev => {
           const newVal = prev + 1;
           toast.warning(`CẢNH BÁO: Phát hiện rời tab ${newVal} lần! Hành vi này được ghi lại.`);
@@ -248,7 +248,7 @@ export default function Exam() {
     };
     document.addEventListener('visibilitychange', handleVisibilityChange);
     return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
-  }, [examStarted, isSubmitting]);
+  }, [examStarted]);
 
   // ============================================
   // KEYBOARD SHORTCUTS PREVENTION
