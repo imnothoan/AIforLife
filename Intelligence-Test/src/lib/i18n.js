@@ -207,6 +207,29 @@ const translations = {
     // Tabs
     'tabs.exams': 'Bài thi',
     'tabs.students': 'Sinh viên',
+    'tabs.analytics': 'Phân tích',
+    
+    // Analytics
+    'analytics.selectExam': 'Chọn bài thi',
+    'analytics.selectExamPrompt': 'Vui lòng chọn một bài thi để xem phân tích',
+    'analytics.noData': 'Chưa có dữ liệu phân tích cho bài thi này',
+    'analytics.totalStudents': 'Số thí sinh nộp bài',
+    'analytics.avgScore': 'Điểm trung bình',
+    'analytics.passRate': 'Tỷ lệ đạt',
+    'analytics.flagged': 'Nghi vấn gian lận',
+    'analytics.scoreDistribution': 'Phân bố điểm',
+    'analytics.highestScore': 'Điểm cao nhất',
+    'analytics.lowestScore': 'Điểm thấp nhất',
+    'analytics.score': 'Điểm',
+    'analytics.submittedAt': 'Thời gian nộp',
+    'analytics.violations': 'Vi phạm',
+    'analytics.integrity': 'Độ tin cậy',
+    'analytics.integrity.good': 'Tốt',
+    'analytics.integrity.warning': 'Cảnh báo',
+    'analytics.integrity.suspicious': 'Nghi vấn',
+    'analytics.status.submitted': 'Đã nộp',
+    'analytics.status.autoSubmitted': 'Tự động nộp',
+    'analytics.status.inProgress': 'Đang làm',
     
     // Exam management
     'exam.create': 'Tạo bài thi mới',
@@ -589,6 +612,29 @@ const translations = {
     // Tabs
     'tabs.exams': 'Exams',
     'tabs.students': 'Students',
+    'tabs.analytics': 'Analytics',
+    
+    // Analytics
+    'analytics.selectExam': 'Select Exam',
+    'analytics.selectExamPrompt': 'Please select an exam to view analytics',
+    'analytics.noData': 'No analytics data for this exam yet',
+    'analytics.totalStudents': 'Students Submitted',
+    'analytics.avgScore': 'Average Score',
+    'analytics.passRate': 'Pass Rate',
+    'analytics.flagged': 'Flagged for Cheating',
+    'analytics.scoreDistribution': 'Score Distribution',
+    'analytics.highestScore': 'Highest Score',
+    'analytics.lowestScore': 'Lowest Score',
+    'analytics.score': 'Score',
+    'analytics.submittedAt': 'Submitted At',
+    'analytics.violations': 'Violations',
+    'analytics.integrity': 'Integrity',
+    'analytics.integrity.good': 'Good',
+    'analytics.integrity.warning': 'Warning',
+    'analytics.integrity.suspicious': 'Suspicious',
+    'analytics.status.submitted': 'Submitted',
+    'analytics.status.autoSubmitted': 'Auto Submitted',
+    'analytics.status.inProgress': 'In Progress',
     
     // Exam management
     'exam.create': 'Create Exam',

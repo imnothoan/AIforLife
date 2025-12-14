@@ -20,13 +20,13 @@ const CONFIG = {
     // We require at least 468 for full face mesh detection
     MIN_LANDMARKS_FOR_POSE: 468,
   },
-  // YOLO settings
+  // YOLO settings - Custom trained model for anti-cheat detection
   YOLO: {
     MODEL_PATH: '/models/anticheat_yolo11s.onnx',
-    INPUT_SIZE: 640,
-    CONFIDENCE_THRESHOLD: 0.25, // Lower threshold for better detection sensitivity
+    INPUT_SIZE: 640, // Model was trained with 640x640 input
+    CONFIDENCE_THRESHOLD: 0.15, // Lower threshold for better detection sensitivity
     IOU_THRESHOLD: 0.45,
-    CLASSES: ['person', 'phone', 'material', 'headphones'],
+    CLASSES: ['person', 'phone', 'material', 'headphones'], // Must match training classes
     ALERT_CLASSES: ['phone', 'material', 'headphones'], // Classes that trigger alerts
     MASK_COEFFICIENTS: 32, // Number of mask coefficients for segmentation models
   },
@@ -73,12 +73,16 @@ async function initializeAI() {
       outputFaceBlendshapes: false,
       outputFacialTransformationMatrixes: true // For head pose
     });
-
+    
+    console.log('MediaPipe Face Landmarker loaded successfully');
     self.postMessage({ type: 'STATUS', payload: 'Đang tải YOLO...' });
 
     // Load YOLO ONNX model
     try {
       ort.env.wasm.wasmPaths = 'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.20.1/dist/';
+      
+      // Fetch the model file first to check if it exists
+      console.log('Attempting to load YOLO model from:', CONFIG.YOLO.MODEL_PATH);
       
       // Try to load the model
       yoloSession = await ort.InferenceSession.create(CONFIG.YOLO.MODEL_PATH, {
@@ -86,15 +90,21 @@ async function initializeAI() {
         graphOptimizationLevel: 'all'
       });
       
-      // Log input/output names for debugging
-      console.log('YOLO model loaded successfully');
+      // Log input/output details for debugging
+      console.log('✅ YOLO model loaded successfully!');
       console.log('Input names:', yoloSession.inputNames);
       console.log('Output names:', yoloSession.outputNames);
       
+      // Log input/output shapes if available
+      if (yoloSession.inputNames && yoloSession.inputNames.length > 0) {
+        console.log('Model is ready for inference with custom trained classes:', CONFIG.YOLO.CLASSES);
+      }
+      
       self.postMessage({ type: 'STATUS', payload: 'Hệ thống giám sát đầy đủ đã sẵn sàng.' });
     } catch (yoloError) {
-      console.warn('YOLO model not available at', CONFIG.YOLO.MODEL_PATH);
-      console.warn('Error:', yoloError.message);
+      console.warn('⚠️ YOLO model not available at', CONFIG.YOLO.MODEL_PATH);
+      console.warn('Error details:', yoloError.message);
+      console.warn('Stack:', yoloError.stack);
       self.postMessage({ type: 'STATUS', payload: 'Giám sát khuôn mặt đang hoạt động. (YOLO không khả dụng)' });
     }
 
@@ -336,76 +346,157 @@ function parseYoloOutput(output, dims, originalWidth, originalHeight) {
   const inputSize = CONFIG.YOLO.INPUT_SIZE;
   const maskCoefficients = CONFIG.YOLO.MASK_COEFFICIENTS;
   
-  // YOLO11 output format: [1, channels, numBoxes]
-  // For detect models: channels = 4 + numClasses
-  // For seg models: channels = 4 + numClasses + maskCoefficients
-  
-  if (dims.length !== 3) {
-    console.warn('Unexpected dims length:', dims.length);
-    return [];
+  // Log output dimensions for debugging (only first time)
+  if (!self.loggedDims) {
+    console.log('YOLO Output dimensions:', dims);
+    console.log('Expected classes:', numClasses);
+    self.loggedDims = true;
   }
   
-  const channels = dims[1];
-  const numBoxes = dims[2];
+  // Handle different output formats
+  // YOLO11 can output in different formats depending on export options
   
-  // Validate the channel count and determine model type
-  const expectedDetect = 4 + numClasses;
-  const expectedSeg = 4 + numClasses + maskCoefficients;
-  
-  // Determine if format is transposed (YOLO11 style) or standard
-  // YOLO11: [1, channels, numBoxes] where channels < numBoxes
-  // Standard: [1, numBoxes, channels] where numBoxes > channels
-  const isTransposed = channels < numBoxes;
-  
-  if (!isTransposed) {
-    console.warn('Non-transposed format detected, this may not be a YOLO11 model');
-    return [];
-  }
-  
-  if (channels !== expectedDetect && channels !== expectedSeg) {
-    console.warn(`Unexpected channel count: ${channels}. Expected ${expectedDetect} (detect) or ${expectedSeg} (seg)`);
-    return []; // Return empty to avoid incorrect parsing
-  }
-  
-  for (let i = 0; i < numBoxes; i++) {
-    // Transposed format: data is arranged [cx0, cx1, ..., cxN, cy0, cy1, ..., cyN, ...]
-    const cx = output[0 * numBoxes + i];
-    const cy = output[1 * numBoxes + i];
-    const w = output[2 * numBoxes + i];
-    const h = output[3 * numBoxes + i];
+  if (dims.length === 3) {
+    // Format: [1, channels, numBoxes] or [1, numBoxes, channels]
+    const dim1 = dims[1];
+    const dim2 = dims[2];
     
-    // Extract class scores (channels 4 to 4+numClasses)
-    let classScores = [];
-    for (let c = 0; c < numClasses; c++) {
-      classScores.push(output[(4 + c) * numBoxes + i]);
-    }
-
-    // Get max class score
-    let maxScore = 0;
-    let maxClass = 0;
-    for (let c = 0; c < numClasses; c++) {
-      if (classScores[c] > maxScore) {
-        maxScore = classScores[c];
-        maxClass = c;
+    const expectedDetect = 4 + numClasses;
+    const expectedSeg = 4 + numClasses + maskCoefficients;
+    
+    // Determine format based on dimensions
+    let isTransposed = false;
+    let channels, numBoxes;
+    
+    if (dim1 === expectedDetect || dim1 === expectedSeg) {
+      // Format: [1, channels, numBoxes] - transposed format
+      isTransposed = true;
+      channels = dim1;
+      numBoxes = dim2;
+    } else if (dim2 === expectedDetect || dim2 === expectedSeg) {
+      // Format: [1, numBoxes, channels] - standard format
+      isTransposed = false;
+      channels = dim2;
+      numBoxes = dim1;
+    } else {
+      // Try to infer from size ratio
+      if (dim1 < dim2 && dim1 < 100) {
+        isTransposed = true;
+        channels = dim1;
+        numBoxes = dim2;
+      } else if (dim2 < dim1 && dim2 < 100) {
+        isTransposed = false;
+        channels = dim2;
+        numBoxes = dim1;
+      } else {
+        console.warn(`Cannot determine YOLO format. Dims: [1, ${dim1}, ${dim2}], Expected channels: ${expectedDetect}`);
+        return [];
       }
     }
-
-    if (maxScore >= CONFIG.YOLO.CONFIDENCE_THRESHOLD) {
-      // Scale coordinates back to original image size
-      const scaleX = originalWidth / inputSize;
-      const scaleY = originalHeight / inputSize;
+    
+    for (let i = 0; i < numBoxes; i++) {
+      let cx, cy, w, h;
+      let classScores = [];
       
-      detections.push({
-        class: CONFIG.YOLO.CLASSES[maxClass],
-        confidence: maxScore,
-        box: {
-          x: (cx - w / 2) * scaleX,
-          y: (cy - h / 2) * scaleY,
-          width: w * scaleX,
-          height: h * scaleY
+      if (isTransposed) {
+        // Transposed format: data is arranged [cx0, cx1, ..., cxN, cy0, cy1, ..., cyN, ...]
+        cx = output[0 * numBoxes + i];
+        cy = output[1 * numBoxes + i];
+        w = output[2 * numBoxes + i];
+        h = output[3 * numBoxes + i];
+        
+        // Extract class scores
+        for (let c = 0; c < numClasses; c++) {
+          classScores.push(output[(4 + c) * numBoxes + i]);
         }
-      });
+      } else {
+        // Standard format: data is arranged [box0_cx, box0_cy, box0_w, box0_h, box0_class0, ..., box1_cx, ...]
+        const offset = i * channels;
+        cx = output[offset + 0];
+        cy = output[offset + 1];
+        w = output[offset + 2];
+        h = output[offset + 3];
+        
+        // Extract class scores
+        for (let c = 0; c < numClasses; c++) {
+          classScores.push(output[offset + 4 + c]);
+        }
+      }
+
+      // Get max class score
+      let maxScore = 0;
+      let maxClass = 0;
+      for (let c = 0; c < numClasses; c++) {
+        if (classScores[c] > maxScore) {
+          maxScore = classScores[c];
+          maxClass = c;
+        }
+      }
+
+      if (maxScore >= CONFIG.YOLO.CONFIDENCE_THRESHOLD) {
+        // Scale coordinates back to original image size
+        const scaleX = originalWidth / inputSize;
+        const scaleY = originalHeight / inputSize;
+        
+        detections.push({
+          class: CONFIG.YOLO.CLASSES[maxClass],
+          confidence: maxScore,
+          box: {
+            x: (cx - w / 2) * scaleX,
+            y: (cy - h / 2) * scaleY,
+            width: w * scaleX,
+            height: h * scaleY
+          }
+        });
+      }
     }
+  } else if (dims.length === 2) {
+    // Format: [numBoxes, channels]
+    const numBoxes = dims[0];
+    const channels = dims[1];
+    
+    for (let i = 0; i < numBoxes; i++) {
+      const offset = i * channels;
+      const cx = output[offset + 0];
+      const cy = output[offset + 1];
+      const w = output[offset + 2];
+      const h = output[offset + 3];
+      
+      // Extract class scores
+      let classScores = [];
+      for (let c = 0; c < numClasses; c++) {
+        classScores.push(output[offset + 4 + c]);
+      }
+
+      // Get max class score
+      let maxScore = 0;
+      let maxClass = 0;
+      for (let c = 0; c < numClasses; c++) {
+        if (classScores[c] > maxScore) {
+          maxScore = classScores[c];
+          maxClass = c;
+        }
+      }
+
+      if (maxScore >= CONFIG.YOLO.CONFIDENCE_THRESHOLD) {
+        const scaleX = originalWidth / inputSize;
+        const scaleY = originalHeight / inputSize;
+        
+        detections.push({
+          class: CONFIG.YOLO.CLASSES[maxClass],
+          confidence: maxScore,
+          box: {
+            x: (cx - w / 2) * scaleX,
+            y: (cy - h / 2) * scaleY,
+            width: w * scaleX,
+            height: h * scaleY
+          }
+        });
+      }
+    }
+  } else {
+    console.warn('Unexpected dims length:', dims.length, dims);
+    return [];
   }
 
   // Apply NMS
