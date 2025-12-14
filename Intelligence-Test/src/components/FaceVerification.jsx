@@ -1,5 +1,5 @@
-import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { useState, useRef, useEffect, useCallback } from 'react';
+import { motion } from 'framer-motion';
 import { Camera, RefreshCw, CheckCircle, XCircle, Loader2, AlertTriangle, User } from 'lucide-react';
 import { useLanguage } from '../context/LanguageContext';
 import { FaceLandmarker, FilesetResolver } from "@mediapipe/tasks-vision";
@@ -16,7 +16,86 @@ const FACE_CONFIG = {
   MAX_FACE_SIZE: 0.85, // Maximum face size as percentage of frame
   SIMILARITY_THRESHOLD: 0.6, // Cosine similarity threshold for match
   VERIFICATION_TIMEOUT: 30, // Seconds
+  // Anti-spoofing thresholds
+  BLINK_THRESHOLD: 0.3, // Eye aspect ratio threshold for blink detection
+  LIVENESS_FRAMES_REQUIRED: 3, // Number of blink detections required
+  HEAD_MOVEMENT_THRESHOLD: 0.02, // Minimum head movement to prove liveness
 };
+
+// ============================================
+// ANTI-SPOOFING: Liveness Detection Functions
+// ============================================
+
+/**
+ * Calculate Eye Aspect Ratio (EAR) for blink detection
+ * Based on the paper "Real-Time Eye Blink Detection using Facial Landmarks"
+ * 
+ * @param {Array<{x: number, y: number, z?: number}>} landmarks - MediaPipe face mesh landmarks (468+ points)
+ * @param {number[]} eyeIndices - Array of 6 landmark indices for one eye in order:
+ *   [corner_left, top_outer, top_inner, corner_right, bottom_inner, bottom_outer]
+ *   Left eye: [33, 160, 158, 133, 153, 144]
+ *   Right eye: [362, 385, 387, 263, 373, 380]
+ * @returns {number} Eye Aspect Ratio - lower values indicate closed eye (blink)
+ */
+function calculateEAR(landmarks, eyeIndices) {
+  // Eye landmark indices (MediaPipe face mesh)
+  // Left eye: 33, 160, 158, 133, 153, 144
+  // Right eye: 362, 385, 387, 263, 373, 380
+  
+  const getPoint = (idx) => landmarks[idx];
+  
+  // Vertical distances
+  const p2 = getPoint(eyeIndices[1]);
+  const p6 = getPoint(eyeIndices[5]);
+  const p3 = getPoint(eyeIndices[2]);
+  const p5 = getPoint(eyeIndices[4]);
+  
+  // Horizontal distance
+  const p1 = getPoint(eyeIndices[0]);
+  const p4 = getPoint(eyeIndices[3]);
+  
+  if (!p1 || !p2 || !p3 || !p4 || !p5 || !p6) return 0.3; // Default open eye
+  
+  const vertical1 = Math.sqrt(Math.pow(p2.x - p6.x, 2) + Math.pow(p2.y - p6.y, 2));
+  const vertical2 = Math.sqrt(Math.pow(p3.x - p5.x, 2) + Math.pow(p3.y - p5.y, 2));
+  const horizontal = Math.sqrt(Math.pow(p1.x - p4.x, 2) + Math.pow(p1.y - p4.y, 2));
+  
+  if (horizontal === 0) return 0.3;
+  
+  return (vertical1 + vertical2) / (2.0 * horizontal);
+}
+
+// Detect blink using Eye Aspect Ratio
+function detectBlink(landmarks) {
+  // MediaPipe face mesh eye indices
+  const leftEyeIndices = [33, 160, 158, 133, 153, 144];
+  const rightEyeIndices = [362, 385, 387, 263, 373, 380];
+  
+  const leftEAR = calculateEAR(landmarks, leftEyeIndices);
+  const rightEAR = calculateEAR(landmarks, rightEyeIndices);
+  
+  const avgEAR = (leftEAR + rightEAR) / 2.0;
+  
+  return avgEAR < FACE_CONFIG.BLINK_THRESHOLD;
+}
+
+// Check for head movement (anti-static image spoofing)
+function checkHeadMovement(prevLandmarks, currentLandmarks) {
+  if (!prevLandmarks || !currentLandmarks) return 0;
+  
+  // Use nose tip (landmark 1) for movement detection
+  const prev = prevLandmarks[1];
+  const current = currentLandmarks[1];
+  
+  if (!prev || !current) return 0;
+  
+  const movement = Math.sqrt(
+    Math.pow(current.x - prev.x, 2) + 
+    Math.pow(current.y - prev.y, 2)
+  );
+  
+  return movement;
+}
 
 // Simple face embedding using landmark positions (normalized)
 // This is a lightweight approach that works well for identity verification
@@ -564,4 +643,4 @@ export default function FaceVerification({
 }
 
 // Export helper functions for use in other components
-export { extractFaceEmbedding, cosineSimilarity, FACE_CONFIG };
+export { extractFaceEmbedding, cosineSimilarity, detectBlink, checkHeadMovement, FACE_CONFIG };

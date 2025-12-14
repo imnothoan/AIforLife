@@ -24,10 +24,10 @@ const CONFIG = {
   YOLO: {
     MODEL_PATH: '/models/anticheat_yolo11s.onnx',
     INPUT_SIZE: 640, // Model was trained with 640x640 input
-    // Note: Low threshold (0.15) is intentional for anti-cheat to prioritize detection sensitivity
-    // over precision. False positives are acceptable as they only trigger warnings, not penalties.
-    // This can be tuned based on testing results and feedback.
-    CONFIDENCE_THRESHOLD: 0.15,
+    // Very low threshold (0.10) for anti-cheat to maximize detection sensitivity
+    // This is intentional - we want to catch any suspicious objects
+    // False positives are acceptable as they only trigger warnings, not penalties.
+    CONFIDENCE_THRESHOLD: 0.10,
     IOU_THRESHOLD: 0.45,
     CLASSES: ['person', 'phone', 'material', 'headphones'], // Must match training classes
     ALERT_CLASSES: ['phone', 'material', 'headphones'], // Classes that trigger alerts
@@ -51,6 +51,9 @@ let isInitialized = false;
 
 // YOLO throttle interval (run every 500ms)
 const YOLO_THROTTLE_MS = 500;
+
+// Track max scores per class for debugging (persistent across inference runs)
+let maxScorePerClassPersistent = null;
 
 // ============================================
 // INITIALIZATION
@@ -246,6 +249,14 @@ async function processFrame(imageData) {
     try {
       const detections = await runYoloInference(imageData);
       
+      // Log all detections for debugging (only non-person detections)
+      if (detections.length > 0) {
+        const alertableDetections = detections.filter(d => CONFIG.YOLO.ALERT_CLASSES.includes(d.class));
+        if (alertableDetections.length > 0) {
+          console.log('🚨 YOLO Alert Detections:', alertableDetections.map(d => `${d.class} (${(d.confidence * 100).toFixed(1)}%)`));
+        }
+      }
+      
       for (const detection of detections) {
         if (CONFIG.YOLO.ALERT_CLASSES.includes(detection.class)) {
           // Throttle alerts (max once per 5 seconds per class)
@@ -260,6 +271,13 @@ async function processFrame(imageData) {
               payload: alertMessages[detection.class] || `Phát hiện ${detection.class}!`
             });
             lastAlertTime = now;
+            
+            // Also update status to show detection
+            const statusMsg = alertMessages[detection.class] || `Phát hiện ${detection.class}!`;
+            self.postMessage({ 
+              type: 'STATUS', 
+              payload: `⚠️ ${statusMsg} (${(detection.confidence * 100).toFixed(0)}%)` 
+            });
           }
           break;
         }
@@ -353,7 +371,13 @@ function parseYoloOutput(output, dims, originalWidth, originalHeight) {
   if (!self.loggedDims) {
     console.log('YOLO Output dimensions:', dims);
     console.log('Expected classes:', numClasses);
+    console.log('Model classes:', CONFIG.YOLO.CLASSES);
     self.loggedDims = true;
+  }
+  
+  // Initialize persistent max score tracking if not done
+  if (!maxScorePerClassPersistent) {
+    maxScorePerClassPersistent = new Array(numClasses).fill(0);
   }
   
   // Handle different output formats
@@ -366,6 +390,13 @@ function parseYoloOutput(output, dims, originalWidth, originalHeight) {
     
     const expectedDetect = 4 + numClasses;
     const expectedSeg = 4 + numClasses + maskCoefficients;
+    
+    // Log format determination (only first time)
+    if (!self.loggedFormat) {
+      console.log('Expected detect channels:', expectedDetect, '| Expected seg channels:', expectedSeg);
+      console.log('Actual dims: [1,', dim1, ',', dim2, ']');
+      self.loggedFormat = true;
+    }
     
     // Determine format based on dimensions
     let isTransposed = false;
@@ -426,13 +457,17 @@ function parseYoloOutput(output, dims, originalWidth, originalHeight) {
         }
       }
 
-      // Get max class score
+      // Get max class score and track per-class max
       let maxScore = 0;
       let maxClass = 0;
       for (let c = 0; c < numClasses; c++) {
         if (classScores[c] > maxScore) {
           maxScore = classScores[c];
           maxClass = c;
+        }
+        // Track max per class for debugging (persistent)
+        if (classScores[c] > maxScorePerClassPersistent[c]) {
+          maxScorePerClassPersistent[c] = classScores[c];
         }
       }
 
@@ -452,6 +487,13 @@ function parseYoloOutput(output, dims, originalWidth, originalHeight) {
           }
         });
       }
+    }
+    
+    // Log max scores per class periodically for debugging
+    if (!self.lastMaxScoreLog || (Date.now() - self.lastMaxScoreLog > 10000)) {
+      self.lastMaxScoreLog = Date.now();
+      const maxScoreInfo = CONFIG.YOLO.CLASSES.map((cls, i) => `${cls}: ${(maxScorePerClassPersistent[i] * 100).toFixed(1)}%`).join(', ');
+      console.log('YOLO Max scores per class:', maxScoreInfo);
     }
   } else if (dims.length === 2) {
     // Format: [numBoxes, channels]

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useLanguage } from '../context/LanguageContext';
 import { useNavigate } from 'react-router-dom';
@@ -6,10 +6,8 @@ import { supabase } from '../lib/supabase';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'react-toastify';
 import {
-  FileText, User, LogOut, Plus, Users, BookOpen, Clock,
-  BarChart3, AlertTriangle, CheckCircle, Eye, Edit2, Trash2,
-  Calendar, Search, Filter, Download, Settings, ChevronRight,
-  GraduationCap, ClipboardList, Shield, Activity, X, Save, Loader2
+  FileText, Users, Plus, Clock, BarChart3, CheckCircle, Trash2,
+  Calendar, X, Save, Loader2
 } from 'lucide-react';
 import LanguageSwitcher from '../components/LanguageSwitcher';
 
@@ -1204,10 +1202,52 @@ function StudentAnalyticsTab({ classId, exams }) {
             </div>
           </div>
 
-          {/* Score Distribution */}
+          {/* Score Distribution - Visual Bar Chart */}
           <div className="card">
             <h3 className="font-semibold text-gray-900 mb-4">{t('analytics.scoreDistribution')}</h3>
-            <div className="flex items-center space-x-4 text-sm">
+            
+            {/* Visual Score Distribution Bars */}
+            <div className="space-y-3 mb-6">
+              {/* Calculate score ranges */}
+              {(() => {
+                const ranges = [
+                  { label: '90-100%', min: 90, max: 100, color: 'bg-success-600' },
+                  { label: '80-89%', min: 80, max: 89, color: 'bg-success-500' },
+                  { label: '70-79%', min: 70, max: 79, color: 'bg-primary' },
+                  { label: '60-69%', min: 60, max: 69, color: 'bg-warning-500' },
+                  { label: '50-59%', min: 50, max: 59, color: 'bg-warning-600' },
+                  { label: '0-49%', min: 0, max: 49, color: 'bg-danger' },
+                ];
+                
+                const submitted = sessions.filter(s => s.status === 'submitted' || s.status === 'auto_submitted');
+                const total = submitted.length || 1;
+                
+                return ranges.map((range) => {
+                  const count = submitted.filter(s => 
+                    (s.percentage || 0) >= range.min && (s.percentage || 0) <= range.max
+                  ).length;
+                  const percentage = (count / total) * 100;
+                  
+                  return (
+                    <div key={range.label} className="flex items-center space-x-3">
+                      <span className="text-sm text-gray-600 w-20">{range.label}</span>
+                      <div className="flex-1 h-6 bg-gray-100 rounded-full overflow-hidden">
+                        <div 
+                          className={`h-full ${range.color} transition-all duration-500`}
+                          style={{ width: `${percentage}%` }}
+                        />
+                      </div>
+                      <span className="text-sm font-medium text-gray-700 w-16 text-right">
+                        {count} ({percentage.toFixed(0)}%)
+                      </span>
+                    </div>
+                  );
+                });
+              })()}
+            </div>
+            
+            {/* Summary Stats */}
+            <div className="flex items-center space-x-4 text-sm pt-4 border-t border-gray-100">
               <div className="flex items-center space-x-2">
                 <div className="w-3 h-3 bg-success rounded-full"></div>
                 <span>{t('analytics.highestScore')}: {analyticsData.highestScore}%</span>

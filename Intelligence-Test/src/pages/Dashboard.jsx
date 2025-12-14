@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useLanguage } from '../context/LanguageContext';
 import { useNavigate } from 'react-router-dom';
@@ -18,15 +18,19 @@ export default function Dashboard() {
 
   // If instructor, redirect to instructor dashboard
   useEffect(() => {
-    if (isInstructor()) {
-      navigate('/instructor');
+    // Wait for profile to be loaded before checking role
+    if (profile && profile.role) {
+      if (profile.role === 'instructor' || profile.role === 'admin') {
+        navigate('/instructor');
+      }
     }
-  }, [profile, isInstructor, navigate]);
+  }, [profile, navigate]);
 
   // Load available exams for student
   useEffect(() => {
     const loadExams = async () => {
-      if (!user || isInstructor()) return;
+      // Don't load exams for instructors or if profile indicates instructor role
+      if (!user || profile?.role === 'instructor' || profile?.role === 'admin') return;
 
       try {
         // Get enrolled classes
@@ -93,7 +97,7 @@ export default function Dashboard() {
     };
 
     loadExams();
-  }, [user, isInstructor]);
+  }, [user, profile]);
 
   const handleLogout = async () => {
     await logout();

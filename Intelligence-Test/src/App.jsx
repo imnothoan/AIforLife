@@ -1,5 +1,4 @@
-import React from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { LanguageProvider } from './context/LanguageContext';
 import { ToastContainer, toast } from 'react-toastify';
@@ -22,23 +21,23 @@ axios.interceptors.response.use(
   }
 );
 
-const PrivateRoute = ({ children }) => {
+function PrivateRoute({ children }) {
   const { user } = useAuth();
   return user ? children : <Navigate to="/login" />;
-};
+}
 
-const InstructorRoute = ({ children }) => {
-  const { user, profile, isInstructor } = useAuth();
+function InstructorRoute({ children }) {
+  const { user, isInstructor } = useAuth();
   if (!user) return <Navigate to="/login" />;
   if (!isInstructor()) return <Navigate to="/" />;
   return children;
-};
+}
 
 function App() {
   return (
     <LanguageProvider>
       <AuthProvider>
-        <Router>
+        <BrowserRouter>
           <div className="min-h-screen bg-background text-text-main font-sans">
             <Routes>
               <Route path="/login" element={<Login />} />
@@ -59,7 +58,7 @@ function App() {
               theme="light"
             />
           </div>
-        </Router>
+        </BrowserRouter>
       </AuthProvider>
     </LanguageProvider>
   );
