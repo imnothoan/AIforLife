@@ -22,6 +22,14 @@ const REMOTE_DESKTOP_SIGNATURES = [
 // Detect Safari browser (computed once at module level for performance)
 const IS_SAFARI = typeof navigator !== 'undefined' && /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
 
+// Demo exam identifiers for testing
+const DEMO_EXAM_IDS = ['demo', '1'];
+const DEMO_SESSION_IDS = ['demo-session', 'demo-session-id'];
+
+// Timeout constants
+const SUBMIT_TIMEOUT_MS = 15000;
+const SUBMIT_TIMEOUT_ERROR = 'SUBMIT_TIMEOUT';
+
 export default function Exam() {
   const { id: examId } = useParams();
   const { user, profile } = useAuth();
@@ -910,7 +918,7 @@ export default function Exam() {
     isSubmittingRef.current = true; // Update ref for event handlers
 
     try {
-      const isDemo = examId === 'demo' || examId === '1' || sessionId === 'demo-session' || sessionId === 'demo-session-id';
+      const isDemo = DEMO_EXAM_IDS.includes(examId) || DEMO_SESSION_IDS.includes(sessionId);
       
       if (isDemo) {
         // Demo scoring - for testing purposes only
@@ -932,8 +940,6 @@ export default function Exam() {
         toast.success(`${t('exam.submitSuccess')} ${t('exam.score')}: ${score}/${total} (${percentage}%)`);
       } else {
         // Production: Submit answers to database with timeout
-        const TIMEOUT_MS = 15000; // 15 second timeout
-        
         const submitWithTimeout = async () => {
           // Batch upsert all answers at once for better performance
           const answersToInsert = questions.map(q => ({
@@ -1020,7 +1026,7 @@ export default function Exam() {
 
         // Execute with timeout
         const timeoutPromise = new Promise((_, reject) => 
-          setTimeout(() => reject(new Error('SUBMIT_TIMEOUT')), TIMEOUT_MS)
+          setTimeout(() => reject(new Error(SUBMIT_TIMEOUT_ERROR)), SUBMIT_TIMEOUT_MS)
         );
 
         const result = await Promise.race([submitWithTimeout(), timeoutPromise]);
@@ -1054,7 +1060,7 @@ export default function Exam() {
     } catch (error) {
       console.error('Submit error:', error);
       
-      if (error.message === 'SUBMIT_TIMEOUT') {
+      if (error.message === SUBMIT_TIMEOUT_ERROR) {
         toast.error(t('error.timeout'));
       } else {
         toast.error(t('exam.submitError'));

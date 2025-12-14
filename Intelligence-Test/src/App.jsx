@@ -11,6 +11,7 @@ import InstructorDashboard from './pages/InstructorDashboard';
 import './index.css';
 import axios from 'axios';
 import { Suspense } from 'react';
+import { t } from './lib/i18n';
 
 // Loading fallback component
 const LoadingFallback = () => (
@@ -29,7 +30,7 @@ axios.interceptors.response.use(
   response => response,
   error => {
     if (error.response && error.response.status === 429) {
-      toast.error("System busy. Please try again in a few seconds.");
+      toast.error(t('error.systemBusy'));
     }
     return Promise.reject(error);
   }

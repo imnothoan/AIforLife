@@ -351,6 +351,7 @@ const translations = {
     'error.loadQuestions': 'Không thể tải câu hỏi',
     'error.loadExams': 'Không thể tải danh sách bài thi. Vui lòng thử lại.',
     'error.sessionExpired': 'Phiên đăng nhập hết hạn. Vui lòng đăng nhập lại.',
+    'error.systemBusy': 'Hệ thống đang bận. Vui lòng thử lại sau vài giây.',
     
     // Exam specific errors
     'exam.notPublished': 'Bài thi này chưa được công bố',
@@ -749,6 +750,7 @@ const translations = {
     'error.loadQuestions': 'Unable to load questions',
     'error.loadExams': 'Unable to load exams. Please try again.',
     'error.sessionExpired': 'Session expired. Please login again.',
+    'error.systemBusy': 'System busy. Please try again in a few seconds.',
     
     // Exam specific errors
     'exam.notPublished': 'This exam has not been published',

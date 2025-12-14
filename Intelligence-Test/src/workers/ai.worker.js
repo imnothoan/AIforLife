@@ -146,13 +146,13 @@ async function initializeAI() {
         console.log('Confidence threshold:', CONFIG.YOLO.CONFIDENCE_THRESHOLD);
       }
       
-      self.postMessage({ type: 'STATUS', payload: '✅ AI giám sát đầy đủ (Face + YOLO)' });
+      self.postMessage({ type: 'STATUS', payload: 'AI proctoring active (Face + YOLO)' });
     } catch (yoloError) {
-      console.warn('⚠️ YOLO model not available at', CONFIG.YOLO.MODEL_PATH);
+      console.warn('YOLO model not available at', CONFIG.YOLO.MODEL_PATH);
       console.warn('Error details:', yoloError.message);
       console.warn('Stack:', yoloError.stack);
       // Still allow face detection to work
-      self.postMessage({ type: 'STATUS', payload: '⚠️ Giám sát khuôn mặt hoạt động (YOLO chưa sẵn sàng)' });
+      self.postMessage({ type: 'STATUS', payload: 'Face monitoring active (YOLO unavailable)' });
     }
 
     isInitialized = true;
