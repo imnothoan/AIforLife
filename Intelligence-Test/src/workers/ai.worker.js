@@ -44,10 +44,9 @@ const CONFIG = {
   YOLO: {
     MODEL_PATH: '/models/anticheat_yolo11s.onnx',
     INPUT_SIZE: 640, // Model was trained with 640x640 input
-    // Very low threshold (0.10) for anti-cheat to maximize detection sensitivity
-    // This is intentional - we want to catch any suspicious objects
-    // False positives are acceptable as they only trigger warnings, not penalties.
-    CONFIDENCE_THRESHOLD: 0.10,
+    // Confidence threshold for detection
+    // 0.25 provides good balance between detection sensitivity and false positives
+    CONFIDENCE_THRESHOLD: 0.25,
     IOU_THRESHOLD: 0.45,
     CLASSES: ['person', 'phone', 'material', 'headphones'], // Must match training classes
     ALERT_CLASSES: ['phone', 'material', 'headphones'], // Classes that trigger alerts
@@ -144,14 +143,16 @@ async function initializeAI() {
       // Log input/output shapes if available
       if (yoloSession.inputNames && yoloSession.inputNames.length > 0) {
         console.log('Model is ready for inference with custom trained classes:', CONFIG.YOLO.CLASSES);
+        console.log('Confidence threshold:', CONFIG.YOLO.CONFIDENCE_THRESHOLD);
       }
       
-      self.postMessage({ type: 'STATUS', payload: 'Hệ thống giám sát đầy đủ đã sẵn sàng.' });
+      self.postMessage({ type: 'STATUS', payload: '✅ AI giám sát đầy đủ (Face + YOLO)' });
     } catch (yoloError) {
       console.warn('⚠️ YOLO model not available at', CONFIG.YOLO.MODEL_PATH);
       console.warn('Error details:', yoloError.message);
       console.warn('Stack:', yoloError.stack);
-      self.postMessage({ type: 'STATUS', payload: 'Giám sát khuôn mặt đang hoạt động. (YOLO không khả dụng)' });
+      // Still allow face detection to work
+      self.postMessage({ type: 'STATUS', payload: '⚠️ Giám sát khuôn mặt hoạt động (YOLO chưa sẵn sàng)' });
     }
 
     isInitialized = true;

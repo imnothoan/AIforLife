@@ -347,6 +347,18 @@ const translations = {
     'error.retrying': 'Đang thử lại... ({attempt}/{max})',
     'error.permission': 'Bạn không có quyền thực hiện thao tác này.',
     'error.general': 'Có lỗi xảy ra. Vui lòng thử lại sau.',
+    'error.loadExam': 'Không thể tải thông tin bài thi',
+    'error.loadQuestions': 'Không thể tải câu hỏi',
+    'error.loadExams': 'Không thể tải danh sách bài thi. Vui lòng thử lại.',
+    'error.sessionExpired': 'Phiên đăng nhập hết hạn. Vui lòng đăng nhập lại.',
+    
+    // Exam specific errors
+    'exam.notPublished': 'Bài thi này chưa được công bố',
+    'exam.notStarted': 'Bài thi chưa bắt đầu',
+    'exam.ended': 'Bài thi đã kết thúc',
+    'exam.timeExpired': 'Thời gian thi đã hết!',
+    'exam.sessionRestored': 'Đã khôi phục phiên thi trước đó',
+    'exam.loadError': 'Có lỗi xảy ra khi tải bài thi',
     
     // Error Boundary
     'errorBoundary.title': 'Oops! Đã xảy ra lỗi',
@@ -733,6 +745,18 @@ const translations = {
     'error.retrying': 'Retrying... ({attempt}/{max})',
     'error.permission': 'You don\'t have permission for this action.',
     'error.general': 'An error occurred. Please try again later.',
+    'error.loadExam': 'Unable to load exam information',
+    'error.loadQuestions': 'Unable to load questions',
+    'error.loadExams': 'Unable to load exams. Please try again.',
+    'error.sessionExpired': 'Session expired. Please login again.',
+    
+    // Exam specific errors
+    'exam.notPublished': 'This exam has not been published',
+    'exam.notStarted': 'Exam has not started yet',
+    'exam.ended': 'Exam has ended',
+    'exam.timeExpired': 'Exam time has expired!',
+    'exam.sessionRestored': 'Previous session restored',
+    'exam.loadError': 'Error loading exam',
     
     // Error Boundary
     'errorBoundary.title': 'Oops! Something went wrong',

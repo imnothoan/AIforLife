@@ -85,11 +85,11 @@ export default function Dashboard() {
         // User-friendly error messages
         const errorMsg = err.message?.toLowerCase() || '';
         if (errorMsg.includes('network') || errorMsg.includes('fetch')) {
-          toast.error('Lỗi kết nối mạng. Vui lòng kiểm tra internet.');
+          toast.error(t('error.network'));
         } else if (errorMsg.includes('permission') || errorMsg.includes('unauthorized')) {
-          toast.error('Phiên đăng nhập hết hạn. Vui lòng đăng nhập lại.');
+          toast.error(t('error.sessionExpired'));
         } else {
-          toast.error('Không thể tải danh sách bài thi. Vui lòng thử lại.');
+          toast.error(t('error.loadExams'));
         }
       } finally {
         setLoading(false);
@@ -97,7 +97,7 @@ export default function Dashboard() {
     };
 
     loadExams();
-  }, [user, profile]);
+  }, [user, profile, t]);
 
   const handleLogout = async () => {
     await logout();

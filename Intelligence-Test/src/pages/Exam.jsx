@@ -479,7 +479,7 @@ export default function Exam() {
 
         if (examError) {
           console.error('Failed to load exam:', examError);
-          toast.error('Không thể tải thông tin bài thi');
+          toast.error(t('error.loadExam'));
           navigate('/');
           return;
         }
@@ -490,19 +490,19 @@ export default function Exam() {
         const endTime = new Date(exam.end_time);
 
         if (exam.status !== 'published') {
-          toast.error('Bài thi này chưa được công bố');
+          toast.error(t('exam.notPublished'));
           navigate('/');
           return;
         }
 
         if (now < startTime) {
-          toast.error('Bài thi chưa bắt đầu');
+          toast.error(t('exam.notStarted'));
           navigate('/');
           return;
         }
 
         if (now > endTime) {
-          toast.error('Bài thi đã kết thúc');
+          toast.error(t('exam.ended'));
           navigate('/');
           return;
         }
@@ -527,7 +527,7 @@ export default function Exam() {
 
         if (questionsError) {
           console.error('Failed to load questions:', questionsError);
-          toast.error('Không thể tải câu hỏi');
+          toast.error(t('error.loadQuestions'));
           navigate('/');
           return;
         }
@@ -563,7 +563,7 @@ export default function Exam() {
 
           // If time has already expired, auto-submit
           if (remaining === 0) {
-            toast.warning('Thời gian thi đã hết!');
+            toast.warning(t('exam.timeExpired'));
             setExamStarted(true);
             handleAutoSubmit();
             return;
@@ -591,12 +591,12 @@ export default function Exam() {
             setNotes(notesMap);
           }
 
-          toast.info('Đã khôi phục phiên thi trước đó');
+          toast.info(t('exam.sessionRestored'));
         }
 
       } catch (error) {
         console.error('Error loading exam:', error);
-        toast.error('Có lỗi xảy ra khi tải bài thi');
+        toast.error(t('exam.loadError'));
         navigate('/');
       }
     };
