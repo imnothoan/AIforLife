@@ -163,9 +163,16 @@ const translations = {
     'proctoring.camera': 'Camera Giám Sát',
     'proctoring.recording': 'REC',
     'proctoring.aiAlerts': 'AI Phát hiện',
+    'proctoring.aiDetection': 'AI Phát hiện',
     'proctoring.tabSwitches': 'Rời tab',
+    'proctoring.tabViolations': 'Rời tab',
     'proctoring.fullscreenExits': 'Thoát fullscreen',
+    'proctoring.fullscreenViolations': 'Thoát fullscreen',
     'proctoring.gazeAway': 'Nhìn ra ngoài',
+    'proctoring.questionList': 'Danh sách câu hỏi',
+    'proctoring.answered': 'Đã trả lời',
+    'proctoring.unanswered': 'Chưa trả lời',
+    'proctoring.flagged': 'Đã gắn cờ',
     
     // Instructor Dashboard
     'instructor.title': 'Instructor',
@@ -542,9 +549,16 @@ const translations = {
     'proctoring.camera': 'Proctoring Camera',
     'proctoring.recording': 'REC',
     'proctoring.aiAlerts': 'AI Alerts',
+    'proctoring.aiDetection': 'AI Detection',
     'proctoring.tabSwitches': 'Tab Switches',
+    'proctoring.tabViolations': 'Tab Violations',
     'proctoring.fullscreenExits': 'Fullscreen Exits',
+    'proctoring.fullscreenViolations': 'Fullscreen Violations',
     'proctoring.gazeAway': 'Gaze Away',
+    'proctoring.questionList': 'Question List',
+    'proctoring.answered': 'Answered',
+    'proctoring.unanswered': 'Unanswered',
+    'proctoring.flagged': 'Flagged',
     
     // Instructor Dashboard
     'instructor.title': 'Instructor',
