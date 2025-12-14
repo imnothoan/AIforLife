@@ -9,19 +9,22 @@ import { LogOut, FileText, User, PlayCircle, Clock, CheckCircle, AlertCircle, Lo
 import LanguageSwitcher from '../components/LanguageSwitcher';
 
 export default function Dashboard() {
-  const { user, profile, logout, isInstructor } = useAuth();
+  const { user, profile, logout } = useAuth();
   const { t } = useLanguage();
   const navigate = useNavigate();
 
   const [exams, setExams] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [redirecting, setRedirecting] = useState(false);
 
   // If instructor, redirect to instructor dashboard
   useEffect(() => {
     // Wait for profile to be loaded before checking role
     if (profile && profile.role) {
       if (profile.role === 'instructor' || profile.role === 'admin') {
-        navigate('/instructor');
+        setRedirecting(true);
+        // Use replace to prevent back button issues
+        navigate('/instructor', { replace: true });
       }
     }
   }, [profile, navigate]);
@@ -29,8 +32,8 @@ export default function Dashboard() {
   // Load available exams for student
   useEffect(() => {
     const loadExams = async () => {
-      // Don't load exams for instructors or if profile indicates instructor role
-      if (!user || profile?.role === 'instructor' || profile?.role === 'admin') return;
+      // Don't load exams for instructors or if profile indicates instructor role, or if we're redirecting
+      if (!user || profile?.role === 'instructor' || profile?.role === 'admin' || redirecting) return;
 
       try {
         // Get enrolled classes
