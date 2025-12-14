@@ -24,7 +24,10 @@ const CONFIG = {
   YOLO: {
     MODEL_PATH: '/models/anticheat_yolo11s.onnx',
     INPUT_SIZE: 640, // Model was trained with 640x640 input
-    CONFIDENCE_THRESHOLD: 0.15, // Lower threshold for better detection sensitivity
+    // Note: Low threshold (0.15) is intentional for anti-cheat to prioritize detection sensitivity
+    // over precision. False positives are acceptable as they only trigger warnings, not penalties.
+    // This can be tuned based on testing results and feedback.
+    CONFIDENCE_THRESHOLD: 0.15,
     IOU_THRESHOLD: 0.45,
     CLASSES: ['person', 'phone', 'material', 'headphones'], // Must match training classes
     ALERT_CLASSES: ['phone', 'material', 'headphones'], // Classes that trigger alerts

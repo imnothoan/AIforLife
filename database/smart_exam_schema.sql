@@ -1045,6 +1045,7 @@ DECLARE
   v_session RECORD;
   v_analytics RECORD;
   v_result JSONB;
+  v_integrity NUMERIC(5,2);
 BEGIN
   -- Get session info
   SELECT es.*, e.id as exam_id, e.duration_minutes
@@ -1081,15 +1082,12 @@ BEGIN
   SELECT * INTO v_analytics FROM answer_stats;
   
   -- Calculate integrity score (100 - penalties)
-  DECLARE
-    v_integrity NUMERIC(5,2) := 100;
-  BEGIN
-    v_integrity := v_integrity - (v_session.cheat_count * 10);
-    v_integrity := v_integrity - (v_session.tab_violations * 5);
-    v_integrity := v_integrity - (v_session.fullscreen_violations * 5);
-    v_integrity := v_integrity - (v_session.gaze_away_count * 1);
-    v_integrity := GREATEST(0, v_integrity);
-  END;
+  v_integrity := 100;
+  v_integrity := v_integrity - (COALESCE(v_session.cheat_count, 0) * 10);
+  v_integrity := v_integrity - (COALESCE(v_session.tab_violations, 0) * 5);
+  v_integrity := v_integrity - (COALESCE(v_session.fullscreen_violations, 0) * 5);
+  v_integrity := v_integrity - (COALESCE(v_session.gaze_away_count, 0) * 1);
+  v_integrity := GREATEST(0, v_integrity);
   
   -- Insert or update analytics
   INSERT INTO public.student_analytics (
@@ -1114,7 +1112,7 @@ BEGIN
     COALESCE(v_analytics.medium_total, 0),
     COALESCE(v_analytics.hard_correct, 0),
     COALESCE(v_analytics.hard_total, 0),
-    100 - (COALESCE(v_session.cheat_count, 0) * 10 + COALESCE(v_session.tab_violations, 0) * 5 + COALESCE(v_session.fullscreen_violations, 0) * 5 + COALESCE(v_session.gaze_away_count, 0)),
+    v_integrity,
     COALESCE(v_session.cheat_count, 0) + COALESCE(v_session.tab_violations, 0) + COALESCE(v_session.fullscreen_violations, 0)
   )
   ON CONFLICT (session_id) DO UPDATE SET
