@@ -455,18 +455,26 @@ function AddStudentForm({ classId, onClose, onSuccess }) {
     let successCount = 0;
     let errorCount = 0;
     const errorMessages = [];
+    const TIMEOUT_MS = 10000; // 10 second timeout per request
 
     for (const studentEmail of emails) {
       try {
+        // Create timeout promise
+        const timeoutPromise = new Promise((_, reject) => 
+          setTimeout(() => reject(new Error('REQUEST_TIMEOUT')), TIMEOUT_MS)
+        );
+
         // Use RPC function to add student (bypasses RLS restrictions)
-        const { data: result, error: rpcError } = await supabase
+        const rpcPromise = supabase
           .rpc('add_student_to_class', {
             p_class_id: classId,
             p_student_email: studentEmail.toLowerCase().trim()
           });
 
+        const { data: result, error: rpcError } = await Promise.race([rpcPromise, timeoutPromise]);
+
         if (rpcError) {
-          // RPC function doesn't exist - fallback to direct method
+          // RPC function doesn't exist or failed - fallback to direct method
           console.warn('RPC not available, using direct method:', rpcError);
           
           // Fallback: Find user by email directly
@@ -518,7 +526,11 @@ function AddStudentForm({ classId, onClose, onSuccess }) {
         }
       } catch (err) {
         console.error('Add student error:', err);
-        errorMessages.push(`${studentEmail}: ${t('error.network')}`);
+        if (err.message === 'REQUEST_TIMEOUT') {
+          errorMessages.push(`${studentEmail}: ${t('error.timeout')}`);
+        } else {
+          errorMessages.push(`${studentEmail}: ${t('error.network')}`);
+        }
         errorCount++;
       }
     }
@@ -1051,6 +1063,244 @@ function QuestionForm({ question, onSave, onCancel, saving }) {
 }
 
 // ============================================
+// STUDENT ANALYTICS TAB
+// ============================================
+
+function StudentAnalyticsTab({ classId, exams }) {
+  const { t } = useLanguage();
+  const [loading, setLoading] = useState(true);
+  const [selectedExamId, setSelectedExamId] = useState('');
+  const [sessions, setSessions] = useState([]);
+  const [analyticsData, setAnalyticsData] = useState(null);
+
+  // Load sessions for selected exam
+  useEffect(() => {
+    const loadSessions = async () => {
+      if (!selectedExamId) {
+        setSessions([]);
+        setAnalyticsData(null);
+        return;
+      }
+
+      setLoading(true);
+      try {
+        const { data, error } = await supabase
+          .from('exam_sessions')
+          .select(`
+            *,
+            student:profiles(id, full_name, email, student_id)
+          `)
+          .eq('exam_id', selectedExamId)
+          .order('submitted_at', { ascending: false });
+
+        if (error) throw error;
+        setSessions(data || []);
+
+        // Calculate aggregate analytics
+        if (data && data.length > 0) {
+          const submitted = data.filter(s => s.status === 'submitted' || s.status === 'auto_submitted');
+          const avgScore = submitted.length > 0 
+            ? submitted.reduce((acc, s) => acc + (s.percentage || 0), 0) / submitted.length 
+            : 0;
+          const passCount = submitted.filter(s => s.passed).length;
+          const avgViolations = submitted.length > 0
+            ? submitted.reduce((acc, s) => acc + (s.cheat_count || 0) + (s.tab_violations || 0), 0) / submitted.length
+            : 0;
+          const flaggedCount = submitted.filter(s => s.is_flagged || (s.cheat_count || 0) > 2).length;
+
+          setAnalyticsData({
+            totalStudents: data.length,
+            submittedCount: submitted.length,
+            avgScore: avgScore.toFixed(1),
+            passRate: submitted.length > 0 ? ((passCount / submitted.length) * 100).toFixed(1) : 0,
+            avgViolations: avgViolations.toFixed(1),
+            flaggedCount,
+            highestScore: submitted.length > 0 ? Math.max(...submitted.map(s => s.percentage || 0)).toFixed(1) : 0,
+            lowestScore: submitted.length > 0 ? Math.min(...submitted.map(s => s.percentage || 0)).toFixed(1) : 0,
+          });
+        } else {
+          setAnalyticsData(null);
+        }
+      } catch (err) {
+        console.error('Load sessions error:', err);
+        toast.error(t('error.general'));
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadSessions();
+  }, [selectedExamId, t]);
+
+  const formatDateTime = (dateStr) => {
+    if (!dateStr) return '-';
+    return new Date(dateStr).toLocaleString('vi-VN', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+  };
+
+  const getIntegrityStatus = (session) => {
+    const violations = (session.cheat_count || 0) + (session.tab_violations || 0) + (session.fullscreen_violations || 0);
+    if (violations === 0) return { label: t('analytics.integrity.good'), color: 'bg-success-100 text-success-700' };
+    if (violations <= 3) return { label: t('analytics.integrity.warning'), color: 'bg-warning-100 text-warning-700' };
+    return { label: t('analytics.integrity.suspicious'), color: 'bg-danger-100 text-danger-700' };
+  };
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <h2 className="text-lg font-bold text-text-main">{t('tabs.analytics')}</h2>
+        <div className="w-64">
+          <select
+            value={selectedExamId}
+            onChange={(e) => setSelectedExamId(e.target.value)}
+            className="input"
+          >
+            <option value="">{t('analytics.selectExam')}</option>
+            {exams.map((exam) => (
+              <option key={exam.id} value={exam.id}>{exam.title}</option>
+            ))}
+          </select>
+        </div>
+      </div>
+
+      {!selectedExamId ? (
+        <div className="text-center py-12 bg-gray-50 rounded-xl">
+          <BarChart3 className="w-16 h-16 mx-auto mb-4 text-gray-300" />
+          <p className="text-gray-500">{t('analytics.selectExamPrompt')}</p>
+        </div>
+      ) : loading ? (
+        <div className="flex items-center justify-center py-12">
+          <Loader2 className="w-8 h-8 animate-spin text-primary" />
+        </div>
+      ) : !analyticsData ? (
+        <div className="text-center py-12 bg-gray-50 rounded-xl">
+          <BarChart3 className="w-16 h-16 mx-auto mb-4 text-gray-300" />
+          <p className="text-gray-500">{t('analytics.noData')}</p>
+        </div>
+      ) : (
+        <>
+          {/* Summary Cards */}
+          <div className="grid grid-cols-4 gap-4">
+            <div className="card">
+              <p className="text-sm text-gray-500 mb-1">{t('analytics.totalStudents')}</p>
+              <p className="text-2xl font-bold text-text-main">{analyticsData.submittedCount}/{analyticsData.totalStudents}</p>
+            </div>
+            <div className="card">
+              <p className="text-sm text-gray-500 mb-1">{t('analytics.avgScore')}</p>
+              <p className="text-2xl font-bold text-primary">{analyticsData.avgScore}%</p>
+            </div>
+            <div className="card">
+              <p className="text-sm text-gray-500 mb-1">{t('analytics.passRate')}</p>
+              <p className="text-2xl font-bold text-success">{analyticsData.passRate}%</p>
+            </div>
+            <div className="card">
+              <p className="text-sm text-gray-500 mb-1">{t('analytics.flagged')}</p>
+              <p className="text-2xl font-bold text-danger">{analyticsData.flaggedCount}</p>
+            </div>
+          </div>
+
+          {/* Score Distribution */}
+          <div className="card">
+            <h3 className="font-semibold text-gray-900 mb-4">{t('analytics.scoreDistribution')}</h3>
+            <div className="flex items-center space-x-4 text-sm">
+              <div className="flex items-center space-x-2">
+                <div className="w-3 h-3 bg-success rounded-full"></div>
+                <span>{t('analytics.highestScore')}: {analyticsData.highestScore}%</span>
+              </div>
+              <div className="flex items-center space-x-2">
+                <div className="w-3 h-3 bg-danger rounded-full"></div>
+                <span>{t('analytics.lowestScore')}: {analyticsData.lowestScore}%</span>
+              </div>
+              <div className="flex items-center space-x-2">
+                <div className="w-3 h-3 bg-primary rounded-full"></div>
+                <span>{t('analytics.avgScore')}: {analyticsData.avgScore}%</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Session Details Table */}
+          <div className="card overflow-hidden p-0">
+            <table className="w-full">
+              <thead className="bg-gray-50 border-b border-gray-200">
+                <tr>
+                  <th className="text-left px-4 py-3 text-sm font-semibold text-gray-700">{t('table.number')}</th>
+                  <th className="text-left px-4 py-3 text-sm font-semibold text-gray-700">{t('table.name')}</th>
+                  <th className="text-left px-4 py-3 text-sm font-semibold text-gray-700">{t('analytics.score')}</th>
+                  <th className="text-left px-4 py-3 text-sm font-semibold text-gray-700">{t('analytics.submittedAt')}</th>
+                  <th className="text-left px-4 py-3 text-sm font-semibold text-gray-700">{t('analytics.violations')}</th>
+                  <th className="text-left px-4 py-3 text-sm font-semibold text-gray-700">{t('analytics.integrity')}</th>
+                  <th className="text-left px-4 py-3 text-sm font-semibold text-gray-700">{t('table.status')}</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {sessions.map((session, idx) => {
+                  const integrity = getIntegrityStatus(session);
+                  return (
+                    <tr key={session.id} className="hover:bg-gray-50">
+                      <td className="px-4 py-3 text-sm text-gray-500">{idx + 1}</td>
+                      <td className="px-4 py-3">
+                        <div>
+                          <p className="font-medium text-text-main">{session.student?.full_name || 'N/A'}</p>
+                          <p className="text-xs text-gray-500">{session.student?.email}</p>
+                        </div>
+                      </td>
+                      <td className="px-4 py-3">
+                        <span className={`font-bold ${session.passed ? 'text-success' : 'text-danger'}`}>
+                          {session.percentage?.toFixed(1) || 0}%
+                        </span>
+                        <span className="text-xs text-gray-500 ml-1">
+                          ({session.total_score}/{session.max_score})
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-sm text-gray-600">
+                        {formatDateTime(session.submitted_at)}
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="flex items-center space-x-2 text-xs">
+                          <span className="px-2 py-0.5 bg-warning-50 text-warning-700 rounded">
+                            AI: {session.cheat_count || 0}
+                          </span>
+                          <span className="px-2 py-0.5 bg-gray-100 text-gray-600 rounded">
+                            Tab: {session.tab_violations || 0}
+                          </span>
+                        </div>
+                      </td>
+                      <td className="px-4 py-3">
+                        <span className={`px-2 py-1 rounded-full text-xs font-medium ${integrity.color}`}>
+                          {integrity.label}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3">
+                        <span className={`badge ${
+                          session.status === 'submitted' ? 'badge-success' :
+                          session.status === 'auto_submitted' ? 'bg-warning-100 text-warning-700' :
+                          session.status === 'in_progress' ? 'bg-primary-100 text-primary-700' :
+                          'bg-gray-100 text-gray-600'
+                        }`}>
+                          {session.status === 'submitted' ? t('analytics.status.submitted') :
+                           session.status === 'auto_submitted' ? t('analytics.status.autoSubmitted') :
+                           session.status === 'in_progress' ? t('analytics.status.inProgress') :
+                           session.status}
+                        </span>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+// ============================================
 // CREATE CLASS FORM
 // ============================================
 
@@ -1276,13 +1526,15 @@ export default function InstructorDashboard() {
 
   // UI state
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState('overview'); // 'overview' | 'exams' | 'students'
+  const [activeTab, setActiveTab] = useState('exams'); // 'exams' | 'students' | 'analytics'
   const [showCreateExam, setShowCreateExam] = useState(false);
   const [showAddStudent, setShowAddStudent] = useState(false);
   const [showCreateClass, setShowCreateClass] = useState(false);
   const [showManageQuestions, setShowManageQuestions] = useState(false);
   const [selectedExam, setSelectedExam] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
+  const [examSessions, setExamSessions] = useState([]);
+  const [selectedExamForAnalytics, setSelectedExamForAnalytics] = useState(null);
 
   // Load classes
   useEffect(() => {
@@ -1561,6 +1813,7 @@ export default function InstructorDashboard() {
                 {[
                   { id: 'exams', label: t('tabs.exams'), icon: ClipboardList },
                   { id: 'students', label: t('tabs.students'), icon: Users },
+                  { id: 'analytics', label: t('tabs.analytics'), icon: BarChart3 },
                 ].map((tab) => (
                   <button
                     key={tab.id}
@@ -1765,6 +2018,13 @@ export default function InstructorDashboard() {
                     </div>
                   )}
                 </div>
+              )}
+
+              {activeTab === 'analytics' && (
+                <StudentAnalyticsTab 
+                  classId={selectedClass?.id} 
+                  exams={exams}
+                />
               )}
             </>
           ) : (
