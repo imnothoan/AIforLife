@@ -180,6 +180,7 @@ function CreateExamForm({ classId, onClose, onSuccess }) {
         onClose();
       } catch (error) {
         console.error('Create exam error:', error);
+        console.error('Error details:', { code: error.code, message: error.message, details: error.details, hint: error.hint });
         
         if (error.message === 'REQUEST_TIMEOUT') {
           if (attempt < MAX_RETRIES) {
@@ -188,12 +189,15 @@ function CreateExamForm({ classId, onClose, onSuccess }) {
             return createExam(attempt + 1);
           }
           toast.error(t('error.timeout'));
-        } else if (error.code === '42501' || error.message?.includes('permission')) {
+        } else if (error.code === '42501' || error.message?.includes('permission') || error.message?.includes('denied')) {
           toast.error(t('error.permission'));
-        } else if (error.message?.includes('network') || error.message?.includes('fetch')) {
+        } else if (error.message?.includes('network') || error.message?.includes('fetch') || error.message?.includes('Failed to fetch')) {
           toast.error(t('error.network'));
+        } else if (error.code === '23503') {
+          // Foreign key violation - class doesn't exist or user doesn't exist
+          toast.error(t('class.createError'));
         } else {
-          toast.error(t('exam.createError'));
+          toast.error(t('exam.createError') + (error.message ? ` (${error.message})` : ''));
         }
       } finally {
         setLoading(false);
