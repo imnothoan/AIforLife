@@ -5,6 +5,7 @@
 
 import React from 'react';
 import { AlertTriangle, RefreshCw, Home } from 'lucide-react';
+import { t } from '../lib/i18n';
 
 class ErrorBoundary extends React.Component {
   constructor(props) {
@@ -51,12 +52,12 @@ class ErrorBoundary extends React.Component {
             
             {/* Error Title */}
             <h1 className="text-2xl font-bold text-gray-900 mb-2">
-              Oops! Đã xảy ra lỗi
+              {t('errorBoundary.title')}
             </h1>
             
             {/* Error Description */}
             <p className="text-gray-600 mb-6">
-              Ứng dụng gặp sự cố không mong muốn. Đừng lo lắng, dữ liệu của bạn vẫn an toàn.
+              {t('errorBoundary.description')}
             </p>
             
             {/* Actions */}
@@ -66,7 +67,7 @@ class ErrorBoundary extends React.Component {
                 className="inline-flex items-center justify-center px-6 py-3 bg-primary text-white font-medium rounded-xl hover:bg-primary-dark transition-colors"
               >
                 <RefreshCw className="w-5 h-5 mr-2" />
-                Tải lại trang
+                {t('errorBoundary.reload')}
               </button>
               
               <button
@@ -74,15 +75,15 @@ class ErrorBoundary extends React.Component {
                 className="inline-flex items-center justify-center px-6 py-3 bg-gray-100 text-gray-700 font-medium rounded-xl hover:bg-gray-200 transition-colors"
               >
                 <Home className="w-5 h-5 mr-2" />
-                Về trang chủ
+                {t('errorBoundary.home')}
               </button>
             </div>
             
             {/* Technical Details (collapsible in production) */}
-            {process.env.NODE_ENV !== 'production' && this.state.error && (
+            {import.meta.env.DEV && this.state.error && (
               <details className="mt-6 text-left">
                 <summary className="text-sm text-gray-500 cursor-pointer hover:text-gray-700">
-                  Chi tiết kỹ thuật (chỉ hiển thị khi phát triển)
+                  {t('errorBoundary.technicalDetails')}
                 </summary>
                 <div className="mt-2 p-4 bg-gray-50 rounded-lg overflow-auto text-xs text-gray-600 font-mono">
                   <p className="font-bold text-red-600 mb-2">
@@ -99,7 +100,7 @@ class ErrorBoundary extends React.Component {
             
             {/* Contact Support */}
             <p className="mt-6 text-sm text-gray-500">
-              Nếu lỗi tiếp tục xảy ra, vui lòng liên hệ hỗ trợ kỹ thuật.
+              {t('errorBoundary.contactSupport')}
             </p>
           </div>
         </div>

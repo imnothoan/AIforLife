@@ -341,6 +341,14 @@ const translations = {
     'error.permission': 'Bạn không có quyền thực hiện thao tác này.',
     'error.general': 'Có lỗi xảy ra. Vui lòng thử lại sau.',
     
+    // Error Boundary
+    'errorBoundary.title': 'Oops! Đã xảy ra lỗi',
+    'errorBoundary.description': 'Ứng dụng gặp sự cố không mong muốn. Đừng lo lắng, dữ liệu của bạn vẫn an toàn.',
+    'errorBoundary.reload': 'Tải lại trang',
+    'errorBoundary.home': 'Về trang chủ',
+    'errorBoundary.technicalDetails': 'Chi tiết kỹ thuật (chỉ hiển thị khi phát triển)',
+    'errorBoundary.contactSupport': 'Nếu lỗi tiếp tục xảy ra, vui lòng liên hệ hỗ trợ kỹ thuật.',
+    
     // Face Verification
     'face.title': 'Xác minh danh tính',
     'face.subtitle': 'Chụp ảnh khuôn mặt để xác minh bạn là thí sinh đã đăng ký',
@@ -711,6 +719,14 @@ const translations = {
     'error.retrying': 'Retrying... ({attempt}/{max})',
     'error.permission': 'You don\'t have permission for this action.',
     'error.general': 'An error occurred. Please try again later.',
+    
+    // Error Boundary
+    'errorBoundary.title': 'Oops! Something went wrong',
+    'errorBoundary.description': 'The application encountered an unexpected error. Don\'t worry, your data is safe.',
+    'errorBoundary.reload': 'Reload Page',
+    'errorBoundary.home': 'Go Home',
+    'errorBoundary.technicalDetails': 'Technical Details (development only)',
+    'errorBoundary.contactSupport': 'If the error persists, please contact technical support.',
     
     // Face Verification
     'face.title': 'Identity Verification',
