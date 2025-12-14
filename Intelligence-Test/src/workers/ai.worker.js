@@ -24,10 +24,11 @@ const CONFIG = {
   YOLO: {
     MODEL_PATH: '/models/anticheat_yolo11s.onnx',
     INPUT_SIZE: 640,
-    CONFIDENCE_THRESHOLD: 0.4,
+    CONFIDENCE_THRESHOLD: 0.25, // Lower threshold for better detection sensitivity
     IOU_THRESHOLD: 0.45,
     CLASSES: ['person', 'phone', 'material', 'headphones'],
     ALERT_CLASSES: ['phone', 'material', 'headphones'], // Classes that trigger alerts
+    MASK_COEFFICIENTS: 32, // Number of mask coefficients for segmentation models
   },
   // Cascade timing
   CASCADE: {
@@ -333,62 +334,50 @@ function parseYoloOutput(output, dims, originalWidth, originalHeight) {
   const detections = [];
   const numClasses = CONFIG.YOLO.CLASSES.length;
   const inputSize = CONFIG.YOLO.INPUT_SIZE;
+  const maskCoefficients = CONFIG.YOLO.MASK_COEFFICIENTS;
   
-  // Determine output format based on dimensions
-  // YOLOv8/v11 outputs: [1, 4+numClasses, numBoxes] (need transpose)
-  // Older format: [1, numBoxes, 4+numClasses]
+  // YOLO11 output format: [1, channels, numBoxes]
+  // For detect models: channels = 4 + numClasses
+  // For seg models: channels = 4 + numClasses + maskCoefficients
   
-  let numBoxes, stride;
-  let isTransposed = false;
+  if (dims.length !== 3) {
+    console.warn('Unexpected dims length:', dims.length);
+    return [];
+  }
   
-  if (dims.length === 3) {
-    // [batch, channels/boxes, boxes/channels]
-    if (dims[1] === 4 + numClasses) {
-      // Transposed format: [1, 4+numClasses, numBoxes]
-      numBoxes = dims[2];
-      stride = 4 + numClasses;
-      isTransposed = true;
-    } else {
-      // Standard format: [1, numBoxes, 4+numClasses]
-      numBoxes = dims[1];
-      stride = 4 + numClasses;
-    }
-  } else {
-    // Flat array - assume standard format with validation
-    stride = 4 + numClasses;
-    if (output.length % stride !== 0) {
-      console.warn('YOLO output length not divisible by stride, possible format mismatch');
-      // Try to infer correct format
-      return [];
-    }
-    numBoxes = output.length / stride;
+  const channels = dims[1];
+  const numBoxes = dims[2];
+  
+  // Validate the channel count and determine model type
+  const expectedDetect = 4 + numClasses;
+  const expectedSeg = 4 + numClasses + maskCoefficients;
+  
+  // Determine if format is transposed (YOLO11 style) or standard
+  // YOLO11: [1, channels, numBoxes] where channels < numBoxes
+  // Standard: [1, numBoxes, channels] where numBoxes > channels
+  const isTransposed = channels < numBoxes;
+  
+  if (!isTransposed) {
+    console.warn('Non-transposed format detected, this may not be a YOLO11 model');
+    return [];
+  }
+  
+  if (channels !== expectedDetect && channels !== expectedSeg) {
+    console.warn(`Unexpected channel count: ${channels}. Expected ${expectedDetect} (detect) or ${expectedSeg} (seg)`);
+    return []; // Return empty to avoid incorrect parsing
   }
   
   for (let i = 0; i < numBoxes; i++) {
-    let cx, cy, w, h;
-    let classScores = [];
+    // Transposed format: data is arranged [cx0, cx1, ..., cxN, cy0, cy1, ..., cyN, ...]
+    const cx = output[0 * numBoxes + i];
+    const cy = output[1 * numBoxes + i];
+    const w = output[2 * numBoxes + i];
+    const h = output[3 * numBoxes + i];
     
-    if (isTransposed) {
-      // Transposed: data is arranged [cx0, cx1, ..., cxN, cy0, cy1, ..., cyN, ...]
-      cx = output[0 * numBoxes + i];
-      cy = output[1 * numBoxes + i];
-      w = output[2 * numBoxes + i];
-      h = output[3 * numBoxes + i];
-      
-      for (let c = 0; c < numClasses; c++) {
-        classScores.push(output[(4 + c) * numBoxes + i]);
-      }
-    } else {
-      // Standard: data is arranged [cx0, cy0, w0, h0, class0_0, class0_1, ..., cx1, cy1, ...]
-      const baseIdx = i * stride;
-      cx = output[baseIdx];
-      cy = output[baseIdx + 1];
-      w = output[baseIdx + 2];
-      h = output[baseIdx + 3];
-      
-      for (let c = 0; c < numClasses; c++) {
-        classScores.push(output[baseIdx + 4 + c]);
-      }
+    // Extract class scores (channels 4 to 4+numClasses)
+    let classScores = [];
+    for (let c = 0; c < numClasses; c++) {
+      classScores.push(output[(4 + c) * numBoxes + i]);
     }
 
     // Get max class score
