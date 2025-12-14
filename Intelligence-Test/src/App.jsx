@@ -3,6 +3,7 @@ import { AuthProvider, useAuth } from './context/AuthContext';
 import { LanguageProvider } from './context/LanguageContext';
 import { ToastContainer, toast } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
+import ErrorBoundary from './components/ErrorBoundary';
 import Login from './pages/Login';
 import Exam from './pages/Exam';
 import Dashboard from './pages/Dashboard';
@@ -35,32 +36,34 @@ function InstructorRoute({ children }) {
 
 function App() {
   return (
-    <LanguageProvider>
-      <AuthProvider>
-        <BrowserRouter>
-          <div className="min-h-screen bg-background text-text-main font-sans">
-            <Routes>
-              <Route path="/login" element={<Login />} />
-              <Route path="/" element={<PrivateRoute><Dashboard /></PrivateRoute>} />
-              <Route path="/instructor" element={<InstructorRoute><InstructorDashboard /></InstructorRoute>} />
-              <Route path="/exam/:id" element={<PrivateRoute><Exam /></PrivateRoute>} />
-            </Routes>
-            <ToastContainer 
-              position="top-right" 
-              autoClose={4000}
-              hideProgressBar={false}
-              newestOnTop
-              closeOnClick
-              rtl={false}
-              pauseOnFocusLoss
-              draggable
-              pauseOnHover
-              theme="light"
-            />
-          </div>
-        </BrowserRouter>
-      </AuthProvider>
-    </LanguageProvider>
+    <ErrorBoundary>
+      <LanguageProvider>
+        <AuthProvider>
+          <BrowserRouter>
+            <div className="min-h-screen bg-background text-text-main font-sans">
+              <Routes>
+                <Route path="/login" element={<Login />} />
+                <Route path="/" element={<PrivateRoute><Dashboard /></PrivateRoute>} />
+                <Route path="/instructor" element={<InstructorRoute><InstructorDashboard /></InstructorRoute>} />
+                <Route path="/exam/:id" element={<PrivateRoute><Exam /></PrivateRoute>} />
+              </Routes>
+              <ToastContainer 
+                position="top-right" 
+                autoClose={4000}
+                hideProgressBar={false}
+                newestOnTop
+                closeOnClick
+                rtl={false}
+                pauseOnFocusLoss
+                draggable
+                pauseOnHover
+                theme="light"
+              />
+            </div>
+          </BrowserRouter>
+        </AuthProvider>
+      </LanguageProvider>
+    </ErrorBoundary>
   );
 }
 

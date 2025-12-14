@@ -254,3 +254,117 @@ Sau khi hoàn thành các bước trên, nền tảng SmartExamPro của bạn �
 1. Test với 10-20 người dùng trước
 2. Kiểm tra load time trong điều kiện mạng chậm
 3. Có backup plan nếu hệ thống gặp sự cố
+
+---
+
+## 🎓 HƯỚNG DẪN ĐẶC BIỆT CHO GITHUB STUDENT PACK
+
+### Các dịch vụ miễn phí bạn có thể sử dụng:
+
+#### 1. Namecheap (Domain miễn phí 1 năm)
+- Đăng ký tại: https://nc.me/
+- Chọn domain `.me` miễn phí
+- Liên kết với GitHub Education
+
+#### 2. Supabase (Database)
+- Free tier: 500MB database, 50K monthly active users
+- Đủ dùng cho hầu hết các kỳ thi
+
+#### 3. Railway/Render (Backend Hosting)
+- **Railway**: $5/tháng credit miễn phí
+- **Render**: Free tier với 750 hours/tháng
+
+#### 4. Vercel/Netlify (Frontend Hosting)
+- Hoàn toàn miễn phí cho static sites
+- Tự động deploy từ GitHub
+
+---
+
+## 🔒 BẢO MẬT TRƯỚC KHI PRODUCTION
+
+### Checklist bắt buộc:
+
+```bash
+# 1. Đổi tất cả API keys
+# Vào Supabase > Settings > API > Regenerate keys
+
+# 2. Kiểm tra RLS policies
+# Đảm bảo tất cả tables có RLS enabled
+
+# 3. Đổi mật khẩu database
+# Supabase > Settings > Database > Connection Pooling
+
+# 4. Cấu hình CORS đúng domain
+# Trong server .env: FRONTEND_URL=https://yourdomain.com
+
+# 5. Enable 2FA cho tất cả accounts
+```
+
+---
+
+## 📊 MONITORING SAU DEPLOY
+
+### 1. Kiểm tra Health
+```bash
+# Test API
+curl https://api.yourdomain.com/api/health
+
+# Test Frontend
+curl -I https://yourdomain.com
+```
+
+### 2. Logs quan trọng cần theo dõi
+- Supabase Dashboard > Logs
+- Railway/Render Dashboard > Logs
+- Browser Console (F12)
+
+---
+
+## 🆘 XỬ LÝ SỰ CỐ THƯỜNG GẶP
+
+### Lỗi 1: "Failed to fetch" hoặc CORS error
+**Giải pháp:**
+```javascript
+// Kiểm tra FRONTEND_URL trong server .env
+FRONTEND_URL=https://yourdomain.com
+
+// Hoặc tạm thời cho phép all origins
+FRONTEND_URL=*
+```
+
+### Lỗi 2: Database connection timeout
+**Giải pháp:**
+- Kiểm tra Supabase project có đang active không
+- Kiểm tra RLS policies có quá phức tạp không
+- Tăng connection pool size trong Supabase
+
+### Lỗi 3: AI Model không load được
+**Giải pháp:**
+- Đảm bảo file `.onnx` được copy vào thư mục `dist/models/`
+- Kiểm tra CORS headers cho model files
+- Thử load model từ CDN thay vì local
+
+### Lỗi 4: Camera không hoạt động
+**Giải pháp:**
+- Đảm bảo sử dụng HTTPS
+- Kiểm tra permissions trong browser
+- Test trên Chrome/Edge trước (Safari có một số hạn chế)
+
+---
+
+## ✅ CHECKLIST TRƯỚC KỲ THI THỰC TẾ
+
+- [ ] Test với 10-20 học sinh thử nghiệm
+- [ ] Kiểm tra backup database
+- [ ] Chuẩn bị plan B (giấy) nếu hệ thống gặp sự cố
+- [ ] Thông báo cho học sinh về yêu cầu:
+  - Camera hoạt động
+  - Microphone tắt
+  - Mạng ổn định
+  - Sử dụng Chrome/Edge
+- [ ] Có người hỗ trợ kỹ thuật túc trực
+- [ ] Ghi lại số điện thoại liên hệ khẩn cấp
+
+---
+
+*Cập nhật lần cuối: $(date +%Y-%m-%d)*
