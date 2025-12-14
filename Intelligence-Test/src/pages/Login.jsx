@@ -3,9 +3,9 @@ import { useAuth } from '../context/AuthContext';
 import { useLanguage } from '../context/LanguageContext';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import { z } from 'zod';
-import { FileText, Eye, EyeOff, Loader2 } from 'lucide-react';
+import { FileText, Eye, EyeOff, Loader2, Mail, Lock, User, IdCard } from 'lucide-react';
 import LanguageSwitcher from '../components/LanguageSwitcher';
 
 // Validation schemas with error codes (not messages)
