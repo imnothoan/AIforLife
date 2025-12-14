@@ -194,10 +194,11 @@ function CreateExamForm({ classId, onClose, onSuccess }) {
         } else if (error.message?.includes('network') || error.message?.includes('fetch') || error.message?.includes('Failed to fetch')) {
           toast.error(t('error.network'));
         } else if (error.code === '23503') {
-          // Foreign key violation - class doesn't exist or user doesn't exist
-          toast.error(t('class.createError'));
+          // Foreign key violation - class or user doesn't exist
+          toast.error(t('exam.createError'));
         } else {
-          toast.error(t('exam.createError') + (error.message ? ` (${error.message})` : ''));
+          // Don't expose raw error messages to users
+          toast.error(t('exam.createError'));
         }
       } finally {
         setLoading(false);
