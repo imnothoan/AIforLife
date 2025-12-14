@@ -32,8 +32,8 @@ const translations = {
     'common.submit': 'Nộp',
     'common.download': 'Tải xuống',
     'common.upload': 'Tải lên',
-    'common.yes': 'Đúng',
-    'common.no': 'Sai',
+    'common.true': 'Đúng',
+    'common.false': 'Sai',
     'common.more': 'lỗi khác',
     
     // Auth
@@ -340,40 +340,6 @@ const translations = {
     'error.retrying': 'Đang thử lại... ({attempt}/{max})',
     'error.permission': 'Bạn không có quyền thực hiện thao tác này.',
     'error.general': 'Có lỗi xảy ra. Vui lòng thử lại sau.',
-    
-    // Exam Rules
-    'exam.rules.title': 'Quy định phòng thi',
-    'exam.rules.camera': 'Bật Camera & Micro trong suốt thời gian thi',
-    'exam.rules.fullscreen': 'Sử dụng chế độ Toàn màn hình (Fullscreen)',
-    'exam.rules.noMultiScreen': 'Nghiêm cấm sử dụng màn hình phụ (HDMI/Projector)',
-    'exam.rules.noTabSwitch': 'Nghiêm cấm rời khỏi tab thi (Alt+Tab)',
-    'exam.rules.noRemoteDesktop': 'Nghiêm cấm sử dụng TeamViewer, AnyDesk, UltraViewer...',
-    'exam.rules.agree': 'Đồng ý & Bắt đầu làm bài',
-    'exam.rules.cameraCheck': 'Kiểm tra Camera:',
-    
-    // Anti-cheat
-    'anticheat.multiScreen': 'PHÁT HIỆN NHIỀU MÀN HÌNH - Vui lòng ngắt kết nối',
-    'anticheat.remoteDesktop': 'PHÁT HIỆN PHẦN MỀM ĐIỀU KHIỂN TỪ XA',
-    'anticheat.tabSwitch': 'CẢNH BÁO: Phát hiện rời tab!',
-    'anticheat.fullscreenExit': 'CẢNH BÁO: Bạn đã thoát toàn màn hình!',
-    'anticheat.networkOffline': 'MẤT KẾT NỐI MẠNG - Bài thi sẽ không được lưu!',
-    'anticheat.cameraAccess': 'Không thể truy cập camera. Vui lòng cấp quyền camera để thi.',
-    'anticheat.fullscreenRequired': 'Bạn phải bật chế độ Toàn màn hình để thi!',
-    'anticheat.returnToExam': 'Quay lại bài thi',
-    'anticheat.violation': 'CẢNH BÁO VI PHẠM',
-    'anticheat.returnFullscreen': 'Vui lòng quay lại chế độ toàn màn hình để tiếp tục!',
-    
-    // Proctoring
-    'proctoring.camera': 'Camera Giám Sát',
-    'proctoring.recording': 'REC',
-    'proctoring.aiDetection': 'AI Phát hiện',
-    'proctoring.tabViolations': 'Rời tab',
-    'proctoring.fullscreenViolations': 'Thoát fullscreen',
-    'proctoring.gazeAway': 'Nhìn ra ngoài',
-    'proctoring.questionList': 'Danh sách câu hỏi',
-    'proctoring.answered': 'Đã trả lời',
-    'proctoring.unanswered': 'Chưa trả lời',
-    'proctoring.flagged': 'Đã gắn cờ',
     
     // Face Verification
     'face.title': 'Xác minh danh tính',
@@ -745,40 +711,6 @@ const translations = {
     'error.retrying': 'Retrying... ({attempt}/{max})',
     'error.permission': 'You don\'t have permission for this action.',
     'error.general': 'An error occurred. Please try again later.',
-    
-    // Exam Rules
-    'exam.rules.title': 'Exam Room Regulations',
-    'exam.rules.camera': 'Keep Camera & Microphone on throughout the exam',
-    'exam.rules.fullscreen': 'Use Fullscreen mode',
-    'exam.rules.noMultiScreen': 'No external monitors allowed (HDMI/Projector)',
-    'exam.rules.noTabSwitch': 'No tab switching allowed (Alt+Tab)',
-    'exam.rules.noRemoteDesktop': 'No remote desktop software (TeamViewer, AnyDesk, UltraViewer...)',
-    'exam.rules.agree': 'Agree & Start Exam',
-    'exam.rules.cameraCheck': 'Camera Check:',
-    
-    // Anti-cheat
-    'anticheat.multiScreen': 'MULTIPLE SCREENS DETECTED - Please disconnect',
-    'anticheat.remoteDesktop': 'REMOTE DESKTOP SOFTWARE DETECTED',
-    'anticheat.tabSwitch': 'WARNING: Tab switch detected!',
-    'anticheat.fullscreenExit': 'WARNING: You exited fullscreen!',
-    'anticheat.networkOffline': 'NETWORK LOST - Exam will not be saved!',
-    'anticheat.cameraAccess': 'Cannot access camera. Please grant camera permission to take the exam.',
-    'anticheat.fullscreenRequired': 'You must enable Fullscreen mode to take the exam!',
-    'anticheat.returnToExam': 'Return to Exam',
-    'anticheat.violation': 'VIOLATION WARNING',
-    'anticheat.returnFullscreen': 'Please return to fullscreen mode to continue!',
-    
-    // Proctoring
-    'proctoring.camera': 'Proctoring Camera',
-    'proctoring.recording': 'REC',
-    'proctoring.aiDetection': 'AI Detection',
-    'proctoring.tabViolations': 'Tab switches',
-    'proctoring.fullscreenViolations': 'Fullscreen exits',
-    'proctoring.gazeAway': 'Gaze away',
-    'proctoring.questionList': 'Question List',
-    'proctoring.answered': 'Answered',
-    'proctoring.unanswered': 'Unanswered',
-    'proctoring.flagged': 'Flagged',
     
     // Face Verification
     'face.title': 'Identity Verification',
