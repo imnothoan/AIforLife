@@ -354,7 +354,7 @@ export default function Exam() {
             
             // Send frames to worker every 200ms
             frameInterval = setInterval(() => {
-              if (videoRef.current && workerRef.current && examStarted && !isSubmitting) {
+              if (videoRef.current && workerRef.current && examStarted && !isSubmittingRef.current) {
                 try {
                   ctx.drawImage(videoRef.current, 0, 0, 640, 480);
                   const imageData = ctx.getImageData(0, 0, 640, 480);
@@ -398,7 +398,7 @@ export default function Exam() {
         workerRef.current.terminate();
       }
     };
-  }, [examStarted, isSubmitting]);
+  }, [examStarted]);
 
   // ============================================
   // TIMER

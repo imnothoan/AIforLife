@@ -54,7 +54,10 @@ export const AuthProvider = ({ children }) => {
   // Fetch user profile from database with retry logic
   const fetchProfile = useCallback(async (userId, retryCount = 0) => {
     const MAX_RETRIES = 3;
-    const RETRY_DELAY = 500; // ms
+    const BASE_RETRY_DELAY = 500; // ms
+    
+    // Calculate exponential backoff delay
+    const getBackoffDelay = (attempt) => BASE_RETRY_DELAY * Math.pow(2, attempt);
     
     try {
       const { data, error } = await supabase
@@ -88,9 +91,9 @@ export const AuthProvider = ({ children }) => {
             
             if (createError) {
               console.error('Error creating profile:', createError);
-              // If creation failed and we haven't retried too many times, wait and retry
+              // If creation failed and we haven't retried too many times, wait and retry with exponential backoff
               if (retryCount < MAX_RETRIES) {
-                await new Promise(resolve => setTimeout(resolve, RETRY_DELAY * (retryCount + 1)));
+                await new Promise(resolve => setTimeout(resolve, getBackoffDelay(retryCount)));
                 return fetchProfile(userId, retryCount + 1);
               }
               // Return a fallback profile based on user metadata
@@ -106,9 +109,9 @@ export const AuthProvider = ({ children }) => {
           }
         } else {
           console.error('Error fetching profile:', error);
-          // Retry on other errors
+          // Retry on other errors with exponential backoff
           if (retryCount < MAX_RETRIES) {
-            await new Promise(resolve => setTimeout(resolve, RETRY_DELAY * (retryCount + 1)));
+            await new Promise(resolve => setTimeout(resolve, getBackoffDelay(retryCount)));
             return fetchProfile(userId, retryCount + 1);
           }
         }
@@ -118,7 +121,7 @@ export const AuthProvider = ({ children }) => {
     } catch (err) {
       console.error('Profile fetch error:', err);
       if (retryCount < MAX_RETRIES) {
-        await new Promise(resolve => setTimeout(resolve, RETRY_DELAY * (retryCount + 1)));
+        await new Promise(resolve => setTimeout(resolve, getBackoffDelay(retryCount)));
         return fetchProfile(userId, retryCount + 1);
       }
       return null;
