@@ -22,6 +22,14 @@ const REMOTE_DESKTOP_SIGNATURES = [
 // Detect Safari browser (computed once at module level for performance)
 const IS_SAFARI = typeof navigator !== 'undefined' && /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
 
+// Demo exam identifiers for testing
+const DEMO_EXAM_IDS = ['demo', '1'];
+const DEMO_SESSION_IDS = ['demo-session', 'demo-session-id'];
+
+// Timeout constants
+const SUBMIT_TIMEOUT_MS = 15000;
+const SUBMIT_TIMEOUT_ERROR = 'SUBMIT_TIMEOUT';
+
 export default function Exam() {
   const { id: examId } = useParams();
   const { user, profile } = useAuth();
@@ -179,7 +187,7 @@ export default function Exam() {
         console.warn("Safari fullscreen not fully supported, continuing without fullscreen requirement");
         setIsFullscreen(true); // Treat as fullscreen on Safari
       } else {
-        toast.error("Bạn phải bật chế độ Toàn màn hình để thi!");
+        toast.error(t('anticheat.fullscreenRequired'));
       }
     }
   };
@@ -337,7 +345,7 @@ export default function Exam() {
         }
       } catch (err) {
         console.error(err);
-        toast.error("Không thể truy cập camera. Vui lòng cấp quyền camera để thi.");
+        toast.error(t('anticheat.cameraAccess'));
       }
     };
     startCamera();
@@ -479,7 +487,7 @@ export default function Exam() {
 
         if (examError) {
           console.error('Failed to load exam:', examError);
-          toast.error('Không thể tải thông tin bài thi');
+          toast.error(t('error.loadExam'));
           navigate('/');
           return;
         }
@@ -490,19 +498,19 @@ export default function Exam() {
         const endTime = new Date(exam.end_time);
 
         if (exam.status !== 'published') {
-          toast.error('Bài thi này chưa được công bố');
+          toast.error(t('exam.notPublished'));
           navigate('/');
           return;
         }
 
         if (now < startTime) {
-          toast.error('Bài thi chưa bắt đầu');
+          toast.error(t('exam.notStarted'));
           navigate('/');
           return;
         }
 
         if (now > endTime) {
-          toast.error('Bài thi đã kết thúc');
+          toast.error(t('exam.ended'));
           navigate('/');
           return;
         }
@@ -527,7 +535,7 @@ export default function Exam() {
 
         if (questionsError) {
           console.error('Failed to load questions:', questionsError);
-          toast.error('Không thể tải câu hỏi');
+          toast.error(t('error.loadQuestions'));
           navigate('/');
           return;
         }
@@ -563,7 +571,7 @@ export default function Exam() {
 
           // If time has already expired, auto-submit
           if (remaining === 0) {
-            toast.warning('Thời gian thi đã hết!');
+            toast.warning(t('exam.timeExpired'));
             setExamStarted(true);
             handleAutoSubmit();
             return;
@@ -591,12 +599,12 @@ export default function Exam() {
             setNotes(notesMap);
           }
 
-          toast.info('Đã khôi phục phiên thi trước đó');
+          toast.info(t('exam.sessionRestored'));
         }
 
       } catch (error) {
         console.error('Error loading exam:', error);
-        toast.error('Có lỗi xảy ra khi tải bài thi');
+        toast.error(t('exam.loadError'));
         navigate('/');
       }
     };
@@ -881,7 +889,7 @@ export default function Exam() {
   // SUBMIT HANDLERS
   // ============================================
   const handleAutoSubmit = async () => {
-    toast.warning("Hết giờ! Bài thi đang được nộp tự động...");
+    toast.warning(t('exam.timeUp'));
     await handleSubmit(true);
   };
 
@@ -893,12 +901,12 @@ export default function Exam() {
       const unanswered = questions.filter(q => !answers[q.id]).length;
       const flagged = flaggedQuestions.size;
       
-      let confirmMsg = "Bạn có chắc chắn muốn nộp bài?";
+      let confirmMsg = t('exam.submitConfirm');
       if (unanswered > 0) {
-        confirmMsg += `\n\n⚠️ Còn ${unanswered} câu chưa trả lời!`;
+        confirmMsg += `\n\n⚠️ ${unanswered} ${t('exam.unansweredWarning')}`;
       }
       if (flagged > 0) {
-        confirmMsg += `\n⚠️ Còn ${flagged} câu đang gắn cờ!`;
+        confirmMsg += `\n⚠️ ${flagged} ${t('exam.flaggedWarning')}`;
       }
       
       if (!window.confirm(confirmMsg)) {
@@ -910,7 +918,7 @@ export default function Exam() {
     isSubmittingRef.current = true; // Update ref for event handlers
 
     try {
-      const isDemo = examId === 'demo' || examId === '1';
+      const isDemo = DEMO_EXAM_IDS.includes(examId) || DEMO_SESSION_IDS.includes(sessionId);
       
       if (isDemo) {
         // Demo scoring - for testing purposes only
@@ -925,76 +933,138 @@ export default function Exam() {
           }
         });
 
-        toast.success(`Nộp bài thành công! Điểm: ${score}/${total}`);
+        // Simulate brief processing delay for better UX
+        await new Promise(resolve => setTimeout(resolve, 500));
+        
+        const percentage = total > 0 ? ((score / total) * 100).toFixed(1) : 0;
+        toast.success(`${t('exam.submitSuccess')} ${t('exam.score')}: ${score}/${total} (${percentage}%)`);
       } else {
-        // Production: Submit answers to database
-        // Batch upsert all answers at once for better performance
-        const answersToInsert = questions.map(q => ({
-          session_id: sessionId,
-          question_id: q.id,
-          student_answer: answers[q.id] || null,
-          is_flagged: flaggedQuestions.has(q.id),
-          student_notes: notes[q.id] || null
-        }));
+        // Production: Submit answers to database with timeout
+        const submitWithTimeout = async () => {
+          // Batch upsert all answers at once for better performance
+          const answersToInsert = questions.map(q => ({
+            session_id: sessionId,
+            question_id: q.id,
+            student_answer: answers[q.id] || null,
+            is_flagged: flaggedQuestions.has(q.id),
+            student_notes: notes[q.id] || null
+          }));
 
-        // Batch upsert answers
-        const { error: answersError } = await supabase
-          .from('answers')
-          .upsert(answersToInsert, { onConflict: 'session_id,question_id' });
+          // Batch upsert answers
+          const { error: answersError } = await supabase
+            .from('answers')
+            .upsert(answersToInsert, { onConflict: 'session_id,question_id' });
 
-        if (answersError) {
-          console.error('Error saving answers:', answersError);
-          throw new Error('Không thể lưu câu trả lời');
-        }
+          if (answersError) {
+            console.error('Error saving answers:', answersError);
+            throw new Error(t('exam.submitError'));
+          }
 
-        // Update session with violation counts first (before submit)
-        const { error: violationError } = await supabase
-          .from('exam_sessions')
-          .update({
-            cheat_count: cheatCount,
-            tab_violations: tabViolations,
-            fullscreen_violations: fullscreenViolations,
-            gaze_away_count: gazeAwayCount
-          })
-          .eq('id', sessionId);
+          // Update session with violation counts first (before submit)
+          const { error: violationError } = await supabase
+            .from('exam_sessions')
+            .update({
+              cheat_count: cheatCount,
+              tab_violations: tabViolations,
+              fullscreen_violations: fullscreenViolations,
+              gaze_away_count: gazeAwayCount
+            })
+            .eq('id', sessionId);
 
-        if (violationError) {
-          console.error('Error saving violations:', violationError);
-          // Continue with submission even if violation update fails
-          // The core exam data is more important
-        }
+          if (violationError) {
+            console.error('Error saving violations:', violationError);
+            // Continue with submission even if violation update fails
+          }
 
-        // Submit exam via RPC function
-        const { data: result, error: submitError } = await supabase
-          .rpc('submit_exam', {
-            p_session_id: sessionId,
-            p_auto_submit: isAuto
-          });
+          // Try to submit exam via RPC function
+          try {
+            const { data: result, error: submitError } = await supabase
+              .rpc('submit_exam', {
+                p_session_id: sessionId,
+                p_auto_submit: isAuto
+              });
 
-        if (submitError) {
-          throw submitError;
-        }
+            if (submitError) {
+              // RPC function might not exist - try direct update as fallback
+              console.warn('RPC submit_exam failed, using direct update:', submitError);
+              
+              const { error: directUpdateError } = await supabase
+                .from('exam_sessions')
+                .update({
+                  status: isAuto ? 'auto_submitted' : 'submitted',
+                  submitted_at: new Date().toISOString()
+                })
+                .eq('id', sessionId);
 
-        if (result) {
+              if (directUpdateError) {
+                throw directUpdateError;
+              }
+              
+              return { success: true, fallback: true };
+            }
+
+            return result;
+          } catch (rpcError) {
+            console.warn('RPC call failed, using fallback:', rpcError);
+            
+            // Fallback: Direct update
+            const { error: fallbackError } = await supabase
+              .from('exam_sessions')
+              .update({
+                status: isAuto ? 'auto_submitted' : 'submitted',
+                submitted_at: new Date().toISOString()
+              })
+              .eq('id', sessionId);
+
+            if (fallbackError) {
+              throw fallbackError;
+            }
+            
+            return { success: true, fallback: true };
+          }
+        };
+
+        // Execute with timeout
+        const timeoutPromise = new Promise((_, reject) => 
+          setTimeout(() => reject(new Error(SUBMIT_TIMEOUT_ERROR)), SUBMIT_TIMEOUT_MS)
+        );
+
+        const result = await Promise.race([submitWithTimeout(), timeoutPromise]);
+
+        if (result && result.percentage !== undefined) {
           const percentage = result.percentage || 0;
           const passed = result.passed;
           toast.success(
-            `Nộp bài thành công! Điểm: ${percentage.toFixed(1)}% ${passed ? '✓ Đạt' : '✗ Không đạt'}`
+            `${t('exam.submitSuccess')} ${t('exam.score')}: ${percentage.toFixed(1)}% ${passed ? '✓' : '✗'}`
           );
         } else {
-          toast.success("Nộp bài thành công!");
+          toast.success(t('exam.submitSuccess'));
         }
       }
       
-      // Exit fullscreen
-      if (document.fullscreenElement) {
-        await document.exitFullscreen();
+      // Exit fullscreen safely
+      try {
+        if (document.fullscreenElement || document.webkitFullscreenElement) {
+          if (document.exitFullscreen) {
+            await document.exitFullscreen();
+          } else if (document.webkitExitFullscreen) {
+            await document.webkitExitFullscreen();
+          }
+        }
+      } catch (fsError) {
+        console.warn('Error exiting fullscreen:', fsError);
+        // Continue anyway - not critical
       }
       
       navigate('/');
     } catch (error) {
       console.error('Submit error:', error);
-      toast.error("Có lỗi xảy ra khi nộp bài. Vui lòng thử lại.");
+      
+      if (error.message === SUBMIT_TIMEOUT_ERROR) {
+        toast.error(t('error.timeout'));
+      } else {
+        toast.error(t('exam.submitError'));
+      }
     } finally {
       setIsSubmitting(false);
       isSubmittingRef.current = false; // Reset ref
