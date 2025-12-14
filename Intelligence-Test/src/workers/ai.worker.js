@@ -24,10 +24,11 @@ const CONFIG = {
   YOLO: {
     MODEL_PATH: '/models/anticheat_yolo11s.onnx',
     INPUT_SIZE: 640,
-    CONFIDENCE_THRESHOLD: 0.4,
+    CONFIDENCE_THRESHOLD: 0.25, // Lower threshold for better detection sensitivity
     IOU_THRESHOLD: 0.45,
     CLASSES: ['person', 'phone', 'material', 'headphones'],
     ALERT_CLASSES: ['phone', 'material', 'headphones'], // Classes that trigger alerts
+    MASK_COEFFICIENTS: 32, // Number of mask coefficients for segmentation models
   },
   // Cascade timing
   CASCADE: {
@@ -40,10 +41,13 @@ const CONFIG = {
 // ============================================
 let faceLandmarker = null;
 let yoloSession = null;
-let yoloActiveUntil = 0;
 let suspiciousFrameCount = 0;
 let lastAlertTime = 0;
+let lastYoloRunTime = 0;
 let isInitialized = false;
+
+// YOLO throttle interval (run every 500ms)
+const YOLO_THROTTLE_MS = 500;
 
 // ============================================
 // INITIALIZATION
@@ -75,14 +79,23 @@ async function initializeAI() {
     // Load YOLO ONNX model
     try {
       ort.env.wasm.wasmPaths = 'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.20.1/dist/';
+      
+      // Try to load the model
       yoloSession = await ort.InferenceSession.create(CONFIG.YOLO.MODEL_PATH, {
         executionProviders: ['wasm'],
         graphOptimizationLevel: 'all'
       });
-      self.postMessage({ type: 'STATUS', payload: 'Hệ thống giám sát đã sẵn sàng.' });
+      
+      // Log input/output names for debugging
+      console.log('YOLO model loaded successfully');
+      console.log('Input names:', yoloSession.inputNames);
+      console.log('Output names:', yoloSession.outputNames);
+      
+      self.postMessage({ type: 'STATUS', payload: 'Hệ thống giám sát đầy đủ đã sẵn sàng.' });
     } catch (yoloError) {
-      console.warn('YOLO model not available, using face detection only:', yoloError);
-      self.postMessage({ type: 'STATUS', payload: 'Giám sát khuôn mặt đang hoạt động.' });
+      console.warn('YOLO model not available at', CONFIG.YOLO.MODEL_PATH);
+      console.warn('Error:', yoloError.message);
+      self.postMessage({ type: 'STATUS', payload: 'Giám sát khuôn mặt đang hoạt động. (YOLO không khả dụng)' });
     }
 
     isInitialized = true;
@@ -210,14 +223,13 @@ async function processFrame(imageData) {
   }
 
   // ============================================
-  // STAGE 2: YOLO DETECTION (Cascade Trigger)
+  // STAGE 2: YOLO DETECTION
   // ============================================
-  if (isSuspicious && yoloSession) {
-    // Activate YOLO for the next few seconds
-    yoloActiveUntil = now + CONFIG.CASCADE.YOLO_ACTIVATION_SECONDS * 1000;
-  }
-
-  if (yoloSession && now < yoloActiveUntil) {
+  // Run YOLO detection continuously but throttled (every YOLO_THROTTLE_MS)
+  // This ensures objects like phones/headphones are always detected
+  if (yoloSession && (now - lastYoloRunTime >= YOLO_THROTTLE_MS)) {
+    lastYoloRunTime = now;
+    
     try {
       const detections = await runYoloInference(imageData);
       
@@ -294,15 +306,23 @@ async function runYoloInference(imageData) {
       }
     }
 
-    // Create tensor and run inference
+    // Create tensor with dynamic input name
     const tensor = new ort.Tensor('float32', input, [1, 3, inputSize, inputSize]);
-    const results = await yoloSession.run({ images: tensor });
+    const inputName = yoloSession.inputNames[0] || 'images';
+    const feeds = { [inputName]: tensor };
+    
+    const results = await yoloSession.run(feeds);
 
-    // Parse YOLO output
-    const output = results.output0?.data || results[Object.keys(results)[0]]?.data;
-    if (!output) return [];
+    // Get first output
+    const outputName = yoloSession.outputNames[0] || 'output0';
+    const outputTensor = results[outputName];
+    
+    if (!outputTensor) {
+      console.warn('No output tensor found');
+      return [];
+    }
 
-    const detections = parseYoloOutput(output, width, height);
+    const detections = parseYoloOutput(outputTensor.data, outputTensor.dims, width, height);
     return detections;
   } catch (error) {
     console.error('YOLO inference error:', error);
@@ -310,46 +330,79 @@ async function runYoloInference(imageData) {
   }
 }
 
-function parseYoloOutput(output, originalWidth, originalHeight) {
+function parseYoloOutput(output, dims, originalWidth, originalHeight) {
   const detections = [];
   const numClasses = CONFIG.YOLO.CLASSES.length;
   const inputSize = CONFIG.YOLO.INPUT_SIZE;
-
-  // YOLO output format: [batch, num_boxes, 4 + num_classes]
-  // Or for segmentation: [batch, 4 + num_classes + mask_channels, num_boxes]
+  const maskCoefficients = CONFIG.YOLO.MASK_COEFFICIENTS;
   
-  // Assuming output shape [1, numBoxes, 4 + numClasses]
-  const numBoxes = output.length / (4 + numClasses);
+  // YOLO11 output format: [1, channels, numBoxes]
+  // For detect models: channels = 4 + numClasses
+  // For seg models: channels = 4 + numClasses + maskCoefficients
+  
+  if (dims.length !== 3) {
+    console.warn('Unexpected dims length:', dims.length);
+    return [];
+  }
+  
+  const channels = dims[1];
+  const numBoxes = dims[2];
+  
+  // Validate the channel count and determine model type
+  const expectedDetect = 4 + numClasses;
+  const expectedSeg = 4 + numClasses + maskCoefficients;
+  
+  // Determine if format is transposed (YOLO11 style) or standard
+  // YOLO11: [1, channels, numBoxes] where channels < numBoxes
+  // Standard: [1, numBoxes, channels] where numBoxes > channels
+  const isTransposed = channels < numBoxes;
+  
+  if (!isTransposed) {
+    console.warn('Non-transposed format detected, this may not be a YOLO11 model');
+    return [];
+  }
+  
+  if (channels !== expectedDetect && channels !== expectedSeg) {
+    console.warn(`Unexpected channel count: ${channels}. Expected ${expectedDetect} (detect) or ${expectedSeg} (seg)`);
+    return []; // Return empty to avoid incorrect parsing
+  }
   
   for (let i = 0; i < numBoxes; i++) {
-    const baseIdx = i * (4 + numClasses);
+    // Transposed format: data is arranged [cx0, cx1, ..., cxN, cy0, cy1, ..., cyN, ...]
+    const cx = output[0 * numBoxes + i];
+    const cy = output[1 * numBoxes + i];
+    const w = output[2 * numBoxes + i];
+    const h = output[3 * numBoxes + i];
     
-    // Get box coordinates
-    const cx = output[baseIdx];
-    const cy = output[baseIdx + 1];
-    const w = output[baseIdx + 2];
-    const h = output[baseIdx + 3];
+    // Extract class scores (channels 4 to 4+numClasses)
+    let classScores = [];
+    for (let c = 0; c < numClasses; c++) {
+      classScores.push(output[(4 + c) * numBoxes + i]);
+    }
 
-    // Get class scores
+    // Get max class score
     let maxScore = 0;
     let maxClass = 0;
     for (let c = 0; c < numClasses; c++) {
-      const score = output[baseIdx + 4 + c];
-      if (score > maxScore) {
-        maxScore = score;
+      if (classScores[c] > maxScore) {
+        maxScore = classScores[c];
         maxClass = c;
       }
     }
 
     if (maxScore >= CONFIG.YOLO.CONFIDENCE_THRESHOLD) {
+      // Scale coordinates back to original image size
+      const scaleX = originalWidth / inputSize;
+      const scaleY = originalHeight / inputSize;
+      
       detections.push({
         class: CONFIG.YOLO.CLASSES[maxClass],
         confidence: maxScore,
         box: {
-          x: (cx - w / 2) * originalWidth / inputSize,
-          y: (cy - h / 2) * originalHeight / inputSize,
-          width: w * originalWidth / inputSize,
-          height: h * originalHeight / inputSize
+          x: (cx - w / 2) * scaleX,
+          y: (cy - h / 2) * scaleY,
+          width: w * scaleX,
+          height: h * scaleY
         }
       });
     }
