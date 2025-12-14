@@ -22,5 +22,5 @@ Thumbs.db
 .idea/
 
 # Large model files (download separately)
-public/models/*.onnx
+
 public/models/*.pt
