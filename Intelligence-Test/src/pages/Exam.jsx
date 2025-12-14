@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react';
+import { useEffect, useRef, useState, useCallback } from 'react';
 import { toast } from 'react-toastify';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate, useParams } from 'react-router-dom';
@@ -7,8 +7,8 @@ import { useLanguage } from '../context/LanguageContext';
 import { supabase } from '../lib/supabase';
 import { 
   Flag, FlagOff, StickyNote, ChevronLeft, ChevronRight, 
-  Clock, Camera, AlertTriangle, Send, Monitor, Wifi, WifiOff,
-  Eye, EyeOff, Shield, XCircle, CheckCircle, Loader2, User
+  Clock, Camera, AlertTriangle, Send, Wifi, WifiOff,
+  Shield, Loader2
 } from 'lucide-react';
 import FaceVerification from '../components/FaceVerification';
 
