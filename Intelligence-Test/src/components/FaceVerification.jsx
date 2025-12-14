@@ -26,8 +26,17 @@ const FACE_CONFIG = {
 // ANTI-SPOOFING: Liveness Detection Functions
 // ============================================
 
-// Calculate Eye Aspect Ratio (EAR) for blink detection
-// Uses specific MediaPipe face mesh landmark indices for eyes
+/**
+ * Calculate Eye Aspect Ratio (EAR) for blink detection
+ * Based on the paper "Real-Time Eye Blink Detection using Facial Landmarks"
+ * 
+ * @param {Array<{x: number, y: number, z?: number}>} landmarks - MediaPipe face mesh landmarks (468+ points)
+ * @param {number[]} eyeIndices - Array of 6 landmark indices for one eye in order:
+ *   [corner_left, top_outer, top_inner, corner_right, bottom_inner, bottom_outer]
+ *   Left eye: [33, 160, 158, 133, 153, 144]
+ *   Right eye: [362, 385, 387, 263, 373, 380]
+ * @returns {number} Eye Aspect Ratio - lower values indicate closed eye (blink)
+ */
 function calculateEAR(landmarks, eyeIndices) {
   // Eye landmark indices (MediaPipe face mesh)
   // Left eye: 33, 160, 158, 133, 153, 144

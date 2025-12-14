@@ -1211,11 +1211,11 @@ function StudentAnalyticsTab({ classId, exams }) {
               {/* Calculate score ranges */}
               {(() => {
                 const ranges = [
-                  { label: '90-100%', min: 90, max: 100, color: 'bg-success' },
-                  { label: '80-89%', min: 80, max: 89, color: 'bg-success-300' },
+                  { label: '90-100%', min: 90, max: 100, color: 'bg-success-600' },
+                  { label: '80-89%', min: 80, max: 89, color: 'bg-success-500' },
                   { label: '70-79%', min: 70, max: 79, color: 'bg-primary' },
-                  { label: '60-69%', min: 60, max: 69, color: 'bg-warning' },
-                  { label: '50-59%', min: 50, max: 59, color: 'bg-warning-400' },
+                  { label: '60-69%', min: 60, max: 69, color: 'bg-warning-500' },
+                  { label: '50-59%', min: 50, max: 59, color: 'bg-warning-600' },
                   { label: '0-49%', min: 0, max: 49, color: 'bg-danger' },
                 ];
                 
