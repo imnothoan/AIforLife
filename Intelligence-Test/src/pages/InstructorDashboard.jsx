@@ -211,32 +211,32 @@ function CreateExamForm({ classId, onClose, onSuccess }) {
       <div className="space-y-4">
         <h3 className="font-semibold text-gray-900 flex items-center space-x-2">
           <BookOpen className="w-5 h-5 text-primary" />
-          <span>Thông tin cơ bản</span>
+          <span>{t('exam.basicInfo')}</span>
         </h3>
         
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">
-            Tên bài thi <span className="text-danger">*</span>
+            {t('exam.title')} <span className="text-danger">*</span>
           </label>
           <input
             type="text"
             name="title"
             value={formData.title}
             onChange={handleChange}
-            placeholder="VD: Kiểm tra giữa kỳ AI"
+            placeholder={t('exam.titlePlaceholder')}
             className="input"
           />
         </div>
 
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">
-            Mô tả
+            {t('exam.description')}
           </label>
           <textarea
             name="description"
             value={formData.description}
             onChange={handleChange}
-            placeholder="Mô tả về nội dung bài thi..."
+            placeholder={t('exam.descriptionPlaceholder')}
             rows={3}
             className="input resize-none"
           />
@@ -245,7 +245,7 @@ function CreateExamForm({ classId, onClose, onSuccess }) {
         <div className="grid grid-cols-2 gap-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
-              Thời lượng (phút)
+              {t('exam.durationMinutes')}
             </label>
             <input
               type="number"
@@ -259,7 +259,7 @@ function CreateExamForm({ classId, onClose, onSuccess }) {
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
-              Điểm đạt (%)
+              {t('exam.passingScore')}
             </label>
             <input
               type="number"
@@ -278,13 +278,13 @@ function CreateExamForm({ classId, onClose, onSuccess }) {
       <div className="space-y-4">
         <h3 className="font-semibold text-gray-900 flex items-center space-x-2">
           <Clock className="w-5 h-5 text-primary" />
-          <span>Thời gian thi</span>
+          <span>{t('exam.timeSettings')}</span>
         </h3>
 
         <div className="grid grid-cols-2 gap-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
-              Bắt đầu <span className="text-danger">*</span>
+              {t('exam.startTime')} <span className="text-danger">*</span>
             </label>
             <input
               type="datetime-local"
@@ -296,7 +296,7 @@ function CreateExamForm({ classId, onClose, onSuccess }) {
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
-              Kết thúc <span className="text-danger">*</span>
+              {t('exam.endTime')} <span className="text-danger">*</span>
             </label>
             <input
               type="datetime-local"
@@ -313,7 +313,7 @@ function CreateExamForm({ classId, onClose, onSuccess }) {
       <div className="space-y-4">
         <h3 className="font-semibold text-gray-900 flex items-center space-x-2">
           <Shield className="w-5 h-5 text-primary" />
-          <span>Cài đặt chống gian lận</span>
+          <span>{t('exam.antiCheatSettings')}</span>
         </h3>
 
         <div className="grid grid-cols-2 gap-4">
@@ -325,7 +325,7 @@ function CreateExamForm({ classId, onClose, onSuccess }) {
               onChange={handleChange}
               className="w-5 h-5 text-primary rounded"
             />
-            <span className="text-sm text-gray-700">Yêu cầu Camera</span>
+            <span className="text-sm text-gray-700">{t('exam.requireCamera')}</span>
           </label>
 
           <label className="flex items-center space-x-3 p-3 bg-gray-50 rounded-lg cursor-pointer hover:bg-gray-100 transition-colors">
@@ -336,7 +336,7 @@ function CreateExamForm({ classId, onClose, onSuccess }) {
               onChange={handleChange}
               className="w-5 h-5 text-primary rounded"
             />
-            <span className="text-sm text-gray-700">Yêu cầu Fullscreen</span>
+            <span className="text-sm text-gray-700">{t('exam.requireFullscreen')}</span>
           </label>
 
           <label className="flex items-center space-x-3 p-3 bg-gray-50 rounded-lg cursor-pointer hover:bg-gray-100 transition-colors">
@@ -347,7 +347,7 @@ function CreateExamForm({ classId, onClose, onSuccess }) {
               onChange={handleChange}
               className="w-5 h-5 text-primary rounded"
             />
-            <span className="text-sm text-gray-700">Xáo trộn câu hỏi</span>
+            <span className="text-sm text-gray-700">{t('exam.shuffleQuestions')}</span>
           </label>
 
           <label className="flex items-center space-x-3 p-3 bg-gray-50 rounded-lg cursor-pointer hover:bg-gray-100 transition-colors">
@@ -358,14 +358,14 @@ function CreateExamForm({ classId, onClose, onSuccess }) {
               onChange={handleChange}
               className="w-5 h-5 text-primary rounded"
             />
-            <span className="text-sm text-gray-700">Hiển thị kết quả ngay</span>
+            <span className="text-sm text-gray-700">{t('exam.showResultImmediately')}</span>
           </label>
         </div>
 
         <div className="grid grid-cols-2 gap-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
-              Số lần rời tab tối đa
+              {t('exam.maxTabViolations')}
             </label>
             <input
               type="number"
@@ -379,7 +379,7 @@ function CreateExamForm({ classId, onClose, onSuccess }) {
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
-              Số lần thoát fullscreen tối đa
+              {t('exam.maxFullscreenViolations')}
             </label>
             <input
               type="number"
@@ -397,7 +397,7 @@ function CreateExamForm({ classId, onClose, onSuccess }) {
       {/* Actions */}
       <div className="flex items-center justify-end space-x-3 pt-4 border-t border-gray-200">
         <button type="button" onClick={onClose} className="btn-secondary">
-          Hủy
+          {t('common.cancel')}
         </button>
         <button type="submit" disabled={loading} className="btn-primary">
           {loading ? (
@@ -405,7 +405,7 @@ function CreateExamForm({ classId, onClose, onSuccess }) {
           ) : (
             <Save className="w-5 h-5 mr-2" />
           )}
-          Tạo bài thi
+          {t('exam.create')}
         </button>
       </div>
     </form>
@@ -417,6 +417,7 @@ function CreateExamForm({ classId, onClose, onSuccess }) {
 // ============================================
 
 function AddStudentForm({ classId, onClose, onSuccess }) {
+  const { t } = useLanguage();
   const [loading, setLoading] = useState(false);
   const [email, setEmail] = useState('');
   const [bulkEmails, setBulkEmails] = useState('');
@@ -433,20 +434,20 @@ function AddStudentForm({ classId, onClose, onSuccess }) {
       : bulkEmails.split('\n').map(e => e.trim()).filter(e => e);
 
     if (emails.length === 0) {
-      toast.error('Vui lòng nhập email sinh viên');
+      toast.error(t('validation.enterStudentEmail'));
       return;
     }
 
     // Limit bulk emails to 100 at a time
     if (emails.length > 100) {
-      toast.error('Chỉ có thể thêm tối đa 100 email một lần');
+      toast.error(t('validation.maxEmails'));
       return;
     }
 
     // Validate email format using utility function
     const invalidEmails = emails.filter(e => !isValidEmail(e));
     if (invalidEmails.length > 0) {
-      toast.error(`Email không hợp lệ: ${invalidEmails.slice(0, 3).join(', ')}${invalidEmails.length > 3 ? '...' : ''}`);
+      toast.error(t('validation.invalidEmails', { emails: invalidEmails.slice(0, 3).join(', ') + (invalidEmails.length > 3 ? '...' : '') }));
       return;
     }
 
@@ -457,41 +458,67 @@ function AddStudentForm({ classId, onClose, onSuccess }) {
 
     for (const studentEmail of emails) {
       try {
-        // Find user by email with timeout
-        const { data: profile, error: profileError } = await supabase
-          .from('profiles')
-          .select('id')
-          .eq('email', studentEmail)
-          .single();
-
-        if (profileError || !profile) {
-          errorMessages.push(`${studentEmail}: Chưa đăng ký tài khoản`);
-          errorCount++;
-          continue;
-        }
-
-        // Add enrollment
-        const { error: enrollError } = await supabase
-          .from('enrollments')
-          .insert({
-            class_id: classId,
-            student_id: profile.id,
-            status: 'active'
+        // Use RPC function to add student (bypasses RLS restrictions)
+        const { data: result, error: rpcError } = await supabase
+          .rpc('add_student_to_class', {
+            p_class_id: classId,
+            p_student_email: studentEmail.toLowerCase().trim()
           });
 
-        if (enrollError) {
-          if (enrollError.code === '23505') {
-            errorMessages.push(`${studentEmail}: Đã có trong lớp`);
+        if (rpcError) {
+          // RPC function doesn't exist - fallback to direct method
+          console.warn('RPC not available, using direct method:', rpcError);
+          
+          // Fallback: Find user by email directly
+          const { data: profile, error: profileError } = await supabase
+            .from('profiles')
+            .select('id')
+            .eq('email', studentEmail.toLowerCase().trim())
+            .single();
+
+          if (profileError || !profile) {
+            errorMessages.push(`${studentEmail}: ${t('student.notRegistered')}`);
+            errorCount++;
+            continue;
+          }
+
+          // Add enrollment directly
+          const { error: enrollError } = await supabase
+            .from('enrollments')
+            .insert({
+              class_id: classId,
+              student_id: profile.id,
+              status: 'active'
+            });
+
+          if (enrollError) {
+            if (enrollError.code === '23505') {
+              errorMessages.push(`${studentEmail}: ${t('student.alreadyInClass')}`);
+            } else {
+              console.error('Enroll error:', enrollError);
+              errorMessages.push(`${studentEmail}: ${t('student.addError')}`);
+            }
+            errorCount++;
           } else {
-            errorMessages.push(`${studentEmail}: Lỗi thêm`);
+            successCount++;
+          }
+        } else if (result && result.success) {
+          successCount++;
+        } else if (result) {
+          // Handle RPC error responses
+          const errorKey = result.error;
+          if (errorKey === 'student_not_found') {
+            errorMessages.push(`${studentEmail}: ${t('student.notRegistered')}`);
+          } else if (errorKey === 'already_enrolled') {
+            errorMessages.push(`${studentEmail}: ${t('student.alreadyInClass')}`);
+          } else {
+            errorMessages.push(`${studentEmail}: ${t('student.addError')}`);
           }
           errorCount++;
-        } else {
-          successCount++;
         }
       } catch (err) {
         console.error('Add student error:', err);
-        errorMessages.push(`${studentEmail}: Lỗi kết nối`);
+        errorMessages.push(`${studentEmail}: ${t('error.network')}`);
         errorCount++;
       }
     }
@@ -499,15 +526,15 @@ function AddStudentForm({ classId, onClose, onSuccess }) {
     setLoading(false);
 
     if (successCount > 0) {
-      toast.success(`Đã thêm ${successCount} sinh viên vào lớp!`);
+      toast.success(t('student.addSuccess', { count: successCount }));
       onSuccess?.();
     }
     
     if (errorCount > 0) {
       // Show first 3 error messages
       const displayErrors = errorMessages.slice(0, 3).join('\n');
-      const moreErrors = errorMessages.length > 3 ? `\n... và ${errorMessages.length - 3} lỗi khác` : '';
-      toast.warning(`Một số sinh viên không thể thêm:\n${displayErrors}${moreErrors}`, { autoClose: 8000 });
+      const moreErrors = errorMessages.length > 3 ? `\n... ${errorMessages.length - 3} ${t('common.more')}` : '';
+      toast.warning(`${displayErrors}${moreErrors}`, { autoClose: 8000 });
     }
 
     if (successCount > 0 && errorCount === 0) {
@@ -526,7 +553,7 @@ function AddStudentForm({ classId, onClose, onSuccess }) {
             mode === 'single' ? 'bg-white shadow text-primary' : 'text-gray-600 hover:text-gray-900'
           }`}
         >
-          Thêm 1 sinh viên
+          {t('student.addSingle')}
         </button>
         <button
           type="button"
@@ -535,14 +562,14 @@ function AddStudentForm({ classId, onClose, onSuccess }) {
             mode === 'bulk' ? 'bg-white shadow text-primary' : 'text-gray-600 hover:text-gray-900'
           }`}
         >
-          Thêm nhiều
+          {t('student.addBulk')}
         </button>
       </div>
 
       {mode === 'single' ? (
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">
-            Email sinh viên
+            {t('student.email')}
           </label>
           <input
             type="email"
@@ -552,13 +579,13 @@ function AddStudentForm({ classId, onClose, onSuccess }) {
             className="input"
           />
           <p className="text-xs text-gray-500 mt-1">
-            Sinh viên cần đăng ký tài khoản trước khi được thêm vào lớp
+            {t('student.emailNote')}
           </p>
         </div>
       ) : (
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">
-            Danh sách email (mỗi email một dòng)
+            {t('student.emailList')}
           </label>
           <textarea
             value={bulkEmails}
@@ -572,7 +599,7 @@ function AddStudentForm({ classId, onClose, onSuccess }) {
 
       <div className="flex items-center justify-end space-x-3 pt-4 border-t border-gray-200">
         <button type="button" onClick={onClose} className="btn-secondary">
-          Hủy
+          {t('common.cancel')}
         </button>
         <button type="submit" disabled={loading} className="btn-primary">
           {loading ? (
@@ -580,7 +607,443 @@ function AddStudentForm({ classId, onClose, onSuccess }) {
           ) : (
             <Plus className="w-5 h-5 mr-2" />
           )}
-          Thêm sinh viên
+          {t('student.add')}
+        </button>
+      </div>
+    </form>
+  );
+}
+
+// ============================================
+// MANAGE QUESTIONS FORM
+// ============================================
+
+function ManageQuestionsForm({ examId, examTitle, onClose }) {
+  const { t } = useLanguage();
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [questions, setQuestions] = useState([]);
+  const [editingQuestion, setEditingQuestion] = useState(null);
+  const [showAddForm, setShowAddForm] = useState(false);
+
+  // Load questions
+  useEffect(() => {
+    const loadQuestions = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('questions')
+          .select('*')
+          .eq('exam_id', examId)
+          .order('order_index');
+
+        if (error) throw error;
+        setQuestions(data || []);
+      } catch (err) {
+        console.error('Load questions error:', err);
+        toast.error(t('error.general'));
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadQuestions();
+  }, [examId, t]);
+
+  const handleDeleteQuestion = async (questionId) => {
+    if (!window.confirm(t('question.deleteConfirm'))) return;
+
+    try {
+      const { error } = await supabase
+        .from('questions')
+        .delete()
+        .eq('id', questionId);
+
+      if (error) throw error;
+      setQuestions(prev => prev.filter(q => q.id !== questionId));
+      toast.success(t('common.success'));
+    } catch (err) {
+      toast.error(t('error.general'));
+    }
+  };
+
+  const handleSaveQuestion = async (questionData) => {
+    setSaving(true);
+    try {
+      if (editingQuestion) {
+        // Update existing question
+        const { error } = await supabase
+          .from('questions')
+          .update({
+            question_text: questionData.question_text,
+            question_type: questionData.question_type,
+            options: questionData.options,
+            correct_answer: questionData.correct_answer,
+            points: questionData.points,
+            difficulty: questionData.difficulty,
+            explanation: questionData.explanation
+          })
+          .eq('id', editingQuestion.id);
+
+        if (error) throw error;
+        setQuestions(prev => prev.map(q => 
+          q.id === editingQuestion.id ? { ...q, ...questionData } : q
+        ));
+      } else {
+        // Create new question
+        const { data, error } = await supabase
+          .from('questions')
+          .insert({
+            exam_id: examId,
+            question_text: questionData.question_text,
+            question_type: questionData.question_type,
+            options: questionData.options,
+            correct_answer: questionData.correct_answer,
+            points: questionData.points,
+            difficulty: questionData.difficulty,
+            explanation: questionData.explanation,
+            order_index: questions.length
+          })
+          .select()
+          .single();
+
+        if (error) throw error;
+        setQuestions(prev => [...prev, data]);
+      }
+
+      toast.success(t('question.saveSuccess'));
+      setEditingQuestion(null);
+      setShowAddForm(false);
+    } catch (err) {
+      console.error('Save question error:', err);
+      toast.error(t('question.saveError'));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center p-12">
+        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h3 className="font-semibold text-gray-900">{examTitle}</h3>
+          <p className="text-sm text-gray-500">{t('exam.questionsCount', { count: questions.length })}</p>
+        </div>
+        <button
+          onClick={() => { setEditingQuestion(null); setShowAddForm(true); }}
+          className="btn-primary"
+        >
+          <Plus className="w-5 h-5 mr-2" />
+          {t('question.add')}
+        </button>
+      </div>
+
+      {/* Question Form */}
+      {(showAddForm || editingQuestion) && (
+        <QuestionForm
+          question={editingQuestion}
+          onSave={handleSaveQuestion}
+          onCancel={() => { setEditingQuestion(null); setShowAddForm(false); }}
+          saving={saving}
+        />
+      )}
+
+      {/* Question List */}
+      {questions.length > 0 ? (
+        <div className="space-y-3">
+          {questions.map((question, idx) => (
+            <div key={question.id} className="p-4 border border-gray-200 rounded-lg hover:border-primary-300 transition-colors">
+              <div className="flex items-start justify-between">
+                <div className="flex-1">
+                  <div className="flex items-center space-x-2 mb-2">
+                    <span className="w-6 h-6 bg-primary-100 text-primary text-sm font-bold rounded-full flex items-center justify-center">
+                      {idx + 1}
+                    </span>
+                    <span className="text-xs px-2 py-0.5 bg-gray-100 text-gray-600 rounded">
+                      {question.question_type === 'multiple_choice' ? t('question.multipleChoice') :
+                       question.question_type === 'true_false' ? t('question.trueFalse') :
+                       question.question_type === 'short_answer' ? t('question.shortAnswer') : t('question.essay')}
+                    </span>
+                    <span className="text-xs text-gray-500">{question.points} {t('exam.points')}</span>
+                  </div>
+                  <p className="text-gray-800">{question.question_text}</p>
+                  {question.options && question.options.length > 0 && (
+                    <div className="mt-2 space-y-1">
+                      {question.options.map((opt, optIdx) => (
+                        <div key={opt.id || optIdx} className={`text-sm px-2 py-1 rounded ${
+                          JSON.stringify(question.correct_answer) === JSON.stringify(opt.id) 
+                            ? 'bg-success-50 text-success-700' 
+                            : 'text-gray-600'
+                        }`}>
+                          {opt.id}. {opt.text}
+                          {JSON.stringify(question.correct_answer) === JSON.stringify(opt.id) && ' ✓'}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+                <div className="flex items-center space-x-1 ml-4">
+                  <button
+                    onClick={() => { setEditingQuestion(question); setShowAddForm(false); }}
+                    className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                    title={t('question.edit')}
+                  >
+                    <Edit2 className="w-4 h-4 text-gray-500" />
+                  </button>
+                  <button
+                    onClick={() => handleDeleteQuestion(question.id)}
+                    className="p-2 hover:bg-danger-50 rounded-lg transition-colors"
+                    title={t('question.delete')}
+                  >
+                    <Trash2 className="w-4 h-4 text-danger" />
+                  </button>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : !showAddForm && (
+        <div className="text-center py-12 bg-gray-50 rounded-xl">
+          <ClipboardList className="w-16 h-16 mx-auto mb-4 text-gray-300" />
+          <p className="text-gray-500 mb-2">{t('question.noQuestions')}</p>
+          <p className="text-sm text-gray-400 mb-4">{t('question.noQuestionsDesc')}</p>
+          <button
+            onClick={() => { setEditingQuestion(null); setShowAddForm(true); }}
+            className="btn-primary"
+          >
+            <Plus className="w-5 h-5 mr-2" />
+            {t('question.add')}
+          </button>
+        </div>
+      )}
+
+      {/* Close button */}
+      <div className="flex justify-end pt-4 border-t border-gray-200">
+        <button onClick={onClose} className="btn-secondary">
+          {t('common.close')}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ============================================
+// QUESTION FORM (for add/edit)
+// ============================================
+
+// Minimum number of options for multiple choice questions
+const MIN_QUESTION_OPTIONS = 2;
+const MAX_QUESTION_OPTIONS = 6;
+
+function QuestionForm({ question, onSave, onCancel, saving }) {
+  const { t } = useLanguage();
+  const [formData, setFormData] = useState({
+    question_text: question?.question_text || '',
+    question_type: question?.question_type || 'multiple_choice',
+    options: question?.options || [
+      { id: 'A', text: '' },
+      { id: 'B', text: '' },
+      { id: 'C', text: '' },
+      { id: 'D', text: '' }
+    ],
+    correct_answer: question?.correct_answer || 'A',
+    points: question?.points || 1,
+    difficulty: question?.difficulty || 'medium',
+    explanation: question?.explanation || ''
+  });
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    if (!formData.question_text.trim()) {
+      toast.error(t('validation.required'));
+      return;
+    }
+    onSave(formData);
+  };
+
+  const handleOptionChange = (index, value) => {
+    const newOptions = [...formData.options];
+    newOptions[index] = { ...newOptions[index], text: value };
+    setFormData(prev => ({ ...prev, options: newOptions }));
+  };
+
+  const addOption = () => {
+    const nextLetter = String.fromCharCode(65 + formData.options.length);
+    setFormData(prev => ({
+      ...prev,
+      options: [...prev.options, { id: nextLetter, text: '' }]
+    }));
+  };
+
+  const removeOption = (index) => {
+    if (formData.options.length <= MIN_QUESTION_OPTIONS) return;
+    const newOptions = formData.options.filter((_, i) => i !== index);
+    // Re-assign letters
+    const reorderedOptions = newOptions.map((opt, i) => ({
+      ...opt,
+      id: String.fromCharCode(65 + i)
+    }));
+    setFormData(prev => ({
+      ...prev,
+      options: reorderedOptions,
+      correct_answer: reorderedOptions[0]?.id || 'A'
+    }));
+  };
+
+  return (
+    <form onSubmit={handleSubmit} className="p-4 bg-gray-50 rounded-xl space-y-4">
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-1">
+          {t('question.text')} <span className="text-danger">*</span>
+        </label>
+        <textarea
+          value={formData.question_text}
+          onChange={(e) => setFormData(prev => ({ ...prev, question_text: e.target.value }))}
+          placeholder={t('question.textPlaceholder')}
+          rows={3}
+          className="input resize-none"
+        />
+      </div>
+
+      <div className="grid grid-cols-3 gap-4">
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">{t('question.type')}</label>
+          <select
+            value={formData.question_type}
+            onChange={(e) => setFormData(prev => ({ ...prev, question_type: e.target.value }))}
+            className="input"
+          >
+            <option value="multiple_choice">{t('question.multipleChoice')}</option>
+            <option value="true_false">{t('question.trueFalse')}</option>
+          </select>
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">{t('question.points')}</label>
+          <input
+            type="number"
+            value={formData.points}
+            onChange={(e) => setFormData(prev => ({ ...prev, points: parseFloat(e.target.value) || 1 }))}
+            min={0.5}
+            step={0.5}
+            className="input"
+          />
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">{t('question.difficulty')}</label>
+          <select
+            value={formData.difficulty}
+            onChange={(e) => setFormData(prev => ({ ...prev, difficulty: e.target.value }))}
+            className="input"
+          >
+            <option value="easy">{t('question.difficultyEasy')}</option>
+            <option value="medium">{t('question.difficultyMedium')}</option>
+            <option value="hard">{t('question.difficultyHard')}</option>
+          </select>
+        </div>
+      </div>
+
+      {formData.question_type === 'multiple_choice' && (
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-2">{t('question.options')}</label>
+          <div className="space-y-2">
+            {formData.options.map((option, idx) => (
+              <div key={idx} className="flex items-center space-x-2">
+                <input
+                  type="radio"
+                  name="correct_answer"
+                  checked={formData.correct_answer === option.id}
+                  onChange={() => setFormData(prev => ({ ...prev, correct_answer: option.id }))}
+                  className="w-4 h-4 text-primary"
+                />
+                <span className="w-6 h-6 bg-gray-200 rounded-full flex items-center justify-center text-sm font-medium">
+                  {option.id}
+                </span>
+                <input
+                  type="text"
+                  value={option.text}
+                  onChange={(e) => handleOptionChange(idx, e.target.value)}
+                  placeholder={t('question.optionPlaceholder')}
+                  className="input flex-1"
+                />
+                {formData.options.length > MIN_QUESTION_OPTIONS && (
+                  <button
+                    type="button"
+                    onClick={() => removeOption(idx)}
+                    className="p-2 hover:bg-danger-50 rounded-lg transition-colors text-danger"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                )}
+              </div>
+            ))}
+          </div>
+          {formData.options.length < MAX_QUESTION_OPTIONS && (
+            <button
+              type="button"
+              onClick={addOption}
+              className="mt-2 text-sm text-primary hover:text-primary-700 flex items-center"
+            >
+              <Plus className="w-4 h-4 mr-1" />
+              {t('question.addOption')}
+            </button>
+          )}
+        </div>
+      )}
+
+      {formData.question_type === 'true_false' && (
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-2">{t('question.correctAnswer')}</label>
+          <div className="flex space-x-4">
+            <label className="flex items-center space-x-2">
+              <input
+                type="radio"
+                name="tf_answer"
+                checked={formData.correct_answer === true || formData.correct_answer === 'true'}
+                onChange={() => setFormData(prev => ({ ...prev, correct_answer: true }))}
+                className="w-4 h-4 text-primary"
+              />
+              <span>{t('common.yes')}</span>
+            </label>
+            <label className="flex items-center space-x-2">
+              <input
+                type="radio"
+                name="tf_answer"
+                checked={formData.correct_answer === false || formData.correct_answer === 'false'}
+                onChange={() => setFormData(prev => ({ ...prev, correct_answer: false }))}
+                className="w-4 h-4 text-primary"
+              />
+              <span>{t('common.no')}</span>
+            </label>
+          </div>
+        </div>
+      )}
+
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-1">{t('question.explanation')}</label>
+        <textarea
+          value={formData.explanation}
+          onChange={(e) => setFormData(prev => ({ ...prev, explanation: e.target.value }))}
+          placeholder={t('question.explanationPlaceholder')}
+          rows={2}
+          className="input resize-none"
+        />
+      </div>
+
+      <div className="flex items-center justify-end space-x-3">
+        <button type="button" onClick={onCancel} className="btn-secondary">
+          {t('common.cancel')}
+        </button>
+        <button type="submit" disabled={saving} className="btn-primary">
+          {saving && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+          {t('common.save')}
         </button>
       </div>
     </form>
@@ -701,41 +1164,41 @@ function CreateClassForm({ onClose, onSuccess }) {
     <form onSubmit={handleSubmit} className="space-y-4">
       <div>
         <label className="block text-sm font-medium text-gray-700 mb-1">
-          Tên lớp học <span className="text-danger">*</span>
+          {t('class.name')} <span className="text-danger">*</span>
         </label>
         <input
           type="text"
           name="name"
           value={formData.name}
           onChange={handleChange}
-          placeholder="VD: Trí tuệ nhân tạo K66"
+          placeholder={t('class.namePlaceholder')}
           className="input"
         />
       </div>
 
       <div>
         <label className="block text-sm font-medium text-gray-700 mb-1">
-          Mã lớp <span className="text-danger">*</span>
+          {t('class.code')} <span className="text-danger">*</span>
         </label>
         <input
           type="text"
           name="code"
           value={formData.code}
           onChange={handleChange}
-          placeholder="VD: INT3401-20231"
+          placeholder={t('class.codePlaceholder')}
           className="input"
         />
       </div>
 
       <div>
         <label className="block text-sm font-medium text-gray-700 mb-1">
-          Mô tả
+          {t('class.description')}
         </label>
         <textarea
           name="description"
           value={formData.description}
           onChange={handleChange}
-          placeholder="Mô tả về lớp học..."
+          placeholder={t('class.descriptionPlaceholder')}
           rows={2}
           className="input resize-none"
         />
@@ -744,7 +1207,7 @@ function CreateClassForm({ onClose, onSuccess }) {
       <div className="grid grid-cols-2 gap-4">
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">
-            Học kỳ
+            {t('class.semester')}
           </label>
           <select
             name="semester"
@@ -752,15 +1215,15 @@ function CreateClassForm({ onClose, onSuccess }) {
             onChange={handleChange}
             className="input"
           >
-            <option value="">Chọn học kỳ</option>
-            <option value="1">Học kỳ 1</option>
-            <option value="2">Học kỳ 2</option>
-            <option value="3">Học kỳ hè</option>
+            <option value="">{t('class.semesterSelect')}</option>
+            <option value="1">{t('class.semester1')}</option>
+            <option value="2">{t('class.semester2')}</option>
+            <option value="3">{t('class.semesterSummer')}</option>
           </select>
         </div>
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">
-            Năm học
+            {t('class.year')}
           </label>
           <input
             type="text"
@@ -775,7 +1238,7 @@ function CreateClassForm({ onClose, onSuccess }) {
 
       <div className="flex items-center justify-end space-x-3 pt-4 border-t border-gray-200">
         <button type="button" onClick={onClose} className="btn-secondary">
-          Hủy
+          {t('common.cancel')}
         </button>
         <button type="submit" disabled={loading} className="btn-primary">
           {loading ? (
@@ -783,7 +1246,7 @@ function CreateClassForm({ onClose, onSuccess }) {
           ) : (
             <Save className="w-5 h-5 mr-2" />
           )}
-          Tạo lớp học
+          {t('instructor.createClass')}
         </button>
       </div>
     </form>
@@ -817,6 +1280,8 @@ export default function InstructorDashboard() {
   const [showCreateExam, setShowCreateExam] = useState(false);
   const [showAddStudent, setShowAddStudent] = useState(false);
   const [showCreateClass, setShowCreateClass] = useState(false);
+  const [showManageQuestions, setShowManageQuestions] = useState(false);
+  const [selectedExam, setSelectedExam] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
 
   // Load classes
@@ -904,14 +1369,14 @@ export default function InstructorDashboard() {
       setExams(prev => prev.map(e => 
         e.id === examId ? { ...e, status: 'published' } : e
       ));
-      toast.success('Đã công bố bài thi!');
+      toast.success(t('exam.published'));
     } catch (err) {
-      toast.error('Có lỗi xảy ra');
+      toast.error(t('error.general'));
     }
   };
 
   const handleRemoveStudent = async (enrollmentId) => {
-    if (!window.confirm('Bạn có chắc muốn xóa sinh viên này khỏi lớp?')) return;
+    if (!window.confirm(t('student.removeConfirm'))) return;
 
     try {
       const { error } = await supabase
@@ -922,9 +1387,9 @@ export default function InstructorDashboard() {
       if (error) throw error;
 
       setStudents(prev => prev.filter(s => s.id !== enrollmentId));
-      toast.success('Đã xóa sinh viên khỏi lớp');
+      toast.success(t('student.removeSuccess'));
     } catch (err) {
-      toast.error('Có lỗi xảy ra');
+      toast.error(t('error.general'));
     }
   };
 
@@ -943,10 +1408,10 @@ export default function InstructorDashboard() {
     const start = new Date(exam.start_time);
     const end = new Date(exam.end_time);
 
-    if (exam.status === 'draft') return { label: 'Nháp', color: 'bg-gray-100 text-gray-700' };
-    if (now < start) return { label: 'Sắp diễn ra', color: 'bg-primary-100 text-primary-700' };
-    if (now > end) return { label: 'Đã kết thúc', color: 'bg-gray-100 text-gray-600' };
-    return { label: 'Đang diễn ra', color: 'bg-success-100 text-success-700' };
+    if (exam.status === 'draft') return { label: t('exam.status.draft'), color: 'bg-gray-100 text-gray-700' };
+    if (now < start) return { label: t('exam.status.upcoming'), color: 'bg-primary-100 text-primary-700' };
+    if (now > end) return { label: t('exam.status.ended'), color: 'bg-gray-100 text-gray-600' };
+    return { label: t('exam.status.active'), color: 'bg-success-100 text-success-700' };
   };
 
   if (loading) {
@@ -1162,11 +1627,16 @@ export default function InstructorDashboard() {
                                     {t('exam.publish')}
                                   </button>
                                 )}
-                                <button className="p-2 hover:bg-gray-100 rounded-lg transition-colors">
-                                  <Eye className="w-5 h-5 text-gray-500" />
-                                </button>
-                                <button className="p-2 hover:bg-gray-100 rounded-lg transition-colors">
-                                  <Edit2 className="w-5 h-5 text-gray-500" />
+                                <button 
+                                  onClick={() => {
+                                    setSelectedExam(exam);
+                                    setShowManageQuestions(true);
+                                  }}
+                                  className="btn-secondary text-sm"
+                                  title={t('exam.manageQuestions')}
+                                >
+                                  <ClipboardList className="w-4 h-4 mr-1" />
+                                  {t('exam.manageQuestions')}
                                 </button>
                               </div>
                             </div>
@@ -1199,7 +1669,7 @@ export default function InstructorDashboard() {
                       className="btn-primary"
                     >
                       <Plus className="w-5 h-5 mr-2" />
-                      Thêm sinh viên
+                      {t('student.add')}
                     </button>
                   </div>
 
@@ -1208,7 +1678,7 @@ export default function InstructorDashboard() {
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
                     <input
                       type="text"
-                      placeholder="Tìm kiếm theo tên hoặc email..."
+                      placeholder={t('student.searchPlaceholder')}
                       value={searchQuery}
                       onChange={(e) => setSearchQuery(e.target.value)}
                       className="input pl-10"
@@ -1220,12 +1690,12 @@ export default function InstructorDashboard() {
                       <table className="w-full">
                         <thead className="bg-gray-50 border-b border-gray-200">
                           <tr>
-                            <th className="text-left px-4 py-3 text-sm font-semibold text-gray-700">#</th>
-                            <th className="text-left px-4 py-3 text-sm font-semibold text-gray-700">Họ tên</th>
-                            <th className="text-left px-4 py-3 text-sm font-semibold text-gray-700">Email</th>
-                            <th className="text-left px-4 py-3 text-sm font-semibold text-gray-700">MSSV</th>
-                            <th className="text-left px-4 py-3 text-sm font-semibold text-gray-700">Trạng thái</th>
-                            <th className="text-right px-4 py-3 text-sm font-semibold text-gray-700">Thao tác</th>
+                            <th className="text-left px-4 py-3 text-sm font-semibold text-gray-700">{t('table.number')}</th>
+                            <th className="text-left px-4 py-3 text-sm font-semibold text-gray-700">{t('table.name')}</th>
+                            <th className="text-left px-4 py-3 text-sm font-semibold text-gray-700">{t('table.email')}</th>
+                            <th className="text-left px-4 py-3 text-sm font-semibold text-gray-700">{t('table.studentId')}</th>
+                            <th className="text-left px-4 py-3 text-sm font-semibold text-gray-700">{t('table.status')}</th>
+                            <th className="text-right px-4 py-3 text-sm font-semibold text-gray-700">{t('table.actions')}</th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-100">
@@ -1264,14 +1734,14 @@ export default function InstructorDashboard() {
                                       ? 'badge-success' 
                                       : 'bg-gray-100 text-gray-600'
                                   }`}>
-                                    {enrollment.status === 'active' ? 'Đang học' : enrollment.status}
+                                    {enrollment.status === 'active' ? t('student.statusActive') : enrollment.status}
                                   </span>
                                 </td>
                                 <td className="px-4 py-3 text-right">
                                   <button
                                     onClick={() => handleRemoveStudent(enrollment.id)}
                                     className="p-2 hover:bg-danger-50 rounded-lg transition-colors text-danger"
-                                    title="Xóa khỏi lớp"
+                                    title={t('student.remove')}
                                   >
                                     <Trash2 className="w-4 h-4" />
                                   </button>
@@ -1284,13 +1754,13 @@ export default function InstructorDashboard() {
                   ) : (
                     <div className="text-center py-12 bg-gray-50 rounded-xl">
                       <Users className="w-16 h-16 mx-auto mb-4 text-gray-300" />
-                      <p className="text-gray-500 mb-4">Chưa có sinh viên nào trong lớp</p>
+                      <p className="text-gray-500 mb-4">{t('student.noStudents')}</p>
                       <button
                         onClick={() => setShowAddStudent(true)}
                         className="btn-primary"
                       >
                         <Plus className="w-5 h-5 mr-2" />
-                        Thêm sinh viên
+                        {t('student.add')}
                       </button>
                     </div>
                   )}
@@ -1301,14 +1771,14 @@ export default function InstructorDashboard() {
             <div className="flex items-center justify-center h-[60vh]">
               <div className="text-center">
                 <BookOpen className="w-20 h-20 mx-auto mb-4 text-gray-300" />
-                <h2 className="text-xl font-bold text-gray-700 mb-2">Chào mừng bạn đến với SmartExamPro</h2>
-                <p className="text-gray-500 mb-6">Hãy tạo lớp học đầu tiên để bắt đầu</p>
+                <h2 className="text-xl font-bold text-gray-700 mb-2">{t('instructor.welcome')}</h2>
+                <p className="text-gray-500 mb-6">{t('instructor.welcomeDesc')}</p>
                 <button
                   onClick={() => setShowCreateClass(true)}
                   className="btn-primary"
                 >
                   <Plus className="w-5 h-5 mr-2" />
-                  Tạo lớp học
+                  {t('instructor.createClass')}
                 </button>
               </div>
             </div>
@@ -1320,7 +1790,7 @@ export default function InstructorDashboard() {
       <Modal
         isOpen={showCreateClass}
         onClose={() => setShowCreateClass(false)}
-        title="Tạo lớp học mới"
+        title={t('instructor.createClassTitle')}
       >
         <CreateClassForm
           onClose={() => setShowCreateClass(false)}
@@ -1334,7 +1804,7 @@ export default function InstructorDashboard() {
       <Modal
         isOpen={showCreateExam}
         onClose={() => setShowCreateExam(false)}
-        title="Tạo bài thi mới"
+        title={t('instructor.createExamTitle')}
       >
         <CreateExamForm
           classId={selectedClass?.id}
@@ -1348,7 +1818,7 @@ export default function InstructorDashboard() {
       <Modal
         isOpen={showAddStudent}
         onClose={() => setShowAddStudent(false)}
-        title="Thêm sinh viên vào lớp"
+        title={t('instructor.addStudentTitle')}
       >
         <AddStudentForm
           classId={selectedClass?.id}
@@ -1364,6 +1834,20 @@ export default function InstructorDashboard() {
             }
           }}
         />
+      </Modal>
+
+      <Modal
+        isOpen={showManageQuestions}
+        onClose={() => { setShowManageQuestions(false); setSelectedExam(null); }}
+        title={t('exam.manageQuestions')}
+      >
+        {selectedExam && (
+          <ManageQuestionsForm
+            examId={selectedExam.id}
+            examTitle={selectedExam.title}
+            onClose={() => { setShowManageQuestions(false); setSelectedExam(null); }}
+          />
+        )}
       </Modal>
     </div>
   );
