@@ -7,7 +7,8 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'react-toastify';
 import {
   FileText, Users, Plus, Clock, BarChart3, CheckCircle, Trash2,
-  Calendar, X, Save, Loader2, BookOpen, Shield, ClipboardList
+  Calendar, X, Save, Loader2, BookOpen, Shield, ClipboardList,
+  Edit2, GraduationCap, Activity, AlertTriangle, Search, LogOut, User
 } from 'lucide-react';
 import LanguageSwitcher from '../components/LanguageSwitcher';
 
