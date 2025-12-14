@@ -49,8 +49,8 @@ const AccessibleButton = forwardRef(function AccessibleButton({
   };
   
   const handleKeyDown = (e) => {
-    // Support Enter and Space for activation
-    if ((e.key === 'Enter' || e.key === ' ') && !isDisabled) {
+    // Only handle Space key - Enter naturally triggers button click
+    if (e.key === ' ' && !isDisabled) {
       e.preventDefault();
       onClick?.(e);
     }
