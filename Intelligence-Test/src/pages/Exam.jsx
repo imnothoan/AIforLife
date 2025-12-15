@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useLanguage } from '../context/LanguageContext';
+import { t as translate } from '../lib/i18n'; // Direct import for event handlers
 import { supabase } from '../lib/supabase';
 import { 
   Flag, FlagOff, StickyNote, ChevronLeft, ChevronRight, 
@@ -210,7 +211,7 @@ export default function Exam() {
       if (!isFull && examStarted && !isSubmittingRef.current) {
         setFullscreenViolations(prev => {
           const newVal = prev + 1;
-          toast.error(`CẢNH BÁO: Bạn đã thoát toàn màn hình ${newVal} lần!`);
+          toast.error(translate('anticheat.fullscreenExit', { count: newVal }));
           logProctoring('fullscreen_exit', { count: newVal });
           return newVal;
         });
@@ -240,7 +241,7 @@ export default function Exam() {
       if (document.hidden && examStarted && !isSubmittingRef.current) {
         setTabViolations(prev => {
           const newVal = prev + 1;
-          toast.warning(`CẢNH BÁO: Phát hiện rời tab ${newVal} lần! Hành vi này được ghi lại.`);
+          toast.warning(translate('anticheat.tabSwitch', { count: newVal }));
           logProctoring('tab_switch', { count: newVal });
           return newVal;
         });
@@ -1356,10 +1357,10 @@ export default function Exam() {
             className="fixed inset-0 bg-black/95 z-40 flex items-center justify-center text-white flex-col"
           >
             <AlertTriangle className="w-20 h-20 text-danger mb-4 animate-bounce" />
-            <h2 className="text-3xl font-bold mb-4">⚠️ CẢNH BÁO VI PHẠM</h2>
-            <p className="mb-6 text-gray-300">Vui lòng quay lại chế độ toàn màn hình để tiếp tục!</p>
+            <h2 className="text-3xl font-bold mb-4">⚠️ {t('anticheat.violation')}</h2>
+            <p className="mb-6 text-gray-300">{t('anticheat.returnFullscreen')}</p>
             <button onClick={enterFullscreen} className="btn-danger px-8 py-3 text-lg">
-              Quay lại bài thi
+              {t('anticheat.fullscreenReturn')}
             </button>
           </motion.div>
         )}
@@ -1371,7 +1372,7 @@ export default function Exam() {
         <header className="bg-paper border-b border-gray-200 px-6 py-3 flex items-center justify-between flex-shrink-0">
           <div>
             <h1 className="text-lg font-bold text-text-main">{examData?.title}</h1>
-            <p className="text-sm text-gray-500">Mã môn: {examData?.code}</p>
+            <p className="text-sm text-gray-500">{t('exam.code')}: {examData?.code}</p>
           </div>
           
           <div className="flex items-center space-x-4">
