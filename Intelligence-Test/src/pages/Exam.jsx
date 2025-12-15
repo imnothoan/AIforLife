@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useLanguage } from '../context/LanguageContext';
+import { t as translate } from '../lib/i18n'; // Direct import for event handlers
 import { supabase } from '../lib/supabase';
 import { 
   Flag, FlagOff, StickyNote, ChevronLeft, ChevronRight, 
@@ -27,7 +28,7 @@ const DEMO_EXAM_IDS = ['demo', '1'];
 const DEMO_SESSION_IDS = ['demo-session', 'demo-session-id'];
 
 // Timeout constants
-const SUBMIT_TIMEOUT_MS = 15000;
+const SUBMIT_TIMEOUT_MS = 30000; // Increased to 30 seconds for better reliability
 const SUBMIT_TIMEOUT_ERROR = 'SUBMIT_TIMEOUT';
 
 export default function Exam() {
@@ -210,7 +211,7 @@ export default function Exam() {
       if (!isFull && examStarted && !isSubmittingRef.current) {
         setFullscreenViolations(prev => {
           const newVal = prev + 1;
-          toast.error(`CẢNH BÁO: Bạn đã thoát toàn màn hình ${newVal} lần!`);
+          toast.error(translate('anticheat.fullscreenExit', { count: newVal }));
           logProctoring('fullscreen_exit', { count: newVal });
           return newVal;
         });
@@ -240,7 +241,7 @@ export default function Exam() {
       if (document.hidden && examStarted && !isSubmittingRef.current) {
         setTabViolations(prev => {
           const newVal = prev + 1;
-          toast.warning(`CẢNH BÁO: Phát hiện rời tab ${newVal} lần! Hành vi này được ghi lại.`);
+          toast.warning(translate('anticheat.tabSwitch', { count: newVal }));
           logProctoring('tab_switch', { count: newVal });
           return newVal;
         });
@@ -305,20 +306,61 @@ export default function Exam() {
   // NETWORK & CAMERA SETUP
   // ============================================
   useEffect(() => {
-    const handleOnline = () => { setIsOffline(false); toast.success("Đã kết nối lại mạng."); };
-    const handleOffline = () => { setIsOffline(true); toast.error("Mất kết nối mạng! Bài thi sẽ không được lưu."); };
+    const handleOnline = () => { setIsOffline(false); toast.success(translate('anticheat.networkOnline')); };
+    const handleOffline = () => { setIsOffline(true); toast.error(translate('anticheat.networkOffline')); };
     window.addEventListener('online', handleOnline);
     window.addEventListener('offline', handleOffline);
+
+    // Helper function to translate AI worker messages
+    const translateWorkerMessage = (data) => {
+      const { code, payload, detectedClass, confidence, count } = data;
+      
+      // Map detection classes to translation keys (predefined for maintainability)
+      const detectionClassMap = {
+        'phone': translate('anticheat.phoneDetected'),
+        'material': translate('anticheat.materialDetected'),
+        'headphones': translate('anticheat.headphonesDetected'),
+        'person': translate('anticheat.noFace'), // person detection for multi-person
+      };
+      
+      // Map message codes to translation keys
+      const messageMap = {
+        'lookAtScreen': translate('anticheat.lookAtScreen'),
+        'NO_FACE': translate('anticheat.noFace'),
+        'LOOK_RIGHT': translate('anticheat.lookRight'),
+        'LOOK_LEFT': translate('anticheat.lookLeft'),
+        'LOOK_DOWN': translate('anticheat.lookDown'),
+        'LOOK_UP': translate('anticheat.lookUp'),
+        'GAZE_LEFT': translate('anticheat.gazeLeft'),
+        'GAZE_RIGHT': translate('anticheat.gazeRight'),
+        'speakingDetected': translate('anticheat.speakingDetected'),
+        'multiPerson': translate('anticheat.multiPerson', { count: count || 2 }),
+        'phoneDetected': translate('anticheat.phoneDetected'),
+        'materialDetected': translate('anticheat.materialDetected'),
+        'headphonesDetected': translate('anticheat.headphonesDetected'),
+        'monitoring': translate('anticheat.monitoring'),
+      };
+      
+      // Handle detection messages with confidence
+      if (code === 'detection' && detectedClass && detectionClassMap[detectedClass]) {
+        const detectionMsg = detectionClassMap[detectedClass];
+        return `${detectionMsg} (${((confidence || 0) * 100).toFixed(0)}%)`;
+      }
+      
+      return messageMap[code] || messageMap[payload] || payload;
+    };
 
     // Initialize AI Worker
     workerRef.current = new Worker(new URL('../workers/ai.worker.js', import.meta.url), { type: 'module' });
     workerRef.current.onmessage = (e) => {
-      const { type, payload } = e.data;
-      if (type === 'STATUS') setStatus(payload);
+      const { type, payload, code } = e.data;
+      const translatedMessage = translateWorkerMessage(e.data);
+      
+      if (type === 'STATUS') setStatus(translatedMessage);
       else if (type === 'ALERT') {
         setCheatCount(prev => prev + 1);
-        toast.warning(`AI Cảnh báo: ${payload}`);
-        logProctoring('ai_alert', { message: payload });
+        toast.warning(`${translate('anticheat.aiWarning')}: ${translatedMessage}`);
+        logProctoring('ai_alert', { message: payload, code });
       } else if (type === 'GAZE_AWAY') {
         setGazeAwayCount(prev => prev + 1);
       }
@@ -1356,10 +1398,10 @@ export default function Exam() {
             className="fixed inset-0 bg-black/95 z-40 flex items-center justify-center text-white flex-col"
           >
             <AlertTriangle className="w-20 h-20 text-danger mb-4 animate-bounce" />
-            <h2 className="text-3xl font-bold mb-4">⚠️ CẢNH BÁO VI PHẠM</h2>
-            <p className="mb-6 text-gray-300">Vui lòng quay lại chế độ toàn màn hình để tiếp tục!</p>
+            <h2 className="text-3xl font-bold mb-4">⚠️ {t('anticheat.violation')}</h2>
+            <p className="mb-6 text-gray-300">{t('anticheat.returnFullscreen')}</p>
             <button onClick={enterFullscreen} className="btn-danger px-8 py-3 text-lg">
-              Quay lại bài thi
+              {t('anticheat.fullscreenReturn')}
             </button>
           </motion.div>
         )}
@@ -1371,7 +1413,7 @@ export default function Exam() {
         <header className="bg-paper border-b border-gray-200 px-6 py-3 flex items-center justify-between flex-shrink-0">
           <div>
             <h1 className="text-lg font-bold text-text-main">{examData?.title}</h1>
-            <p className="text-sm text-gray-500">Mã môn: {examData?.code}</p>
+            <p className="text-sm text-gray-500">{t('exam.code')}: {examData?.code}</p>
           </div>
           
           <div className="flex items-center space-x-4">

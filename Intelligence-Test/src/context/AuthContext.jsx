@@ -51,6 +51,18 @@ export const AuthProvider = ({ children }) => {
   const [loading, setLoading] = useState(true);
   const [profileLoading, setProfileLoading] = useState(false);
 
+  // Helper function to create fallback profile from user metadata
+  const createFallbackProfile = (authUser) => {
+    if (!authUser) return null;
+    return {
+      id: authUser.id,
+      email: authUser.email,
+      full_name: authUser.user_metadata?.full_name || authUser.email?.split('@')[0] || 'User',
+      role: authUser.user_metadata?.role || 'student',
+      student_id: authUser.user_metadata?.student_id || null
+    };
+  };
+
   // Fetch user profile from database with retry logic
   const fetchProfile = useCallback(async (userId, retryCount = 0) => {
     const MAX_RETRIES = 3;
@@ -136,13 +148,27 @@ export const AuthProvider = ({ children }) => {
       if (isMounted && loading) {
         console.warn('Auth loading timeout - forcing completion');
         setLoading(false);
+        setProfileLoading(false);
       }
-    }, 10000); // 10 second timeout
+    }, 8000); // 8 second timeout (reduced for better UX)
 
-    // Check active session on mount
+    // Check active session on mount with timeout
     const initAuth = async () => {
       try {
-        const { data: { session } } = await supabase.auth.getSession();
+        // Add timeout to getSession call
+        const sessionPromise = supabase.auth.getSession();
+        const timeoutPromise = new Promise((_, reject) => 
+          setTimeout(() => reject(new Error('Session check timeout')), 5000)
+        );
+        
+        let session = null;
+        try {
+          const result = await Promise.race([sessionPromise, timeoutPromise]);
+          session = result?.data?.session ?? null;
+        } catch (timeoutError) {
+          console.warn('Session check timed out, continuing without session');
+        }
+        
         const currentUser = session?.user ?? null;
         
         if (isMounted) {
@@ -151,10 +177,21 @@ export const AuthProvider = ({ children }) => {
         
         if (currentUser && isMounted) {
           setProfileLoading(true);
-          const userProfile = await fetchProfile(currentUser.id);
-          if (isMounted) {
-            setProfile(userProfile);
-            setProfileLoading(false);
+          try {
+            const userProfile = await fetchProfile(currentUser.id);
+            if (isMounted) {
+              setProfile(userProfile);
+            }
+          } catch (profileError) {
+            console.error('Error fetching profile:', profileError);
+            // Use helper function for fallback profile
+            if (isMounted) {
+              setProfile(createFallbackProfile(currentUser));
+            }
+          } finally {
+            if (isMounted) {
+              setProfileLoading(false);
+            }
           }
         }
         
@@ -165,6 +202,7 @@ export const AuthProvider = ({ children }) => {
         console.error('Error getting session:', error);
         if (isMounted) {
           setLoading(false);
+          setProfileLoading(false);
         }
       }
     };
@@ -181,13 +219,25 @@ export const AuthProvider = ({ children }) => {
       
       if (currentUser && isMounted) {
         setProfileLoading(true);
-        const userProfile = await fetchProfile(currentUser.id);
-        if (isMounted) {
-          setProfile(userProfile);
-          setProfileLoading(false);
+        try {
+          const userProfile = await fetchProfile(currentUser.id);
+          if (isMounted) {
+            setProfile(userProfile);
+          }
+        } catch (profileError) {
+          console.error('Error fetching profile on auth change:', profileError);
+          // Use helper function for fallback profile
+          if (isMounted) {
+            setProfile(createFallbackProfile(currentUser));
+          }
+        } finally {
+          if (isMounted) {
+            setProfileLoading(false);
+          }
         }
       } else if (isMounted) {
         setProfile(null);
+        setProfileLoading(false);
       }
       
       if (isMounted) {

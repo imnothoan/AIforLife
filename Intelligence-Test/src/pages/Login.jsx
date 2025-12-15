@@ -56,31 +56,63 @@ export default function Login() {
 
   // Helper function to translate Zod validation errors
   const translateValidationError = (error) => {
-    // Check if error has valid errors array
-    if (!error?.errors || error.errors.length === 0) {
+    // Check if error has valid issues/errors
+    // Zod v3 uses 'issues' but some versions use 'errors'
+    const errorList = error?.issues || error?.errors || [];
+    
+    if (errorList.length === 0) {
+      // Try to parse from message if no issues array
+      if (error?.message) {
+        try {
+          const parsed = JSON.parse(error.message);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            const firstError = parsed[0];
+            return getErrorMessage(firstError);
+          }
+        } catch (e) {
+          // Not JSON format - this is expected for non-Zod errors
+          console.debug('Validation error message is not JSON:', error.message);
+        }
+      }
       return t('validation.required');
     }
     
-    const firstError = error.errors[0];
-    const code = firstError?.code;
-    const path = firstError?.path?.[0];
+    return getErrorMessage(errorList[0]);
+  };
+  
+  // Get user-friendly error message based on Zod error
+  const getErrorMessage = (errorItem) => {
+    const code = errorItem?.code;
+    const path = errorItem?.path?.[0];
+    const message = errorItem?.message || '';
+    const format = errorItem?.format;
     
-    // Handle empty/missing fields with specific messages
-    if (code === 'too_small' || code === 'invalid_type') {
-      if (path === 'email') {
+    // Handle email field errors
+    if (path === 'email') {
+      // Check for invalid format (email validation failed)
+      if (code === 'invalid_format' && format === 'email') {
+        // Empty email shows as invalid format too
         return t('validation.emailRequired');
       }
-      if (path === 'password') {
-        return t('validation.passwordRequired');
+      if (code === 'invalid_string' || code === 'too_small' || code === 'invalid_type') {
+        return t('validation.emailRequired');
       }
-      if (path === 'fullName') {
-        return t('validation.minLength', { min: 2 });
-      }
+      return t('validation.emailRequired');
     }
     
-    // Handle invalid email format
-    if (code === 'invalid_string' && path === 'email') {
-      return t('validation.invalidEmail');
+    // Handle password field errors
+    if (path === 'password') {
+      if (code === 'too_small' || code === 'invalid_type') {
+        return t('validation.passwordRequired');
+      }
+      return t('validation.minLength', { min: 6 });
+    }
+    
+    // Handle fullName field errors
+    if (path === 'fullName') {
+      if (code === 'too_small' || code === 'invalid_type') {
+        return t('validation.minLength', { min: 2 });
+      }
     }
     
     // Handle password confirmation mismatch

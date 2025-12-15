@@ -141,7 +141,7 @@ function CreateExamForm({ classId, onClose, onSuccess }) {
     
     const createExam = async (attempt = 0) => {
       const MAX_RETRIES = 3;
-      const TIMEOUT_MS = 15000;
+      const TIMEOUT_MS = 30000; // Increased to 30 seconds
       try {
         // Use Promise.race for timeout since Supabase doesn't support AbortController
         const timeoutPromise = new Promise((_, reject) => 
@@ -427,6 +427,50 @@ function AddStudentForm({ classId, onClose, onSuccess }) {
   const [bulkEmails, setBulkEmails] = useState('');
   const [mode, setMode] = useState('single'); // 'single' | 'bulk'
 
+  // Direct method to add student (fallback when RPC not available)
+  const addStudentDirect = async (studentEmail) => {
+    // Find user by email directly
+    const { data: profileData, error: profileError } = await supabase
+      .from('profiles')
+      .select('id, role')
+      .eq('email', studentEmail.toLowerCase().trim())
+      .single();
+
+    if (profileError) {
+      if (profileError.code === 'PGRST116') {
+        return { success: false, error: 'student_not_found' };
+      }
+      console.error('Profile lookup error:', profileError);
+      return { success: false, error: 'lookup_failed' };
+    }
+
+    if (!profileData) {
+      return { success: false, error: 'student_not_found' };
+    }
+
+    // Note: We allow adding any user (student or instructor) for flexibility
+    // Role validation can be added here if needed in the future
+
+    // Add enrollment directly
+    const { error: enrollError } = await supabase
+      .from('enrollments')
+      .insert({
+        class_id: classId,
+        student_id: profileData.id,
+        status: 'active'
+      });
+
+    if (enrollError) {
+      if (enrollError.code === '23505') {
+        return { success: false, error: 'already_enrolled' };
+      }
+      console.error('Enroll error:', enrollError);
+      return { success: false, error: 'enroll_failed' };
+    }
+
+    return { success: true };
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     
@@ -459,7 +503,7 @@ function AddStudentForm({ classId, onClose, onSuccess }) {
     let successCount = 0;
     let errorCount = 0;
     const errorMessages = [];
-    const TIMEOUT_MS = 10000; // 10 second timeout per request
+    const TIMEOUT_MS = 15000; // 15 second timeout per request
 
     for (const studentEmail of emails) {
       try {
@@ -468,56 +512,14 @@ function AddStudentForm({ classId, onClose, onSuccess }) {
           setTimeout(() => reject(new Error('REQUEST_TIMEOUT')), TIMEOUT_MS)
         );
 
-        // Use RPC function to add student (bypasses RLS restrictions)
-        const rpcPromise = supabase
-          .rpc('add_student_to_class', {
-            p_class_id: classId,
-            p_student_email: studentEmail.toLowerCase().trim()
-          });
+        // Use direct method (more reliable than RPC which may not exist)
+        const directPromise = addStudentDirect(studentEmail);
+        const result = await Promise.race([directPromise, timeoutPromise]);
 
-        const { data: result, error: rpcError } = await Promise.race([rpcPromise, timeoutPromise]);
-
-        if (rpcError) {
-          // RPC function doesn't exist or failed - fallback to direct method
-          console.warn('RPC not available, using direct method:', rpcError);
-          
-          // Fallback: Find user by email directly
-          const { data: profile, error: profileError } = await supabase
-            .from('profiles')
-            .select('id')
-            .eq('email', studentEmail.toLowerCase().trim())
-            .single();
-
-          if (profileError || !profile) {
-            errorMessages.push(`${studentEmail}: ${t('student.notRegistered')}`);
-            errorCount++;
-            continue;
-          }
-
-          // Add enrollment directly
-          const { error: enrollError } = await supabase
-            .from('enrollments')
-            .insert({
-              class_id: classId,
-              student_id: profile.id,
-              status: 'active'
-            });
-
-          if (enrollError) {
-            if (enrollError.code === '23505') {
-              errorMessages.push(`${studentEmail}: ${t('student.alreadyInClass')}`);
-            } else {
-              console.error('Enroll error:', enrollError);
-              errorMessages.push(`${studentEmail}: ${t('student.addError')}`);
-            }
-            errorCount++;
-          } else {
-            successCount++;
-          }
-        } else if (result && result.success) {
+        if (result.success) {
           successCount++;
-        } else if (result) {
-          // Handle RPC error responses
+        } else {
+          // Handle error responses
           const errorKey = result.error;
           if (errorKey === 'student_not_found') {
             errorMessages.push(`${studentEmail}: ${t('student.notRegistered')}`);
