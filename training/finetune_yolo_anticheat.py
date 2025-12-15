@@ -1,12 +1,15 @@
 #!/usr/bin/env python3
 """
-YOLO Anti-Cheat Model Fine-tuning Script
-=========================================
-This script fine-tunes the existing YOLO model to improve detection of:
+YOLO Segmentation Anti-Cheat Model Fine-tuning Script
+======================================================
+This script fine-tunes the existing YOLO SEGMENTATION model to improve detection of:
 - Phone (currently weak)
 - Material/Paper (currently weak)
 - Person (needs improvement)
 - Headphones (already good)
+
+IMPORTANT: This script is designed for YOLO Segmentation models (yolo11s-seg, etc.)
+It automatically converts bounding box labels to segmentation polygon format.
 
 Run this on Google Colab with GPU for best results.
 """
@@ -51,17 +54,19 @@ CLASS_MAPPING = {
     'phone': 'phone', 'mobile': 'phone', 'cell phone': 'phone', 
     'telephone': 'phone', 'smartphone': 'phone', 'cellphone': 'phone',
     'mobile phone': 'phone', 'iphone': 'phone', 'android': 'phone',
+    'ProductRecog - v2 2024-11-05 7:03am': 'phone',
     
     # Material/Paper variations
     'paper': 'material', 'document': 'material', 'book': 'material',
     'notebook': 'material', 'notes': 'material', 'sheet': 'material',
-    'material': 'material', 'cheat sheet': 'material',
+    'material': 'material', 'cheat sheet': 'material', 'PAPER': 'material', 'Paper': 'material',
     
     # Headphones variations
     'headphone': 'headphones', 'headphones': 'headphones', 
     'earphone': 'headphones', 'earphones': 'headphones',
     'headset': 'headphones', 'earbuds': 'headphones', 'earbud': 'headphones',
-    'airpods': 'headphones', 'ear device': 'headphones',
+    'airpods': 'headphones', 'ear device': 'headphones', 'Headphone': 'headphones',
+    'left earbud': 'headphones', 'eardevice': 'headphones',
 }
 
 # Training configuration
@@ -112,8 +117,40 @@ def normalize_class(class_name):
     return -1  # Unknown class
 
 
+def bbox_to_segment(bbox_coords):
+    """
+    Convert YOLO bounding box (x_center, y_center, width, height) to 
+    segmentation polygon format (x1 y1 x2 y2 x3 y3 x4 y4).
+    
+    This is required for training segmentation models with detection datasets.
+    Returns None if the input is invalid or results in out-of-bounds coordinates.
+    """
+    try:
+        xc, yc, w, h = map(float, bbox_coords)
+        
+        # Validate input values are in valid range [0, 1]
+        if not (0 <= xc <= 1 and 0 <= yc <= 1 and 0 < w <= 1 and 0 < h <= 1):
+            return None
+            
+        # Calculate corner points (normalized coordinates)
+        x1, y1 = xc - w/2, yc - h/2  # Top-left
+        x2, y2 = xc + w/2, yc - h/2  # Top-right
+        x3, y3 = xc + w/2, yc + h/2  # Bottom-right
+        x4, y4 = xc - w/2, yc + h/2  # Bottom-left
+        
+        # Clamp values to [0, 1] range
+        x1, y1 = max(0, x1), max(0, y1)
+        x2, y2 = min(1, x2), max(0, y2)
+        x3, y3 = min(1, x3), min(1, y3)
+        x4, y4 = max(0, x4), min(1, y4)
+        
+        return f"{x1} {y1} {x2} {y2} {x3} {y3} {x4} {y4}"
+    except (ValueError, TypeError):
+        return None
+
+
 def convert_labels(dataset_dir, output_dir, split='train'):
-    """Convert dataset labels to unified format"""
+    """Convert dataset labels to unified SEGMENTATION format"""
     images_out = os.path.join(output_dir, split, 'images')
     labels_out = os.path.join(output_dir, split, 'labels')
     os.makedirs(images_out, exist_ok=True)
@@ -141,6 +178,9 @@ def convert_labels(dataset_dir, output_dir, split='train'):
     
     # Process images and labels
     count = 0
+    bbox_converted = 0
+    seg_preserved = 0
+    
     for split_name in ['train', 'valid', 'test']:
         img_dir = os.path.join(dataset_dir, split_name, 'images')
         lbl_dir = os.path.join(dataset_dir, split_name, 'labels')
@@ -157,7 +197,7 @@ def convert_labels(dataset_dir, output_dir, split='train'):
             dst_img = os.path.join(images_out, f"{Path(dataset_dir).name}_{img_file}")
             shutil.copy(src_img, dst_img)
             
-            # Convert label
+            # Convert label to segmentation format
             lbl_file = os.path.splitext(img_file)[0] + '.txt'
             src_lbl = os.path.join(lbl_dir, lbl_file)
             dst_lbl = os.path.join(labels_out, f"{Path(dataset_dir).name}_{lbl_file}")
@@ -178,14 +218,28 @@ def convert_labels(dataset_dir, output_dir, split='train'):
                         new_class_id = normalize_class(old_class_name)
                         
                         if new_class_id >= 0:
-                            parts[0] = str(new_class_id)
-                            new_lines.append(' '.join(parts))
+                            # Check if this is bounding box (5 parts) or segmentation (9+ parts)
+                            # Bounding box: class x_center y_center width height (5 values)
+                            # Segmentation: class x1 y1 x2 y2 x3 y3 x4 y4... (9+ values for rectangle/polygon)
+                            if len(parts) == 5:
+                                # Bounding box format: class x_center y_center width height
+                                # Convert to segmentation polygon format
+                                segment_coords = bbox_to_segment(parts[1:])
+                                if segment_coords:
+                                    new_lines.append(f"{new_class_id} {segment_coords}")
+                                    bbox_converted += 1
+                            elif len(parts) >= 9:
+                                # Already segmentation format: class x1 y1 x2 y2 x3 y3 x4 y4 ...
+                                new_lines.append(f"{new_class_id} {' '.join(parts[1:])}")
+                                seg_preserved += 1
+                            # Skip labels with 6-8 parts as they're likely malformed
                 
                 if new_lines:
                     with open(dst_lbl, 'w') as f:
                         f.write('\n'.join(new_lines))
                     count += 1
     
+    print(f"  Converted {bbox_converted} bboxes to polygons, preserved {seg_preserved} segmentation labels")
     return count
 
 

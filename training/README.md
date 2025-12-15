@@ -1,6 +1,20 @@
-# YOLO Anti-Cheat Model Training
+# YOLO Segmentation Anti-Cheat Model Training
 
-This folder contains scripts for fine-tuning the YOLO model used for AI proctoring in SmartExamPro.
+This folder contains scripts for fine-tuning the YOLO **segmentation** model used for AI proctoring in SmartExamPro.
+
+## ⚠️ Important: Segmentation Model
+
+The anti-cheat system uses a **YOLO Segmentation model** (yolo11s-seg), NOT a detection model. 
+The training scripts automatically convert bounding box labels to segmentation polygon format.
+
+If you get this error:
+```
+TypeError: ERROR ❌ segment dataset incorrectly formatted or not a segment dataset.
+```
+
+This means the labels are in detection format (5 values: class x_center y_center width height) 
+instead of segmentation format (class followed by polygon coordinates). 
+The updated scripts now handle this conversion automatically.
 
 ## Current Model Status
 
@@ -78,6 +92,12 @@ TRAIN_CONFIG = {
 
 ## Troubleshooting
 
+### "segment dataset incorrectly formatted" Error
+This error occurs when training a segmentation model with detection-format labels.
+- **Solution**: Use the updated `finetune_yolo_colab.ipynb` or `finetune_yolo_anticheat.py`
+- These scripts automatically convert bounding box labels to segmentation polygon format
+- Make sure you're using a segmentation model (`yolo11s-seg.pt`, NOT `yolo11s.pt`)
+
 ### Low detection confidence
 - Train for more epochs (increase to 100-150)
 - Add more training data
@@ -89,5 +109,6 @@ TRAIN_CONFIG = {
 
 ### Model not detecting objects
 - Verify class mapping is correct
-- Check that labels are in YOLO format
+- Check that labels are in YOLO segmentation format (polygon coordinates)
 - Ensure image preprocessing matches training
+- For segmentation models: labels should have more than 5 values per line
