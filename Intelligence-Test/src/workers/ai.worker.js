@@ -45,8 +45,8 @@ const CONFIG = {
     MODEL_PATH: '/models/anticheat_yolo11s.onnx',
     INPUT_SIZE: 640, // Model was trained with 640x640 input
     // Confidence threshold for detection
-    // 0.25 provides good balance between detection sensitivity and false positives
-    CONFIDENCE_THRESHOLD: 0.25,
+    // 0.15 provides better detection sensitivity (lowered from 0.25)
+    CONFIDENCE_THRESHOLD: 0.15,
     IOU_THRESHOLD: 0.45,
     CLASSES: ['person', 'phone', 'material', 'headphones'], // Must match training classes
     ALERT_CLASSES: ['phone', 'material', 'headphones'], // Classes that trigger alerts

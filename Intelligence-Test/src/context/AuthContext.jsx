@@ -49,9 +49,16 @@ export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [profileLoading, setProfileLoading] = useState(false);
 
-  // Fetch user profile from database
-  const fetchProfile = useCallback(async (userId) => {
+  // Fetch user profile from database with retry logic
+  const fetchProfile = useCallback(async (userId, retryCount = 0) => {
+    const MAX_RETRIES = 3;
+    const BASE_RETRY_DELAY = 500; // ms
+    
+    // Calculate exponential backoff delay
+    const getBackoffDelay = (attempt) => BASE_RETRY_DELAY * Math.pow(2, attempt);
+    
     try {
       const { data, error } = await supabase
         .from('profiles')
@@ -59,57 +66,137 @@ export const AuthProvider = ({ children }) => {
         .eq('id', userId)
         .single();
       
-      if (error && error.code !== 'PGRST116') {
-        console.error('Error fetching profile:', error);
+      if (error) {
+        // PGRST116 means no rows returned - profile may not exist yet
+        if (error.code === 'PGRST116') {
+          // Profile doesn't exist yet, try to create it from user metadata
+          const { data: { user: authUser } } = await supabase.auth.getUser();
+          if (authUser) {
+            const metadata = authUser.user_metadata || {};
+            const role = metadata.role || 'student';
+            const fullName = metadata.full_name || authUser.email?.split('@')[0] || 'User';
+            
+            // Try to create profile
+            const { data: newProfile, error: createError } = await supabase
+              .from('profiles')
+              .upsert({
+                id: userId,
+                email: authUser.email,
+                full_name: fullName,
+                role: role,
+                student_id: metadata.student_id || null
+              }, { onConflict: 'id' })
+              .select()
+              .single();
+            
+            if (createError) {
+              console.error('Error creating profile:', createError);
+              // If creation failed and we haven't retried too many times, wait and retry with exponential backoff
+              if (retryCount < MAX_RETRIES) {
+                await new Promise(resolve => setTimeout(resolve, getBackoffDelay(retryCount)));
+                return fetchProfile(userId, retryCount + 1);
+              }
+              // Return a fallback profile based on user metadata
+              return {
+                id: userId,
+                email: authUser.email,
+                full_name: fullName,
+                role: role,
+                student_id: metadata.student_id || null
+              };
+            }
+            return newProfile;
+          }
+        } else {
+          console.error('Error fetching profile:', error);
+          // Retry on other errors with exponential backoff
+          if (retryCount < MAX_RETRIES) {
+            await new Promise(resolve => setTimeout(resolve, getBackoffDelay(retryCount)));
+            return fetchProfile(userId, retryCount + 1);
+          }
+        }
+        return null;
       }
       return data;
     } catch (err) {
       console.error('Profile fetch error:', err);
+      if (retryCount < MAX_RETRIES) {
+        await new Promise(resolve => setTimeout(resolve, getBackoffDelay(retryCount)));
+        return fetchProfile(userId, retryCount + 1);
+      }
       return null;
     }
   }, []);
 
   useEffect(() => {
+    let isMounted = true;
+    
     // Add timeout to prevent infinite loading
     const loadingTimeout = setTimeout(() => {
-      if (loading) {
+      if (isMounted && loading) {
         console.warn('Auth loading timeout - forcing completion');
         setLoading(false);
       }
     }, 10000); // 10 second timeout
 
     // Check active session on mount
-    supabase.auth.getSession().then(async ({ data: { session } }) => {
-      const currentUser = session?.user ?? null;
-      setUser(currentUser);
-      
-      if (currentUser) {
-        const userProfile = await fetchProfile(currentUser.id);
-        setProfile(userProfile);
+    const initAuth = async () => {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        const currentUser = session?.user ?? null;
+        
+        if (isMounted) {
+          setUser(currentUser);
+        }
+        
+        if (currentUser && isMounted) {
+          setProfileLoading(true);
+          const userProfile = await fetchProfile(currentUser.id);
+          if (isMounted) {
+            setProfile(userProfile);
+            setProfileLoading(false);
+          }
+        }
+        
+        if (isMounted) {
+          setLoading(false);
+        }
+      } catch (error) {
+        console.error('Error getting session:', error);
+        if (isMounted) {
+          setLoading(false);
+        }
       }
-      
-      setLoading(false);
-    }).catch((error) => {
-      console.error('Error getting session:', error);
-      setLoading(false);
-    });
+    };
+    
+    initAuth();
 
     // Listen for changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
       const currentUser = session?.user ?? null;
-      setUser(currentUser);
       
-      if (currentUser) {
+      if (isMounted) {
+        setUser(currentUser);
+      }
+      
+      if (currentUser && isMounted) {
+        setProfileLoading(true);
         const userProfile = await fetchProfile(currentUser.id);
-        setProfile(userProfile);
-      } else {
+        if (isMounted) {
+          setProfile(userProfile);
+          setProfileLoading(false);
+        }
+      } else if (isMounted) {
         setProfile(null);
       }
       
-      setLoading(false);
+      if (isMounted) {
+        setLoading(false);
+      }
     });
 
     return () => {
+      isMounted = false;
       clearTimeout(loadingTimeout);
       subscription.unsubscribe();
     };
@@ -236,6 +323,7 @@ export const AuthProvider = ({ children }) => {
     <AuthContext.Provider value={{ 
       user, 
       profile,
+      profileLoading,
       login, 
       register,
       logout, 

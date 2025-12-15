@@ -199,15 +199,15 @@ export default function Exam() {
                         document.mozFullScreenElement || document.msFullscreenElement);
       setIsFullscreen(isFull);
       
-      // Don't trigger violation if submitting or on Safari (which has limited support)
+      // On Safari, fullscreen API has limited support - skip violations
+      if (IS_SAFARI) {
+        console.log("Safari fullscreen state change - skipping violation check");
+        return;
+      }
+      
+      // Don't trigger violation if submitting or not in exam
       // Use ref instead of state because event handlers have stale closure
       if (!isFull && examStarted && !isSubmittingRef.current) {
-        // On Safari, fullscreen exit may happen during submit - ignore it
-        if (IS_SAFARI) {
-          console.warn("Safari fullscreen state change - continuing without violation");
-          return;
-        }
-        
         setFullscreenViolations(prev => {
           const newVal = prev + 1;
           toast.error(`CẢNH BÁO: Bạn đã thoát toàn màn hình ${newVal} lần!`);
@@ -236,8 +236,8 @@ export default function Exam() {
   // ============================================
   useEffect(() => {
     const handleVisibilityChange = () => {
-      // Don't trigger violation if submitting
-      if (document.hidden && examStarted && !isSubmitting) {
+      // Don't trigger violation if submitting (use ref for current value)
+      if (document.hidden && examStarted && !isSubmittingRef.current) {
         setTabViolations(prev => {
           const newVal = prev + 1;
           toast.warning(`CẢNH BÁO: Phát hiện rời tab ${newVal} lần! Hành vi này được ghi lại.`);
@@ -248,7 +248,7 @@ export default function Exam() {
     };
     document.addEventListener('visibilitychange', handleVisibilityChange);
     return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
-  }, [examStarted, isSubmitting]);
+  }, [examStarted]);
 
   // ============================================
   // KEYBOARD SHORTCUTS PREVENTION
@@ -323,10 +323,27 @@ export default function Exam() {
         setGazeAwayCount(prev => prev + 1);
       }
     };
+    
+    // Handle worker errors
+    workerRef.current.onerror = (error) => {
+      console.error('AI Worker error:', error);
+      setStatus('AI Worker error - basic mode');
+    };
+
+    let frameInterval = null;
+    let streamRef = null;
 
     const startCamera = async () => {
       try {
-        const stream = await navigator.mediaDevices.getUserMedia({ video: { width: 640, height: 480 } });
+        const stream = await navigator.mediaDevices.getUserMedia({ 
+          video: { 
+            width: { ideal: 640 }, 
+            height: { ideal: 480 },
+            facingMode: 'user'
+          } 
+        });
+        streamRef = stream;
+        
         if (videoRef.current) {
           videoRef.current.srcObject = stream;
           videoRef.current.onloadeddata = () => {
@@ -334,17 +351,29 @@ export default function Exam() {
             canvas.width = 640;
             canvas.height = 480;
             const ctx = canvas.getContext('2d', { willReadFrequently: true });
-            setInterval(() => {
-              if (videoRef.current && workerRef.current && examStarted) {
-                ctx.drawImage(videoRef.current, 0, 0, 640, 480);
-                const imageData = ctx.getImageData(0, 0, 640, 480);
-                workerRef.current.postMessage({ type: 'PROCESS_FRAME', payload: imageData }, [imageData.data.buffer]);
+            
+            // Send frames to worker every 200ms
+            frameInterval = setInterval(() => {
+              if (videoRef.current && workerRef.current && examStarted && !isSubmittingRef.current) {
+                try {
+                  ctx.drawImage(videoRef.current, 0, 0, 640, 480);
+                  const imageData = ctx.getImageData(0, 0, 640, 480);
+                  // Only send if we have valid image data
+                  if (imageData.data && imageData.data.length > 0) {
+                    workerRef.current.postMessage(
+                      { type: 'PROCESS_FRAME', payload: imageData }, 
+                      [imageData.data.buffer]
+                    );
+                  }
+                } catch (err) {
+                  console.warn('Error sending frame to worker:', err);
+                }
               }
             }, 200);
           };
         }
       } catch (err) {
-        console.error(err);
+        console.error('Camera access error:', err);
         toast.error(t('anticheat.cameraAccess'));
       }
     };
@@ -353,7 +382,21 @@ export default function Exam() {
     return () => {
       window.removeEventListener('online', handleOnline);
       window.removeEventListener('offline', handleOffline);
-      if (workerRef.current) workerRef.current.terminate();
+      
+      // Clear the frame interval
+      if (frameInterval) {
+        clearInterval(frameInterval);
+      }
+      
+      // Stop camera stream
+      if (streamRef) {
+        streamRef.getTracks().forEach(track => track.stop());
+      }
+      
+      // Terminate worker
+      if (workerRef.current) {
+        workerRef.current.terminate();
+      }
     };
   }, [examStarted]);
 

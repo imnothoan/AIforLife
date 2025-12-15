@@ -37,26 +37,42 @@ axios.interceptors.response.use(
 );
 
 function PrivateRoute({ children }) {
-  const { user, loading } = useAuth();
+  const { user, profile, profileLoading, loading } = useAuth();
   
   // Show loading while auth is being checked
   if (loading) {
     return <LoadingFallback />;
   }
   
-  return user ? children : <Navigate to="/login" />;
+  if (!user) {
+    return <Navigate to="/login" replace />;
+  }
+  
+  // Wait for profile to be loaded (profileLoading is true while fetching)
+  if (profileLoading && !profile) {
+    return <LoadingFallback />;
+  }
+  
+  return children;
 }
 
 function InstructorRoute({ children }) {
-  const { user, isInstructor, loading } = useAuth();
+  const { user, profile, profileLoading, isInstructor, loading } = useAuth();
   
   // Show loading while auth is being checked
   if (loading) {
     return <LoadingFallback />;
   }
   
-  if (!user) return <Navigate to="/login" />;
-  if (!isInstructor()) return <Navigate to="/" />;
+  if (!user) return <Navigate to="/login" replace />;
+  
+  // Wait for profile to be loaded before checking role
+  if (profileLoading && !profile) {
+    return <LoadingFallback />;
+  }
+  
+  // Now check if instructor (profile should be loaded by now)
+  if (!isInstructor()) return <Navigate to="/" replace />;
   return children;
 }
 
