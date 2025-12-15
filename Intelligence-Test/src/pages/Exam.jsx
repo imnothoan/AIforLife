@@ -306,14 +306,22 @@ export default function Exam() {
   // NETWORK & CAMERA SETUP
   // ============================================
   useEffect(() => {
-    const handleOnline = () => { setIsOffline(false); toast.success("Đã kết nối lại mạng."); };
-    const handleOffline = () => { setIsOffline(true); toast.error(translate('error.networkOffline')); };
+    const handleOnline = () => { setIsOffline(false); toast.success(translate('anticheat.networkOnline')); };
+    const handleOffline = () => { setIsOffline(true); toast.error(translate('anticheat.networkOffline')); };
     window.addEventListener('online', handleOnline);
     window.addEventListener('offline', handleOffline);
 
     // Helper function to translate AI worker messages
     const translateWorkerMessage = (data) => {
-      const { code, payload, detectedClass, confidence, count, direction } = data;
+      const { code, payload, detectedClass, confidence, count } = data;
+      
+      // Map detection classes to translation keys (predefined for maintainability)
+      const detectionClassMap = {
+        'phone': translate('anticheat.phoneDetected'),
+        'material': translate('anticheat.materialDetected'),
+        'headphones': translate('anticheat.headphonesDetected'),
+        'person': translate('anticheat.noFace'), // person detection for multi-person
+      };
       
       // Map message codes to translation keys
       const messageMap = {
@@ -331,8 +339,13 @@ export default function Exam() {
         'materialDetected': translate('anticheat.materialDetected'),
         'headphonesDetected': translate('anticheat.headphonesDetected'),
         'monitoring': translate('anticheat.monitoring'),
-        'detection': `${translate('anticheat.' + detectedClass + 'Detected')} (${((confidence || 0) * 100).toFixed(0)}%)`,
       };
+      
+      // Handle detection messages with confidence
+      if (code === 'detection' && detectedClass && detectionClassMap[detectedClass]) {
+        const detectionMsg = detectionClassMap[detectedClass];
+        return `${detectionMsg} (${((confidence || 0) * 100).toFixed(0)}%)`;
+      }
       
       return messageMap[code] || messageMap[payload] || payload;
     };
