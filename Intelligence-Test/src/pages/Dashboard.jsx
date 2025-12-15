@@ -9,7 +9,7 @@ import { LogOut, FileText, User, PlayCircle, Clock, CheckCircle, AlertCircle, Lo
 import LanguageSwitcher from '../components/LanguageSwitcher';
 
 export default function Dashboard() {
-  const { user, profile, logout } = useAuth();
+  const { user, profile, profileLoading, logout, isInstructor } = useAuth();
   const { t } = useLanguage();
   const navigate = useNavigate();
 
@@ -19,21 +19,35 @@ export default function Dashboard() {
 
   // If instructor, redirect to instructor dashboard
   useEffect(() => {
-    // Wait for profile to be loaded before checking role
-    if (profile && profile.role) {
-      if (profile.role === 'instructor' || profile.role === 'admin') {
-        setRedirecting(true);
-        // Use replace to prevent back button issues
-        navigate('/instructor', { replace: true });
-      }
+    // Wait for profile to be fully loaded before checking role
+    if (profileLoading) return;
+    
+    // Check role from profile or use isInstructor helper
+    const shouldRedirect = isInstructor() || 
+      profile?.role === 'instructor' || 
+      profile?.role === 'admin' ||
+      // Also check user metadata as fallback
+      user?.user_metadata?.role === 'instructor' ||
+      user?.user_metadata?.role === 'admin';
+    
+    if (shouldRedirect) {
+      setRedirecting(true);
+      // Use replace to prevent back button issues
+      navigate('/instructor', { replace: true });
     }
-  }, [profile, navigate]);
+  }, [profile, profileLoading, user, navigate, isInstructor]);
 
   // Load available exams for student
   useEffect(() => {
     const loadExams = async () => {
+      // Wait for profile to be loaded before checking role
+      if (profileLoading) return;
+      
       // Don't load exams for instructors or if profile indicates instructor role, or if we're redirecting
-      if (!user || profile?.role === 'instructor' || profile?.role === 'admin' || redirecting) return;
+      const isInstructorUser = profile?.role === 'instructor' || profile?.role === 'admin' ||
+        user?.user_metadata?.role === 'instructor' || user?.user_metadata?.role === 'admin';
+      
+      if (!user || isInstructorUser || redirecting) return;
 
       try {
         // Get enrolled classes
@@ -100,7 +114,7 @@ export default function Dashboard() {
     };
 
     loadExams();
-  }, [user, profile, t]);
+  }, [user, profile, profileLoading, redirecting, t]);
 
   const handleLogout = async () => {
     await logout();

@@ -27,7 +27,7 @@ const DEMO_EXAM_IDS = ['demo', '1'];
 const DEMO_SESSION_IDS = ['demo-session', 'demo-session-id'];
 
 // Timeout constants
-const SUBMIT_TIMEOUT_MS = 15000;
+const SUBMIT_TIMEOUT_MS = 30000; // Increased to 30 seconds for better reliability
 const SUBMIT_TIMEOUT_ERROR = 'SUBMIT_TIMEOUT';
 
 export default function Exam() {

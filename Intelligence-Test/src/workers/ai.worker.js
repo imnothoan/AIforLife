@@ -45,8 +45,8 @@ const CONFIG = {
     MODEL_PATH: '/models/anticheat_yolo11s.onnx',
     INPUT_SIZE: 640, // Model was trained with 640x640 input
     // Confidence threshold for detection
-    // 0.15 provides better detection sensitivity (lowered from 0.25)
-    CONFIDENCE_THRESHOLD: 0.15,
+    // 0.10 provides maximum sensitivity for anti-cheat purposes
+    CONFIDENCE_THRESHOLD: 0.10,
     IOU_THRESHOLD: 0.45,
     CLASSES: ['person', 'phone', 'material', 'headphones'], // Must match training classes
     ALERT_CLASSES: ['phone', 'material', 'headphones'], // Classes that trigger alerts
@@ -126,14 +126,37 @@ async function initializeAI() {
     try {
       ort.env.wasm.wasmPaths = 'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.20.1/dist/';
       
-      // Fetch the model file first to check if it exists
-      console.log('Attempting to load YOLO model from:', CONFIG.YOLO.MODEL_PATH);
+      // Construct absolute URL for model (workers may have issues with relative paths)
+      const modelPath = CONFIG.YOLO.MODEL_PATH;
+      const baseUrl = self.location.origin || '';
+      const absoluteModelPath = modelPath.startsWith('/') ? baseUrl + modelPath : modelPath;
       
-      // Try to load the model
-      yoloSession = await ort.InferenceSession.create(CONFIG.YOLO.MODEL_PATH, {
-        executionProviders: ['wasm'],
-        graphOptimizationLevel: 'all'
-      });
+      console.log('Attempting to load YOLO model from:', absoluteModelPath);
+      console.log('Worker origin:', self.location.origin);
+      
+      // Try to load the model with multiple fallback paths
+      let loadError = null;
+      const pathsToTry = [absoluteModelPath, modelPath, './models/anticheat_yolo11s.onnx'];
+      
+      for (const tryPath of pathsToTry) {
+        try {
+          console.log('Trying to load from:', tryPath);
+          yoloSession = await ort.InferenceSession.create(tryPath, {
+            executionProviders: ['wasm'],
+            graphOptimizationLevel: 'all'
+          });
+          console.log('✅ Successfully loaded from:', tryPath);
+          loadError = null;
+          break;
+        } catch (err) {
+          console.warn('Failed to load from', tryPath, ':', err.message);
+          loadError = err;
+        }
+      }
+      
+      if (loadError) {
+        throw loadError;
+      }
       
       // Log input/output details for debugging
       console.log('✅ YOLO model loaded successfully!');
@@ -148,7 +171,7 @@ async function initializeAI() {
       
       self.postMessage({ type: 'STATUS', payload: 'AI proctoring active (Face + YOLO)' });
     } catch (yoloError) {
-      console.warn('YOLO model not available at', CONFIG.YOLO.MODEL_PATH);
+      console.warn('YOLO model not available');
       console.warn('Error details:', yoloError.message);
       console.warn('Stack:', yoloError.stack);
       // Still allow face detection to work
