@@ -4,14 +4,16 @@ import { LanguageProvider } from './context/LanguageContext';
 import { ToastContainer, toast } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 import ErrorBoundary from './components/ErrorBoundary';
-import Login from './pages/Login';
-import Exam from './pages/Exam';
-import Dashboard from './pages/Dashboard';
-import InstructorDashboard from './pages/InstructorDashboard';
 import './index.css';
 import axios from 'axios';
-import { Suspense } from 'react';
+import { Suspense, lazy } from 'react';
 import { t } from './lib/i18n';
+
+// Lazy load pages for better performance and smaller initial bundle
+const Login = lazy(() => import('./pages/Login'));
+const Dashboard = lazy(() => import('./pages/Dashboard'));
+const InstructorDashboard = lazy(() => import('./pages/InstructorDashboard'));
+const Exam = lazy(() => import('./pages/Exam'));
 
 // Loading fallback component
 const LoadingFallback = () => (
