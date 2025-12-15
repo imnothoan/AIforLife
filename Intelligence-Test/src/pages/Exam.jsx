@@ -307,19 +307,47 @@ export default function Exam() {
   // ============================================
   useEffect(() => {
     const handleOnline = () => { setIsOffline(false); toast.success("Đã kết nối lại mạng."); };
-    const handleOffline = () => { setIsOffline(true); toast.error("Mất kết nối mạng! Bài thi sẽ không được lưu."); };
+    const handleOffline = () => { setIsOffline(true); toast.error(translate('error.networkOffline')); };
     window.addEventListener('online', handleOnline);
     window.addEventListener('offline', handleOffline);
+
+    // Helper function to translate AI worker messages
+    const translateWorkerMessage = (data) => {
+      const { code, payload, detectedClass, confidence, count, direction } = data;
+      
+      // Map message codes to translation keys
+      const messageMap = {
+        'lookAtScreen': translate('anticheat.lookAtScreen'),
+        'NO_FACE': translate('anticheat.noFace'),
+        'LOOK_RIGHT': translate('anticheat.lookRight'),
+        'LOOK_LEFT': translate('anticheat.lookLeft'),
+        'LOOK_DOWN': translate('anticheat.lookDown'),
+        'LOOK_UP': translate('anticheat.lookUp'),
+        'GAZE_LEFT': translate('anticheat.gazeLeft'),
+        'GAZE_RIGHT': translate('anticheat.gazeRight'),
+        'speakingDetected': translate('anticheat.speakingDetected'),
+        'multiPerson': translate('anticheat.multiPerson', { count: count || 2 }),
+        'phoneDetected': translate('anticheat.phoneDetected'),
+        'materialDetected': translate('anticheat.materialDetected'),
+        'headphonesDetected': translate('anticheat.headphonesDetected'),
+        'monitoring': translate('anticheat.monitoring'),
+        'detection': `${translate('anticheat.' + detectedClass + 'Detected')} (${((confidence || 0) * 100).toFixed(0)}%)`,
+      };
+      
+      return messageMap[code] || messageMap[payload] || payload;
+    };
 
     // Initialize AI Worker
     workerRef.current = new Worker(new URL('../workers/ai.worker.js', import.meta.url), { type: 'module' });
     workerRef.current.onmessage = (e) => {
-      const { type, payload } = e.data;
-      if (type === 'STATUS') setStatus(payload);
+      const { type, payload, code } = e.data;
+      const translatedMessage = translateWorkerMessage(e.data);
+      
+      if (type === 'STATUS') setStatus(translatedMessage);
       else if (type === 'ALERT') {
         setCheatCount(prev => prev + 1);
-        toast.warning(`AI Cảnh báo: ${payload}`);
-        logProctoring('ai_alert', { message: payload });
+        toast.warning(`${translate('anticheat.aiWarning')}: ${translatedMessage}`);
+        logProctoring('ai_alert', { message: payload, code });
       } else if (type === 'GAZE_AWAY') {
         setGazeAwayCount(prev => prev + 1);
       }

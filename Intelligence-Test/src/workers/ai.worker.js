@@ -398,7 +398,7 @@ async function processFrame(imageData) {
   if (!isInitialized) {
     // Fallback random detection for demo
     if (Math.random() < 0.02) {
-      self.postMessage({ type: 'ALERT', payload: 'Vui lòng nhìn thẳng vào màn hình.' });
+      self.postMessage({ type: 'ALERT', payload: 'LOOK_AT_SCREEN', code: 'lookAtScreen' });
     }
     return;
   }
@@ -422,7 +422,7 @@ async function processFrame(imageData) {
         suspiciousFrameCount++;
         if (suspiciousFrameCount >= CONFIG.FACE.CONSECUTIVE_FRAMES) {
           isSuspicious = true;
-          suspicionReason = 'Không phát hiện khuôn mặt';
+          suspicionReason = 'NO_FACE'; // Message code for translation
         }
       } else {
         const landmarks = result.faceLandmarks[0];
@@ -435,13 +435,13 @@ async function processFrame(imageData) {
             suspiciousFrameCount++;
             if (suspiciousFrameCount >= CONFIG.FACE.CONSECUTIVE_FRAMES) {
               isSuspicious = true;
-              suspicionReason = pose.yaw > 0 ? 'Nhìn sang phải' : 'Nhìn sang trái';
+              suspicionReason = pose.yaw > 0 ? 'LOOK_RIGHT' : 'LOOK_LEFT';
             }
           } else if (Math.abs(pose.pitch) > CONFIG.FACE.PITCH_THRESHOLD) {
             suspiciousFrameCount++;
             if (suspiciousFrameCount >= CONFIG.FACE.CONSECUTIVE_FRAMES) {
               isSuspicious = true;
-              suspicionReason = pose.pitch > 0 ? 'Cúi đầu xuống' : 'Ngẩng đầu lên';
+              suspicionReason = pose.pitch > 0 ? 'LOOK_DOWN' : 'LOOK_UP';
             }
           } else {
             // Reset counter if looking at screen
@@ -456,7 +456,8 @@ async function processFrame(imageData) {
         if (eyeGaze.isLookingAway && now - lastEyeGazeAlert > 8000) {
           self.postMessage({ 
             type: 'GAZE_AWAY', 
-            payload: `Mắt nhìn ${eyeGaze.direction === 'left' ? 'sang trái' : 'sang phải'}` 
+            payload: eyeGaze.direction === 'left' ? 'GAZE_LEFT' : 'GAZE_RIGHT',
+            direction: eyeGaze.direction
           });
           lastEyeGazeAlert = now;
         }
@@ -468,7 +469,8 @@ async function processFrame(imageData) {
         if (lipAnalysis.isSpeaking && now - lastAlertTime > 10000) {
           self.postMessage({ 
             type: 'ALERT', 
-            payload: '⚠️ Phát hiện đang nói chuyện!' 
+            payload: 'SPEAKING_DETECTED',
+            code: 'speakingDetected'
           });
           lastAlertTime = now;
         }
@@ -521,7 +523,9 @@ async function processFrame(imageData) {
         if (personDetections.length > 1 && now - multiPersonAlertTime > 10000) {
           self.postMessage({ 
             type: 'ALERT', 
-            payload: `⚠️ Phát hiện ${personDetections.length} người trong khung hình!`
+            payload: 'MULTI_PERSON',
+            code: 'multiPerson',
+            count: personDetections.length
           });
           multiPersonAlertTime = now;
           console.log('🚨 Multi-person detected:', personDetections.length, 'people');
@@ -532,22 +536,23 @@ async function processFrame(imageData) {
         if (CONFIG.YOLO.ALERT_CLASSES.includes(detection.class)) {
           // Throttle alerts (max once per 5 seconds per class)
           if (now - lastAlertTime > 5000) {
-            const alertMessages = {
-              'phone': 'Phát hiện điện thoại!',
-              'material': 'Phát hiện tài liệu!',
-              'headphones': 'Phát hiện tai nghe!'
-            };
+            // Send detection class as code for i18n translation
             self.postMessage({ 
               type: 'ALERT', 
-              payload: alertMessages[detection.class] || `Phát hiện ${detection.class}!`
+              payload: detection.class.toUpperCase() + '_DETECTED',
+              code: detection.class + 'Detected',
+              detectedClass: detection.class,
+              confidence: detection.confidence
             });
             lastAlertTime = now;
             
             // Also update status to show detection
-            const statusMsg = alertMessages[detection.class] || `Phát hiện ${detection.class}!`;
             self.postMessage({ 
               type: 'STATUS', 
-              payload: `⚠️ ${statusMsg} (${(detection.confidence * 100).toFixed(0)}%)` 
+              payload: `DETECTION_${detection.class.toUpperCase()}`,
+              code: 'detection',
+              detectedClass: detection.class,
+              confidence: detection.confidence
             });
           }
           break;
@@ -560,18 +565,18 @@ async function processFrame(imageData) {
 
   // Send gaze away event (not blocking alert)
   if (isSuspicious && suspiciousFrameCount === CONFIG.FACE.CONSECUTIVE_FRAMES) {
-    self.postMessage({ type: 'GAZE_AWAY', payload: suspicionReason });
+    self.postMessage({ type: 'GAZE_AWAY', payload: suspicionReason, code: suspicionReason });
     
     // Only send alert for prolonged suspicious activity
     if (suspiciousFrameCount >= CONFIG.FACE.CONSECUTIVE_FRAMES * 2 && now - lastAlertTime > 5000) {
-      self.postMessage({ type: 'ALERT', payload: suspicionReason });
+      self.postMessage({ type: 'ALERT', payload: suspicionReason, code: suspicionReason });
       lastAlertTime = now;
     }
   }
 
   // Update status periodically
   if (Math.random() < 0.01) {
-    self.postMessage({ type: 'STATUS', payload: 'Đang giám sát...' });
+    self.postMessage({ type: 'STATUS', payload: 'MONITORING', code: 'monitoring' });
   }
 }
 
