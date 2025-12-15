@@ -45,8 +45,8 @@ const CONFIG = {
     MODEL_PATH: '/models/anticheat_yolo11s.onnx',
     INPUT_SIZE: 640, // Model was trained with 640x640 input
     // Confidence threshold for detection
-    // 0.10 provides maximum sensitivity for anti-cheat purposes
-    CONFIDENCE_THRESHOLD: 0.10,
+    // 0.05 - very low threshold to catch more detections (model may have low confidence)
+    CONFIDENCE_THRESHOLD: 0.05,
     IOU_THRESHOLD: 0.45,
     CLASSES: ['person', 'phone', 'material', 'headphones'], // Must match training classes
     ALERT_CLASSES: ['phone', 'material', 'headphones'], // Classes that trigger alerts
@@ -495,6 +495,12 @@ async function processFrame(imageData) {
     
     try {
       const detections = await runYoloInference(imageData);
+      
+      // Log detection count periodically (every 5 seconds)
+      if (!self.lastDetectionLog || (now - self.lastDetectionLog > 5000)) {
+        self.lastDetectionLog = now;
+        console.log(`🔍 YOLO inference: ${detections.length} detections (threshold: ${CONFIG.YOLO.CONFIDENCE_THRESHOLD})`);
+      }
       
       // Log all detections for debugging (only non-person detections)
       if (detections.length > 0) {
