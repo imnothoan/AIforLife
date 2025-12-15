@@ -233,6 +233,11 @@ CREATE POLICY "Users can update own profile"
   ON public.profiles FOR UPDATE
   USING (auth.uid() = id);
 
+-- Users can insert their own profile (needed when trigger doesn't work or for upsert)
+CREATE POLICY "Users can insert own profile"
+  ON public.profiles FOR INSERT
+  WITH CHECK (auth.uid() = id);
+
 CREATE POLICY "Instructors can view enrolled students"
   ON public.profiles FOR SELECT
   USING (

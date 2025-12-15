@@ -78,6 +78,49 @@ function InstructorRoute({ children }) {
   return children;
 }
 
+// Smart Home route - redirects based on user role
+function HomeRoute() {
+  const { user, profile, profileLoading, isInstructor, loading } = useAuth();
+  
+  // Show loading while auth is being checked
+  if (loading) {
+    return <LoadingFallback />;
+  }
+  
+  if (!user) {
+    return <Navigate to="/login" replace />;
+  }
+  
+  // Wait for profile to be loaded before checking role
+  if (profileLoading && !profile) {
+    return <LoadingFallback />;
+  }
+  
+  // Check role from multiple sources (profile, user metadata)
+  const userRole = profile?.role || user?.user_metadata?.role || 'student';
+  const shouldRedirectToInstructor = isInstructor() || 
+    userRole === 'instructor' || 
+    userRole === 'admin';
+  
+  // Debug logging for auth issues
+  if (process.env.NODE_ENV === 'development') {
+    console.log('[HomeRoute] Auth state:', {
+      userId: user?.id,
+      profileRole: profile?.role,
+      metadataRole: user?.user_metadata?.role,
+      userRole,
+      isInstructor: shouldRedirectToInstructor
+    });
+  }
+  
+  // Redirect based on role
+  if (shouldRedirectToInstructor) {
+    return <Navigate to="/instructor" replace />;
+  }
+  
+  return <Dashboard />;
+}
+
 function App() {
   return (
     <ErrorBoundary>
@@ -88,7 +131,7 @@ function App() {
               <div className="min-h-screen bg-background text-text-main font-sans">
                 <Routes>
                   <Route path="/login" element={<Login />} />
-                  <Route path="/" element={<PrivateRoute><Dashboard /></PrivateRoute>} />
+                  <Route path="/" element={<HomeRoute />} />
                   <Route path="/instructor" element={<InstructorRoute><InstructorDashboard /></InstructorRoute>} />
                   <Route path="/exam/:id" element={<PrivateRoute><Exam /></PrivateRoute>} />
                 </Routes>
