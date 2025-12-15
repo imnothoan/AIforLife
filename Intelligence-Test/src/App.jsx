@@ -102,8 +102,8 @@ function HomeRoute() {
     userRole === 'instructor' || 
     userRole === 'admin';
   
-  // Debug logging for auth issues
-  if (process.env.NODE_ENV === 'development') {
+  // Debug logging for auth issues (only in development mode)
+  if (import.meta.env.DEV) {
     console.log('[HomeRoute] Auth state:', {
       userId: user?.id,
       profileRole: profile?.role,
