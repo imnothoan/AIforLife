@@ -45,9 +45,10 @@ const CONFIG = {
   YOLO: {
     MODEL_PATH: '/models/anticheat_yolo11s.onnx',
     INPUT_SIZE: 640, // Model was trained with 640x640 input
-    // Confidence threshold - lowered significantly to detect more objects
-    // The model was trained on synthetic/simulated data so real-world scores may be lower
-    CONFIDENCE_THRESHOLD: 0.02,
+    // Confidence threshold - set very low to catch more detections
+    // Model was fine-tuned on specific objects, real-world performance may vary
+    // Training notebook showed: phone ~2-5%, material ~90%+, headphones ~40%+
+    CONFIDENCE_THRESHOLD: 0.01,
     IOU_THRESHOLD: 0.45,
     CLASSES: ['person', 'phone', 'material', 'headphones'], // Must match training classes (4 classes)
     ALERT_CLASSES: ['phone', 'material', 'headphones'], // Classes that trigger alerts
