@@ -249,6 +249,21 @@ CREATE POLICY "Instructors can view enrolled students"
     )
   );
 
+-- Instructors can lookup any student profile to add to their class
+-- This is needed because instructors need to find students before they are enrolled
+CREATE POLICY "Instructors can lookup student profiles"
+  ON public.profiles FOR SELECT
+  USING (
+    -- Only instructors/admins can use this policy
+    EXISTS (
+      SELECT 1 FROM public.profiles p
+      WHERE p.id = auth.uid()
+      AND p.role IN ('instructor', 'admin')
+    )
+    -- Only lookup students (not other instructors)
+    AND role = 'student'
+  );
+
 -- CLASSES POLICIES
 CREATE POLICY "Anyone can view active classes"
   ON public.classes FOR SELECT
