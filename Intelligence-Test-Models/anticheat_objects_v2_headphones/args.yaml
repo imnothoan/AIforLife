@@ -4,8 +4,8 @@ model: /content/drive/MyDrive/Intelligence-Test-Models/anticheat_objects_v2_head
 data: /content/merged_dataset/data.yaml
 epochs: 100
 time: null
-patience: 10
-batch: 16
+patience: 20
+batch: 28
 imgsz: 640
 save: true
 save_period: -1
