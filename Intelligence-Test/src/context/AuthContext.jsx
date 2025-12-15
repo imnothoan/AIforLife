@@ -51,6 +51,18 @@ export const AuthProvider = ({ children }) => {
   const [loading, setLoading] = useState(true);
   const [profileLoading, setProfileLoading] = useState(false);
 
+  // Helper function to create fallback profile from user metadata
+  const createFallbackProfile = (authUser) => {
+    if (!authUser) return null;
+    return {
+      id: authUser.id,
+      email: authUser.email,
+      full_name: authUser.user_metadata?.full_name || authUser.email?.split('@')[0] || 'User',
+      role: authUser.user_metadata?.role || 'student',
+      student_id: authUser.user_metadata?.student_id || null
+    };
+  };
+
   // Fetch user profile from database with retry logic
   const fetchProfile = useCallback(async (userId, retryCount = 0) => {
     const MAX_RETRIES = 3;
@@ -172,15 +184,9 @@ export const AuthProvider = ({ children }) => {
             }
           } catch (profileError) {
             console.error('Error fetching profile:', profileError);
-            // Create fallback profile from user metadata
-            if (isMounted && currentUser.user_metadata) {
-              setProfile({
-                id: currentUser.id,
-                email: currentUser.email,
-                full_name: currentUser.user_metadata.full_name || currentUser.email?.split('@')[0] || 'User',
-                role: currentUser.user_metadata.role || 'student',
-                student_id: currentUser.user_metadata.student_id || null
-              });
+            // Use helper function for fallback profile
+            if (isMounted) {
+              setProfile(createFallbackProfile(currentUser));
             }
           } finally {
             if (isMounted) {
@@ -220,15 +226,9 @@ export const AuthProvider = ({ children }) => {
           }
         } catch (profileError) {
           console.error('Error fetching profile on auth change:', profileError);
-          // Create fallback profile from user metadata
-          if (isMounted && currentUser.user_metadata) {
-            setProfile({
-              id: currentUser.id,
-              email: currentUser.email,
-              full_name: currentUser.user_metadata.full_name || currentUser.email?.split('@')[0] || 'User',
-              role: currentUser.user_metadata.role || 'student',
-              student_id: currentUser.user_metadata.student_id || null
-            });
+          // Use helper function for fallback profile
+          if (isMounted) {
+            setProfile(createFallbackProfile(currentUser));
           }
         } finally {
           if (isMounted) {

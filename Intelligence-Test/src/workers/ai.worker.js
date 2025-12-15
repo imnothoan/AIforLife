@@ -131,12 +131,15 @@ async function initializeAI() {
       const baseUrl = self.location.origin || '';
       const absoluteModelPath = modelPath.startsWith('/') ? baseUrl + modelPath : modelPath;
       
+      // Extract filename for fallback path (to avoid hardcoding)
+      const modelFilename = modelPath.split('/').pop();
+      
       console.log('Attempting to load YOLO model from:', absoluteModelPath);
       console.log('Worker origin:', self.location.origin);
       
       // Try to load the model with multiple fallback paths
       let loadError = null;
-      const pathsToTry = [absoluteModelPath, modelPath, './models/anticheat_yolo11s.onnx'];
+      const pathsToTry = [absoluteModelPath, modelPath, `./models/${modelFilename}`];
       
       for (const tryPath of pathsToTry) {
         try {

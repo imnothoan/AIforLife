@@ -92,9 +92,13 @@ def download_datasets(output_dir):
             
         print(f"Downloading {name}...")
         os.makedirs(dataset_dir, exist_ok=True)
-        os.system(f'curl -L "{url}" > {dataset_dir}/dataset.zip')
-        os.system(f'unzip -q {dataset_dir}/dataset.zip -d {dataset_dir}')
-        os.system(f'rm {dataset_dir}/dataset.zip')
+        
+        # Use subprocess for security instead of os.system
+        import subprocess
+        zip_path = os.path.join(dataset_dir, 'dataset.zip')
+        subprocess.run(['curl', '-L', url, '-o', zip_path], check=True)
+        subprocess.run(['unzip', '-q', zip_path, '-d', dataset_dir], check=True)
+        os.remove(zip_path)
     
     print("All datasets downloaded!")
 

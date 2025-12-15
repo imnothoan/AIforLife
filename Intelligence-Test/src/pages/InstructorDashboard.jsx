@@ -448,10 +448,8 @@ function AddStudentForm({ classId, onClose, onSuccess }) {
       return { success: false, error: 'student_not_found' };
     }
 
-    // Check if student role (optional - allow adding instructors too for flexibility)
-    // if (profileData.role !== 'student') {
-    //   return { success: false, error: 'not_a_student' };
-    // }
+    // Note: We allow adding any user (student or instructor) for flexibility
+    // Role validation can be added here if needed in the future
 
     // Add enrollment directly
     const { error: enrollError } = await supabase

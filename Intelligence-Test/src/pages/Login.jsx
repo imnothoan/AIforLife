@@ -70,7 +70,8 @@ export default function Login() {
             return getErrorMessage(firstError);
           }
         } catch (e) {
-          // Not JSON, continue with default
+          // Not JSON format - this is expected for non-Zod errors
+          console.debug('Validation error message is not JSON:', error.message);
         }
       }
       return t('validation.required');
