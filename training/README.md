@@ -27,16 +27,23 @@ The existing model (`Intelligence-Test/public/models/anticheat_yolo11s.onnx`) ha
 | Material/Paper | <1% | ❌ Needs training |
 | Headphones | 44% | ✅ Good |
 
+## Which notebook to use
+
+- **Use `finetune_yolo_production.ipynb` for all future Colab/Codelab fine-tuning.** It consolidates setup, deterministic exports, and unified data download/conversion helpers.
+- `finetune_yolo_v4_enhanced.ipynb` is legacy/archived—keep only for reference.
+- `finetune_yolo_colab.ipynb` remains for quick demos, but production retraining should run the production notebook above.
+
 ## How to Fine-tune the Model
 
 ### Option 1: Google Colab (Recommended)
 
-1. Open `finetune_yolo_colab.ipynb` in Google Colab
+1. Open `finetune_yolo_production.ipynb` in Google Colab
 2. Enable GPU runtime (Runtime > Change runtime type > GPU)
-3. Upload your `best.pt` model to Google Drive
-4. Run all cells in order
-5. Download the new `best.onnx` file when done
-6. Copy to `Intelligence-Test/public/models/anticheat_yolo11s.onnx`
+3. Upload your `best.pt` (or previous checkpoint) to Google Drive
+4. Update the dataset download cell with the sources below (YOLO-seg or COCO masks)
+5. Run all cells in order (data download → conversion → training → ONNX export)
+6. Download the new `best.onnx` file when done
+7. Copy to `Intelligence-Test/public/models/anticheat_yolo11s.onnx`
 
 ### Option 2: Local Training
 
@@ -63,6 +70,26 @@ The training script downloads these datasets from Roboflow:
 - **Paper/Material Detection**: 2 datasets for documents and papers
 - **Headphones Detection**: 2 datasets for headphones and earbuds
 - **Person Detection**: 1 dataset for person detection
+
+## High-quality segmentation datasets to plug into `finetune_yolo_production.ipynb`
+
+All sets below provide polygons/instance masks or YOLO-seg exports. Use the notebook’s conversion helper to map classes into `['person','phone','material','headphones']`.
+
+- **People (multi-view / crowded / occlusion):**
+  - COCO 2017 train/val with person masks (instance segmentation). Use official masks or the Ultralytics `coco128-seg` pattern and convert via the notebook helper.
+  - CrowdHuman instance segmentation (e.g., Roboflow “CrowdHuman-Instance-Segmentation”).
+- **Phones (in-hand, pocket, partially hidden):**
+  - Roboflow “Cell Phones v2 (Segmentation)” (polygon masks).
+  - Open Images phone subset with segmentation masks (`Mobile phone` class) via the notebook helper.
+- **Headphones / Earbuds:**
+  - Roboflow “Headphones-Segmentation” (over-ear) and “Earbuds-Segmentation” (in-ear).
+- **Books / Paper / Notebooks:**
+  - Roboflow “Books-and-Notebooks-Segmentation”.
+  - DocLayNet (page masks) — convert to YOLO-seg using the notebook helper for paper/book surfaces.
+
+Notes:
+- For COCO/OpenImages/DocLayNet, enable the conversion cell in `finetune_yolo_production.ipynb` to generate YOLO-seg labels and remap class names to `person/phone/material/headphones`.
+- For Roboflow, export as “YOLOv8 Segmentation” to skip manual conversion.
 
 ## Target Classes
 
