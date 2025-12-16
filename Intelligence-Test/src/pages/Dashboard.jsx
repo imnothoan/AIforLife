@@ -9,33 +9,12 @@ import { LogOut, FileText, User, PlayCircle, Clock, CheckCircle, AlertCircle, Lo
 import LanguageSwitcher from '../components/LanguageSwitcher';
 
 export default function Dashboard() {
-  const { user, profile, profileLoading, logout, isInstructor } = useAuth();
+  const { user, profile, profileLoading, logout } = useAuth();
   const { t } = useLanguage();
   const navigate = useNavigate();
 
   const [exams, setExams] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [redirecting, setRedirecting] = useState(false);
-
-  // If instructor, redirect to instructor dashboard
-  useEffect(() => {
-    // Wait for profile to be fully loaded before checking role
-    if (profileLoading) return;
-    
-    // Check role from profile or use isInstructor helper
-    const shouldRedirect = isInstructor() || 
-      profile?.role === 'instructor' || 
-      profile?.role === 'admin' ||
-      // Also check user metadata as fallback
-      user?.user_metadata?.role === 'instructor' ||
-      user?.user_metadata?.role === 'admin';
-    
-    if (shouldRedirect) {
-      setRedirecting(true);
-      // Use replace to prevent back button issues
-      navigate('/instructor', { replace: true });
-    }
-  }, [profile, profileLoading, user, navigate, isInstructor]);
 
   // Load available exams for student
   useEffect(() => {
@@ -43,11 +22,15 @@ export default function Dashboard() {
       // Wait for profile to be loaded before checking role
       if (profileLoading) return;
       
-      // Don't load exams for instructors or if profile indicates instructor role, or if we're redirecting
+      // Dashboard is only for students - instructors should be redirected by HomeRoute
+      // This is a fallback check
       const isInstructorUser = profile?.role === 'instructor' || profile?.role === 'admin' ||
         user?.user_metadata?.role === 'instructor' || user?.user_metadata?.role === 'admin';
       
-      if (!user || isInstructorUser || redirecting) return;
+      if (!user || isInstructorUser) {
+        setLoading(false);
+        return;
+      }
 
       try {
         // Get enrolled classes
@@ -114,7 +97,7 @@ export default function Dashboard() {
     };
 
     loadExams();
-  }, [user, profile, profileLoading, redirecting, t]);
+  }, [user, profile, profileLoading, t]);
 
   const handleLogout = async () => {
     await logout();

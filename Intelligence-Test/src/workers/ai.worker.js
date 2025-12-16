@@ -40,15 +40,17 @@ const CONFIG = {
     LIP_MOVEMENT_THRESHOLD: 0.02, // Threshold for detecting speech
     BLINK_THRESHOLD: 0.2,         // Eye aspect ratio for blink detection
   },
-  // YOLO settings - Custom trained model for anti-cheat detection
+  // YOLO settings - Custom trained SEGMENTATION model for anti-cheat detection
+  // Model outputs: [1, 40, 8400] = 4 bbox + 4 classes + 32 mask coefficients
   YOLO: {
     MODEL_PATH: '/models/anticheat_yolo11s.onnx',
     INPUT_SIZE: 640, // Model was trained with 640x640 input
-    // Confidence threshold for detection
-    // 0.05 - very low threshold to catch more detections (model may have low confidence)
-    CONFIDENCE_THRESHOLD: 0.05,
+    // Confidence threshold - set very low to catch more detections
+    // Model was fine-tuned on specific objects, real-world performance may vary
+    // Training notebook showed: phone ~2-5%, material ~90%+, headphones ~40%+
+    CONFIDENCE_THRESHOLD: 0.01,
     IOU_THRESHOLD: 0.45,
-    CLASSES: ['person', 'phone', 'material', 'headphones'], // Must match training classes
+    CLASSES: ['person', 'phone', 'material', 'headphones'], // Must match training classes (4 classes)
     ALERT_CLASSES: ['phone', 'material', 'headphones'], // Classes that trigger alerts
     MASK_COEFFICIENTS: 32, // Number of mask coefficients for segmentation models
     // Multi-person detection
@@ -620,13 +622,26 @@ async function runYoloInference(imageData) {
     
     const results = await yoloSession.run(feeds);
 
-    // Get first output
+    // For segmentation models, there may be 2 outputs:
+    // output0: detection tensor (1, 40, 8400) for seg or (1, 8, 8400) for detect
+    // output1: mask tensor (1, 32, 160, 160) for seg only
+    // We only need output0 for detection
     const outputName = yoloSession.outputNames[0] || 'output0';
     const outputTensor = results[outputName];
     
     if (!outputTensor) {
       console.warn('No output tensor found');
       return [];
+    }
+
+    // Log output info once for debugging
+    if (!self.loggedOutputInfo) {
+      console.log('YOLO inference output:', {
+        outputNames: yoloSession.outputNames,
+        outputDims: outputTensor.dims,
+        numElements: outputTensor.data.length
+      });
+      self.loggedOutputInfo = true;
     }
 
     const detections = parseYoloOutput(outputTensor.data, outputTensor.dims, width, height);
@@ -645,9 +660,10 @@ function parseYoloOutput(output, dims, originalWidth, originalHeight) {
   
   // Log output dimensions for debugging (only first time)
   if (!self.loggedDims) {
-    console.log('YOLO Output dimensions:', dims);
-    console.log('Expected classes:', numClasses);
-    console.log('Model classes:', CONFIG.YOLO.CLASSES);
+    console.log('🔍 YOLO Output dimensions:', dims);
+    console.log('   Expected classes:', numClasses, '(' + CONFIG.YOLO.CLASSES.join(', ') + ')');
+    console.log('   Expected detect channels:', 4 + numClasses);
+    console.log('   Expected seg channels:', 4 + numClasses + maskCoefficients);
     self.loggedDims = true;
   }
   
@@ -657,20 +673,20 @@ function parseYoloOutput(output, dims, originalWidth, originalHeight) {
   }
   
   // Handle different output formats
-  // YOLO11 can output in different formats depending on export options
+  // YOLO11 segmentation outputs: [1, 40, 8400] = 4 bbox + 4 classes + 32 mask coefficients
   
   if (dims.length === 3) {
     // Format: [1, channels, numBoxes] or [1, numBoxes, channels]
     const dim1 = dims[1];
     const dim2 = dims[2];
     
-    const expectedDetect = 4 + numClasses;
-    const expectedSeg = 4 + numClasses + maskCoefficients;
+    const expectedDetect = 4 + numClasses; // 8 for 4 classes
+    const expectedSeg = 4 + numClasses + maskCoefficients; // 40 for 4 classes + 32 mask
     
     // Log format determination (only first time)
     if (!self.loggedFormat) {
-      console.log('Expected detect channels:', expectedDetect, '| Expected seg channels:', expectedSeg);
-      console.log('Actual dims: [1,', dim1, ',', dim2, ']');
+      console.log('   Actual dims: [1,', dim1, ',', dim2, ']');
+      console.log('   Determining format...');
       self.loggedFormat = true;
     }
     
@@ -678,31 +694,54 @@ function parseYoloOutput(output, dims, originalWidth, originalHeight) {
     let isTransposed = false;
     let channels, numBoxes;
     
+    // For segmentation model output [1, 40, 8400], dim1=40 matches expectedSeg
     if (dim1 === expectedDetect || dim1 === expectedSeg) {
-      // Format: [1, channels, numBoxes] - transposed format
+      // Format: [1, channels, numBoxes] - transposed format (common for YOLO)
       isTransposed = true;
       channels = dim1;
       numBoxes = dim2;
+      if (!self.loggedFormatResult) {
+        console.log('   ✅ Detected transposed format: [1, channels, numBoxes]');
+        console.log('   Channels:', channels, 'NumBoxes:', numBoxes);
+        self.loggedFormatResult = true;
+      }
     } else if (dim2 === expectedDetect || dim2 === expectedSeg) {
       // Format: [1, numBoxes, channels] - standard format
       isTransposed = false;
       channels = dim2;
       numBoxes = dim1;
+      if (!self.loggedFormatResult) {
+        console.log('   ✅ Detected standard format: [1, numBoxes, channels]');
+        self.loggedFormatResult = true;
+      }
     } else {
-      // Try to infer from size ratio
-      if (dim1 < dim2 && dim1 < 100) {
+      // Try to infer from size ratio - smaller dimension is likely channels
+      if (dim1 < dim2 && dim1 <= 100) {
         isTransposed = true;
         channels = dim1;
         numBoxes = dim2;
-      } else if (dim2 < dim1 && dim2 < 100) {
+        if (!self.loggedFormatResult) {
+          console.log('   ⚠️ Inferred transposed format from size ratio');
+          console.log('   Channels:', channels, 'NumBoxes:', numBoxes);
+          self.loggedFormatResult = true;
+        }
+      } else if (dim2 < dim1 && dim2 <= 100) {
         isTransposed = false;
         channels = dim2;
         numBoxes = dim1;
+        if (!self.loggedFormatResult) {
+          console.log('   ⚠️ Inferred standard format from size ratio');
+          self.loggedFormatResult = true;
+        }
       } else {
-        console.warn(`Cannot determine YOLO format. Dims: [1, ${dim1}, ${dim2}], Expected channels: ${expectedDetect}`);
+        console.warn(`❌ Cannot determine YOLO format. Dims: [1, ${dim1}, ${dim2}]`);
+        console.warn(`   Expected detect channels: ${expectedDetect}, seg channels: ${expectedSeg}`);
         return [];
       }
     }
+    
+    // Sample first few detections for debugging
+    let sampleLogged = false;
     
     for (let i = 0; i < numBoxes; i++) {
       let cx, cy, w, h;
@@ -710,12 +749,13 @@ function parseYoloOutput(output, dims, originalWidth, originalHeight) {
       
       if (isTransposed) {
         // Transposed format: data is arranged [cx0, cx1, ..., cxN, cy0, cy1, ..., cyN, ...]
+        // For [1, 40, 8400], each channel has 8400 values
         cx = output[0 * numBoxes + i];
         cy = output[1 * numBoxes + i];
         w = output[2 * numBoxes + i];
         h = output[3 * numBoxes + i];
         
-        // Extract class scores
+        // Extract class scores (indices 4, 5, 6, 7 for 4 classes)
         for (let c = 0; c < numClasses; c++) {
           classScores.push(output[(4 + c) * numBoxes + i]);
         }
@@ -733,6 +773,15 @@ function parseYoloOutput(output, dims, originalWidth, originalHeight) {
         }
       }
 
+      // Debug logging for first detection with highest scores
+      if (!sampleLogged && i < 5) {
+        const maxS = Math.max(...classScores);
+        if (maxS > 0.001) {
+          console.log(`   Box[${i}]: cx=${cx.toFixed(1)}, cy=${cy.toFixed(1)}, w=${w.toFixed(1)}, h=${h.toFixed(1)}, scores=[${classScores.map(s => (s*100).toFixed(1)+'%').join(', ')}]`);
+          sampleLogged = true;
+        }
+      }
+
       // Get max class score and track per-class max
       let maxScore = 0;
       let maxClass = 0;
@@ -741,8 +790,9 @@ function parseYoloOutput(output, dims, originalWidth, originalHeight) {
           maxScore = classScores[c];
           maxClass = c;
         }
-        // Track max per class for debugging (persistent)
-        if (classScores[c] > maxScorePerClassPersistent[c]) {
+        // Track max per class for debugging (persistent) with bounds check
+        if (maxScorePerClassPersistent && c < maxScorePerClassPersistent.length && 
+            classScores[c] > maxScorePerClassPersistent[c]) {
           maxScorePerClassPersistent[c] = classScores[c];
         }
       }
@@ -765,11 +815,17 @@ function parseYoloOutput(output, dims, originalWidth, originalHeight) {
       }
     }
     
-    // Log max scores per class periodically for debugging
-    if (!self.lastMaxScoreLog || (Date.now() - self.lastMaxScoreLog > 10000)) {
+    // Log max scores per class periodically for debugging (every 10 seconds)
+    if (maxScorePerClassPersistent && (!self.lastMaxScoreLog || (Date.now() - self.lastMaxScoreLog > 10000))) {
       self.lastMaxScoreLog = Date.now();
-      const maxScoreInfo = CONFIG.YOLO.CLASSES.map((cls, i) => `${cls}: ${(maxScorePerClassPersistent[i] * 100).toFixed(1)}%`).join(', ');
-      console.log('YOLO Max scores per class:', maxScoreInfo);
+      const maxScoreInfo = CONFIG.YOLO.CLASSES.map((cls, i) => {
+        const score = i < maxScorePerClassPersistent.length ? maxScorePerClassPersistent[i] : 0;
+        return `${cls}: ${(score * 100).toFixed(2)}%`;
+      }).join(', ');
+      console.log('📊 YOLO Max scores per class:', maxScoreInfo);
+      if (detections.length > 0) {
+        console.log('   Detections found:', detections.length);
+      }
     }
   } else if (dims.length === 2) {
     // Format: [numBoxes, channels]
@@ -816,7 +872,7 @@ function parseYoloOutput(output, dims, originalWidth, originalHeight) {
       }
     }
   } else {
-    console.warn('Unexpected dims length:', dims.length, dims);
+    console.warn('❌ Unexpected dims length:', dims.length, dims);
     return [];
   }
 

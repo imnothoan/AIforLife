@@ -233,6 +233,11 @@ CREATE POLICY "Users can update own profile"
   ON public.profiles FOR UPDATE
   USING (auth.uid() = id);
 
+-- Users can insert their own profile (needed when trigger doesn't work or for upsert)
+CREATE POLICY "Users can insert own profile"
+  ON public.profiles FOR INSERT
+  WITH CHECK (auth.uid() = id);
+
 CREATE POLICY "Instructors can view enrolled students"
   ON public.profiles FOR SELECT
   USING (
@@ -242,6 +247,21 @@ CREATE POLICY "Instructors can view enrolled students"
       WHERE c.instructor_id = auth.uid()
       AND e.student_id = profiles.id
     )
+  );
+
+-- Instructors can lookup any student profile to add to their class
+-- This is needed because instructors need to find students before they are enrolled
+CREATE POLICY "Instructors can lookup student profiles"
+  ON public.profiles FOR SELECT
+  USING (
+    -- Only instructors/admins can use this policy
+    EXISTS (
+      SELECT 1 FROM public.profiles p
+      WHERE p.id = auth.uid()
+      AND p.role IN ('instructor', 'admin')
+    )
+    -- Only lookup students (not other instructors)
+    AND role = 'student'
   );
 
 -- CLASSES POLICIES
