@@ -216,14 +216,19 @@ CREATE INDEX IF NOT EXISTS idx_proctoring_logs_session
 
 -- Ensure necessary privileges for PostgREST roles (prevents auth failures/permission errors)
 GRANT USAGE ON SCHEMA public TO anon, authenticated, service_role;
-GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO anon, authenticated, service_role;
-GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO anon, authenticated, service_role;
-GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA public TO anon, authenticated, service_role;
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.profiles TO authenticated, service_role;
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.classes TO authenticated, service_role;
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.enrollments TO authenticated, service_role;
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.exams TO authenticated, service_role;
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.questions TO authenticated, service_role;
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.exam_sessions TO authenticated, service_role;
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.answers TO authenticated, service_role;
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.proctoring_logs TO authenticated, service_role;
+GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO authenticated, service_role;
+GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA public TO authenticated, service_role;
 
--- Keep future objects accessible without rerunning grants
-ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO anon, authenticated, service_role;
-ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT USAGE, SELECT ON SEQUENCES TO anon, authenticated, service_role;
-ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT EXECUTE ON FUNCTIONS TO anon, authenticated, service_role;
+-- Optional public browsing (only expose specific table)
+GRANT SELECT ON public.classes TO anon;
 
 -- Enable RLS on all tables
 ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
