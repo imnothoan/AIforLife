@@ -225,19 +225,23 @@ ALTER TABLE public.answers ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.proctoring_logs ENABLE ROW LEVEL SECURITY;
 
 -- PROFILES POLICIES
+DROP POLICY IF EXISTS "Users can view own profile" ON public.profiles;
 CREATE POLICY "Users can view own profile"
   ON public.profiles FOR SELECT
   USING (auth.uid() = id);
 
+DROP POLICY IF EXISTS "Users can update own profile" ON public.profiles;
 CREATE POLICY "Users can update own profile"
   ON public.profiles FOR UPDATE
   USING (auth.uid() = id);
 
 -- Users can insert their own profile (needed when trigger doesn't work or for upsert)
+DROP POLICY IF EXISTS "Users can insert own profile" ON public.profiles;
 CREATE POLICY "Users can insert own profile"
   ON public.profiles FOR INSERT
   WITH CHECK (auth.uid() = id);
 
+DROP POLICY IF EXISTS "Instructors can view enrolled students" ON public.profiles;
 CREATE POLICY "Instructors can view enrolled students"
   ON public.profiles FOR SELECT
   USING (
@@ -251,6 +255,7 @@ CREATE POLICY "Instructors can view enrolled students"
 
 -- Instructors can lookup any student profile to add to their class
 -- This is needed because instructors need to find students before they are enrolled
+DROP POLICY IF EXISTS "Instructors can lookup student profiles" ON public.profiles;
 CREATE POLICY "Instructors can lookup student profiles"
   ON public.profiles FOR SELECT
   USING (
@@ -265,16 +270,19 @@ CREATE POLICY "Instructors can lookup student profiles"
   );
 
 -- CLASSES POLICIES
+DROP POLICY IF EXISTS "Anyone can view active classes" ON public.classes;
 CREATE POLICY "Anyone can view active classes"
   ON public.classes FOR SELECT
   USING (is_active = true);
 
 -- SELECT: Instructors can view their own classes (including inactive)
+DROP POLICY IF EXISTS "Instructors can view own classes" ON public.classes;
 CREATE POLICY "Instructors can view own classes"
   ON public.classes FOR SELECT
   USING (instructor_id = auth.uid());
 
 -- INSERT: Instructors can create classes if they set themselves as instructor
+DROP POLICY IF EXISTS "Instructors can create classes" ON public.classes;
 CREATE POLICY "Instructors can create classes"
   ON public.classes FOR INSERT
   WITH CHECK (
@@ -287,22 +295,26 @@ CREATE POLICY "Instructors can create classes"
   );
 
 -- UPDATE: Instructors can update their own classes
+DROP POLICY IF EXISTS "Instructors can update own classes" ON public.classes;
 CREATE POLICY "Instructors can update own classes"
   ON public.classes FOR UPDATE
   USING (instructor_id = auth.uid())
   WITH CHECK (instructor_id = auth.uid());
 
 -- DELETE: Instructors can delete their own classes
+DROP POLICY IF EXISTS "Instructors can delete own classes" ON public.classes;
 CREATE POLICY "Instructors can delete own classes"
   ON public.classes FOR DELETE
   USING (instructor_id = auth.uid());
 
 -- ENROLLMENTS POLICIES
+DROP POLICY IF EXISTS "Students can view own enrollments" ON public.enrollments;
 CREATE POLICY "Students can view own enrollments"
   ON public.enrollments FOR SELECT
   USING (student_id = auth.uid());
 
 -- Instructors can view enrollments for their classes
+DROP POLICY IF EXISTS "Instructors can view class enrollments" ON public.enrollments;
 CREATE POLICY "Instructors can view class enrollments"
   ON public.enrollments FOR SELECT
   USING (
@@ -314,6 +326,7 @@ CREATE POLICY "Instructors can view class enrollments"
   );
 
 -- Instructors can add students to their classes
+DROP POLICY IF EXISTS "Instructors can add students to classes" ON public.enrollments;
 CREATE POLICY "Instructors can add students to classes"
   ON public.enrollments FOR INSERT
   WITH CHECK (
@@ -325,6 +338,7 @@ CREATE POLICY "Instructors can add students to classes"
   );
 
 -- Instructors can update enrollments for their classes
+DROP POLICY IF EXISTS "Instructors can update class enrollments" ON public.enrollments;
 CREATE POLICY "Instructors can update class enrollments"
   ON public.enrollments FOR UPDATE
   USING (
@@ -343,6 +357,7 @@ CREATE POLICY "Instructors can update class enrollments"
   );
 
 -- Instructors can remove students from their classes
+DROP POLICY IF EXISTS "Instructors can remove students from classes" ON public.enrollments;
 CREATE POLICY "Instructors can remove students from classes"
   ON public.enrollments FOR DELETE
   USING (
@@ -354,6 +369,7 @@ CREATE POLICY "Instructors can remove students from classes"
   );
 
 -- EXAMS POLICIES
+DROP POLICY IF EXISTS "Students can view published exams for enrolled classes" ON public.exams;
 CREATE POLICY "Students can view published exams for enrolled classes"
   ON public.exams FOR SELECT
   USING (
@@ -367,6 +383,7 @@ CREATE POLICY "Students can view published exams for enrolled classes"
   );
 
 -- Instructors can view exams for their classes
+DROP POLICY IF EXISTS "Instructors can view exams for own classes" ON public.exams;
 CREATE POLICY "Instructors can view exams for own classes"
   ON public.exams FOR SELECT
   USING (
@@ -378,6 +395,7 @@ CREATE POLICY "Instructors can view exams for own classes"
   );
 
 -- Instructors can create exams for their classes
+DROP POLICY IF EXISTS "Instructors can create exams for own classes" ON public.exams;
 CREATE POLICY "Instructors can create exams for own classes"
   ON public.exams FOR INSERT
   WITH CHECK (
@@ -390,6 +408,7 @@ CREATE POLICY "Instructors can create exams for own classes"
   );
 
 -- Instructors can update exams for their classes
+DROP POLICY IF EXISTS "Instructors can update exams for own classes" ON public.exams;
 CREATE POLICY "Instructors can update exams for own classes"
   ON public.exams FOR UPDATE
   USING (
@@ -408,6 +427,7 @@ CREATE POLICY "Instructors can update exams for own classes"
   );
 
 -- Instructors can delete exams for their classes
+DROP POLICY IF EXISTS "Instructors can delete exams for own classes" ON public.exams;
 CREATE POLICY "Instructors can delete exams for own classes"
   ON public.exams FOR DELETE
   USING (
@@ -419,6 +439,7 @@ CREATE POLICY "Instructors can delete exams for own classes"
   );
 
 -- QUESTIONS POLICIES
+DROP POLICY IF EXISTS "Students can view questions during active exam" ON public.questions;
 CREATE POLICY "Students can view questions during active exam"
   ON public.questions FOR SELECT
   USING (
@@ -432,6 +453,7 @@ CREATE POLICY "Students can view questions during active exam"
   );
 
 -- Instructors can view questions for their exams
+DROP POLICY IF EXISTS "Instructors can view questions for own exams" ON public.questions;
 CREATE POLICY "Instructors can view questions for own exams"
   ON public.questions FOR SELECT
   USING (
@@ -444,6 +466,7 @@ CREATE POLICY "Instructors can view questions for own exams"
   );
 
 -- Instructors can create questions for their exams
+DROP POLICY IF EXISTS "Instructors can create questions for own exams" ON public.questions;
 CREATE POLICY "Instructors can create questions for own exams"
   ON public.questions FOR INSERT
   WITH CHECK (
@@ -456,6 +479,7 @@ CREATE POLICY "Instructors can create questions for own exams"
   );
 
 -- Instructors can update questions for their exams
+DROP POLICY IF EXISTS "Instructors can update questions for own exams" ON public.questions;
 CREATE POLICY "Instructors can update questions for own exams"
   ON public.questions FOR UPDATE
   USING (
@@ -476,6 +500,7 @@ CREATE POLICY "Instructors can update questions for own exams"
   );
 
 -- Instructors can delete questions for their exams
+DROP POLICY IF EXISTS "Instructors can delete questions for own exams" ON public.questions;
 CREATE POLICY "Instructors can delete questions for own exams"
   ON public.questions FOR DELETE
   USING (
@@ -488,18 +513,22 @@ CREATE POLICY "Instructors can delete questions for own exams"
   );
 
 -- EXAM SESSIONS POLICIES
+DROP POLICY IF EXISTS "Students can view own sessions" ON public.exam_sessions;
 CREATE POLICY "Students can view own sessions"
   ON public.exam_sessions FOR SELECT
   USING (student_id = auth.uid());
 
+DROP POLICY IF EXISTS "Students can insert own sessions" ON public.exam_sessions;
 CREATE POLICY "Students can insert own sessions"
   ON public.exam_sessions FOR INSERT
   WITH CHECK (student_id = auth.uid());
 
+DROP POLICY IF EXISTS "Students can update own active sessions" ON public.exam_sessions;
 CREATE POLICY "Students can update own active sessions"
   ON public.exam_sessions FOR UPDATE
   USING (student_id = auth.uid() AND status = 'in_progress');
 
+DROP POLICY IF EXISTS "Instructors can view sessions for own exams" ON public.exam_sessions;
 CREATE POLICY "Instructors can view sessions for own exams"
   ON public.exam_sessions FOR SELECT
   USING (
@@ -512,6 +541,7 @@ CREATE POLICY "Instructors can view sessions for own exams"
   );
 
 -- ANSWERS POLICIES
+DROP POLICY IF EXISTS "Students can manage own answers" ON public.answers;
 CREATE POLICY "Students can manage own answers"
   ON public.answers FOR ALL
   USING (
@@ -522,6 +552,7 @@ CREATE POLICY "Students can manage own answers"
     )
   );
 
+DROP POLICY IF EXISTS "Instructors can view answers for own exams" ON public.answers;
 CREATE POLICY "Instructors can view answers for own exams"
   ON public.answers FOR SELECT
   USING (
@@ -535,6 +566,7 @@ CREATE POLICY "Instructors can view answers for own exams"
   );
 
 -- PROCTORING LOGS POLICIES
+DROP POLICY IF EXISTS "Students can insert own proctoring logs" ON public.proctoring_logs;
 CREATE POLICY "Students can insert own proctoring logs"
   ON public.proctoring_logs FOR INSERT
   WITH CHECK (
@@ -545,6 +577,7 @@ CREATE POLICY "Students can insert own proctoring logs"
     )
   );
 
+DROP POLICY IF EXISTS "Instructors can view proctoring logs for own exams" ON public.proctoring_logs;
 CREATE POLICY "Instructors can view proctoring logs for own exams"
   ON public.proctoring_logs FOR SELECT
   USING (
@@ -812,6 +845,7 @@ CREATE TRIGGER set_exams_updated_at
 -- ================================================
 
 -- Policy to allow instructors to search for students by email
+DROP POLICY IF EXISTS "Instructors can search students by email" ON public.profiles;
 CREATE POLICY "Instructors can search students by email"
   ON public.profiles FOR SELECT
   USING (
@@ -905,11 +939,13 @@ CREATE TABLE IF NOT EXISTS public.face_verification_logs (
 ALTER TABLE public.face_verification_logs ENABLE ROW LEVEL SECURITY;
 
 -- Policy: Students can insert their own verification logs
+DROP POLICY IF EXISTS "Students can insert own face verification logs" ON public.face_verification_logs;
 CREATE POLICY "Students can insert own face verification logs"
   ON public.face_verification_logs FOR INSERT
   WITH CHECK (student_id = auth.uid());
 
 -- Policy: Instructors can view verification logs for their exams
+DROP POLICY IF EXISTS "Instructors can view face verification logs" ON public.face_verification_logs;
 CREATE POLICY "Instructors can view face verification logs"
   ON public.face_verification_logs FOR SELECT
   USING (
@@ -1032,11 +1068,13 @@ CREATE TABLE IF NOT EXISTS public.student_analytics (
 ALTER TABLE public.student_analytics ENABLE ROW LEVEL SECURITY;
 
 -- Students can view own analytics
+DROP POLICY IF EXISTS "Students can view own analytics" ON public.student_analytics;
 CREATE POLICY "Students can view own analytics"
   ON public.student_analytics FOR SELECT
   USING (student_id = auth.uid());
 
 -- Instructors can view analytics for their exams
+DROP POLICY IF EXISTS "Instructors can view analytics for own exams" ON public.student_analytics;
 CREATE POLICY "Instructors can view analytics for own exams"
   ON public.student_analytics FOR SELECT
   USING (
@@ -1049,6 +1087,7 @@ CREATE POLICY "Instructors can view analytics for own exams"
   );
 
 -- System can insert/update analytics
+DROP POLICY IF EXISTS "System can manage analytics" ON public.student_analytics;
 CREATE POLICY "System can manage analytics"
   ON public.student_analytics FOR ALL
   USING (student_id = auth.uid());
@@ -1267,6 +1306,7 @@ CREATE INDEX IF NOT EXISTS idx_audit_user ON public.audit_logs(changed_by);
 ALTER TABLE public.audit_logs ENABLE ROW LEVEL SECURITY;
 
 -- Only admins can view audit logs
+DROP POLICY IF EXISTS "Admins can view audit logs" ON public.audit_logs;
 CREATE POLICY "Admins can view audit logs"
   ON public.audit_logs FOR SELECT
   USING (
