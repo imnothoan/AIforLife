@@ -284,18 +284,23 @@ export const AuthProvider = ({ children }) => {
         
         if (currentUser && isMounted) {
           setProfileLoading(true);
+          // Track locally whether profile was successfully set
+          let profileWasSet = false;
+          
           // Add overall timeout to prevent infinite loading
           const profileFetchPromise = (async () => {
             try {
               const userProfile = await fetchProfile(currentUser.id);
               if (isMounted) {
                 setProfile(userProfile || createFallbackProfile(currentUser));
+                profileWasSet = true;
               }
             } catch (profileError) {
               console.error('Error fetching profile:', profileError);
               // Use helper function for fallback profile
               if (isMounted) {
                 setProfile(createFallbackProfile(currentUser));
+                profileWasSet = true;
               }
             }
           })();
@@ -310,8 +315,8 @@ export const AuthProvider = ({ children }) => {
           await Promise.race([profileFetchPromise, timeoutPromise]);
           
           if (isMounted) {
-            // Ensure fallback profile is set if profile is still null
-            if (!profile) {
+            // Ensure fallback profile is set if profile wasn't set during fetch
+            if (!profileWasSet) {
               setProfile(createFallbackProfile(currentUser));
             }
             setProfileLoading(false);
@@ -348,18 +353,23 @@ export const AuthProvider = ({ children }) => {
       
       if (currentUser) {
         setProfileLoading(true);
+        // Track locally whether profile was successfully set
+        let profileWasSet = false;
+        
         // Add overall timeout to prevent infinite loading
         const profileFetchPromise = (async () => {
           try {
             const userProfile = await fetchProfile(currentUser.id);
             if (isMounted) {
               setProfile(userProfile || createFallbackProfile(currentUser));
+              profileWasSet = true;
             }
           } catch (profileError) {
             console.error('Error fetching profile on auth change:', profileError);
             // Use helper function for fallback profile
             if (isMounted) {
               setProfile(createFallbackProfile(currentUser));
+              profileWasSet = true;
             }
           }
         })();
@@ -367,9 +377,6 @@ export const AuthProvider = ({ children }) => {
         const timeoutPromise = new Promise((resolve) => {
           setTimeout(() => {
             console.warn('Profile fetch timeout in onAuthStateChange - using fallback');
-            if (isMounted && !profile) {
-              setProfile(createFallbackProfile(currentUser));
-            }
             resolve();
           }, 5000); // 5 second overall timeout
         });
@@ -377,6 +384,10 @@ export const AuthProvider = ({ children }) => {
         await Promise.race([profileFetchPromise, timeoutPromise]);
         
         if (isMounted) {
+          // Ensure fallback profile is set if profile wasn't set during fetch
+          if (!profileWasSet) {
+            setProfile(createFallbackProfile(currentUser));
+          }
           setProfileLoading(false);
         }
       } else {
