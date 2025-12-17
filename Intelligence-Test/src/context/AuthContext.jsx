@@ -483,27 +483,23 @@ export const AuthProvider = ({ children }) => {
   };
 
   const logout = async () => {
-    // Clear state immediately for responsive UI
+    // Clear state immediately for responsive UI - this makes UI update instantly
     setUser(null);
     setProfile(null);
     setProfileLoading(false);
     setLoading(false);
     
+    // Clear local storage session immediately for faster logout
     try {
-      // Add timeout to prevent hanging with proper cleanup
-      let timeoutId;
-      const signOutPromise = supabase.auth.signOut();
-      const timeoutPromise = new Promise((resolve) => {
-        timeoutId = setTimeout(() => resolve({ error: { message: 'Logout timeout' } }), 3000);
-      });
-      
-      await Promise.race([signOutPromise, timeoutPromise]).finally(() => {
-        clearTimeout(timeoutId);
-      });
-    } catch (error) {
-      console.warn('Logout error:', error);
-      // Even if signOut fails, we've cleared local state
+      localStorage.removeItem('smartexampro-auth');
+    } catch (e) {
+      console.warn('Could not clear local storage:', e);
     }
+    
+    // Fire and forget - don't await for faster UI response
+    supabase.auth.signOut().catch((error) => {
+      console.warn('Logout error (non-blocking):', error);
+    });
     
     return { error: null };
   };

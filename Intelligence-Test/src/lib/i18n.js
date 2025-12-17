@@ -77,6 +77,7 @@ const translations = {
     'dashboard.notStarted': 'Chưa đến giờ',
     'dashboard.expired': 'Đã hết hạn',
     'dashboard.notAvailable': 'Không khả dụng',
+    'dashboard.myClasses': 'Lớp học của tôi',
     
     // Exam Status
     'exam.status.completed': 'Đã hoàn thành',
@@ -333,6 +334,11 @@ const translations = {
     'student.status': 'Trạng thái',
     'student.statusActive': 'Đang học',
     'student.searchPlaceholder': 'Tìm kiếm theo tên hoặc email...',
+    'student.enrolledAt': 'Tham gia',
+    
+    // Class status
+    'class.status.completed': 'Hoàn thành',
+    'class.status.dropped': 'Đã rời',
     
     // Table headers
     'table.number': '#',
@@ -498,6 +504,7 @@ const translations = {
     'dashboard.notStarted': 'Not started yet',
     'dashboard.expired': 'Expired',
     'dashboard.notAvailable': 'Not available',
+    'dashboard.myClasses': 'My Classes',
     
     // Exam Status
     'exam.status.completed': 'Completed',
@@ -754,6 +761,11 @@ const translations = {
     'student.status': 'Status',
     'student.statusActive': 'Active',
     'student.searchPlaceholder': 'Search by name or email...',
+    'student.enrolledAt': 'Joined',
+    
+    // Class status
+    'class.status.completed': 'Completed',
+    'class.status.dropped': 'Dropped',
     
     // Table headers
     'table.number': '#',

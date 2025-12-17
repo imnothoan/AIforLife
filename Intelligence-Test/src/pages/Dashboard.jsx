@@ -3,9 +3,9 @@ import { useAuth } from '../context/AuthContext';
 import { useLanguage } from '../context/LanguageContext';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'react-toastify';
-import { LogOut, FileText, User, PlayCircle, Clock, CheckCircle, AlertCircle, Loader2 } from 'lucide-react';
+import { LogOut, FileText, User, PlayCircle, Clock, CheckCircle, AlertCircle, Loader2, BookOpen, Users, GraduationCap, ChevronRight } from 'lucide-react';
 import LanguageSwitcher from '../components/LanguageSwitcher';
 
 export default function Dashboard() {
@@ -14,8 +14,10 @@ export default function Dashboard() {
   const navigate = useNavigate();
 
   const [exams, setExams] = useState([]);
+  const [classes, setClasses] = useState([]);
   const [loading, setLoading] = useState(true);
   const [profileTimeoutReached, setProfileTimeoutReached] = useState(false);
+  const [showClasses, setShowClasses] = useState(true);
 
   // Profile loading timeout - prevent infinite waiting
   useEffect(() => {
@@ -31,6 +33,65 @@ export default function Dashboard() {
     
     return () => clearTimeout(timeout);
   }, [profileLoading]);
+
+  // Load student's enrolled classes with realtime subscription
+  useEffect(() => {
+    if (!user) return;
+    
+    const loadClasses = async () => {
+      try {
+        const { data: enrollmentData, error: enrollError } = await supabase
+          .from('enrollments')
+          .select(`
+            id,
+            status,
+            enrolled_at,
+            class:classes(
+              id,
+              name,
+              code,
+              description,
+              semester,
+              academic_year,
+              instructor:profiles!classes_instructor_id_fkey(full_name, email)
+            )
+          `)
+          .eq('student_id', user.id)
+          .order('enrolled_at', { ascending: false });
+
+        if (enrollError) throw enrollError;
+        
+        setClasses(enrollmentData || []);
+      } catch (err) {
+        console.error('Load classes error:', err);
+      }
+    };
+
+    loadClasses();
+
+    // Subscribe to realtime changes for this student's enrollments
+    const subscription = supabase
+      .channel(`enrollments-${user.id}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'enrollments',
+          filter: `student_id=eq.${user.id}`
+        },
+        (payload) => {
+          console.log('Enrollment change:', payload);
+          // Reload classes when enrollment changes
+          loadClasses();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      subscription.unsubscribe();
+    };
+  }, [user]);
 
   // Load available exams for student
   useEffect(() => {
@@ -246,6 +307,95 @@ export default function Dashboard() {
             {t('dashboard.selectExam')}
           </p>
         </div>
+
+        {/* My Classes Section */}
+        {classes.length > 0 && (
+          <motion.div 
+            variants={itemVariants}
+            className="mb-10"
+          >
+            <div 
+              onClick={() => setShowClasses(!showClasses)}
+              className="flex items-center justify-between cursor-pointer mb-4 group"
+            >
+              <div className="flex items-center space-x-2">
+                <GraduationCap className="w-6 h-6 text-primary" />
+                <h2 className="text-xl font-bold text-text-main">{t('dashboard.myClasses') || 'Lớp học của tôi'}</h2>
+                <span className="bg-primary-100 text-primary-700 text-xs font-bold px-2 py-0.5 rounded-full">
+                  {classes.length}
+                </span>
+              </div>
+              <ChevronRight className={`w-5 h-5 text-gray-400 transition-transform ${showClasses ? 'rotate-90' : ''}`} />
+            </div>
+            
+            <AnimatePresence>
+              {showClasses && (
+                <motion.div 
+                  initial={{ height: 0, opacity: 0 }}
+                  animate={{ height: 'auto', opacity: 1 }}
+                  exit={{ height: 0, opacity: 0 }}
+                  transition={{ duration: 0.2 }}
+                  className="overflow-hidden"
+                >
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {classes.map((enrollment) => (
+                      <motion.div
+                        key={enrollment.id}
+                        variants={itemVariants}
+                        className="bg-paper rounded-xl border border-gray-100 p-4 hover:shadow-soft transition-all"
+                      >
+                        <div className="flex items-start justify-between mb-2">
+                          <div className="flex items-center space-x-2">
+                            <BookOpen className="w-5 h-5 text-primary" />
+                            <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${
+                              enrollment.status === 'active' 
+                                ? 'bg-success-100 text-success-700' 
+                                : enrollment.status === 'completed'
+                                ? 'bg-primary-100 text-primary-700'
+                                : 'bg-gray-100 text-gray-600'
+                            }`}>
+                              {enrollment.status === 'active' 
+                                ? (t('student.statusActive') || 'Đang học')
+                                : enrollment.status === 'completed'
+                                ? (t('class.status.completed') || 'Hoàn thành')
+                                : (t('class.status.dropped') || 'Đã rời')}
+                            </span>
+                          </div>
+                        </div>
+                        
+                        <h3 className="font-bold text-text-main mb-1 line-clamp-2">
+                          {enrollment.class?.name || 'N/A'}
+                        </h3>
+                        
+                        <div className="text-xs text-gray-500 space-y-1">
+                          <p className="flex items-center space-x-1">
+                            <span className="font-medium">{t('class.code') || 'Mã lớp'}:</span>
+                            <span>{enrollment.class?.code || 'N/A'}</span>
+                          </p>
+                          {enrollment.class?.instructor && (
+                            <p className="flex items-center space-x-1">
+                              <Users className="w-3 h-3" />
+                              <span>{enrollment.class.instructor.full_name || enrollment.class.instructor.email}</span>
+                            </p>
+                          )}
+                          {enrollment.class?.semester && (
+                            <p>
+                              {enrollment.class.semester} - {enrollment.class.academic_year || ''}
+                            </p>
+                          )}
+                        </div>
+                        
+                        <div className="mt-3 pt-3 border-t border-gray-100 text-xs text-gray-400">
+                          {t('student.enrolledAt') || 'Tham gia'}: {new Date(enrollment.enrolled_at).toLocaleDateString('vi-VN')}
+                        </div>
+                      </motion.div>
+                    ))}
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </motion.div>
+        )}
 
         {exams.length > 0 ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">

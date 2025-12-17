@@ -1724,7 +1724,35 @@ export default function InstructorDashboard() {
     };
 
     loadClassData();
-  }, [selectedClass]);
+
+    // Subscribe to realtime enrollment changes for this class
+    const enrollmentSubscription = supabase
+      .channel(`enrollments-class-${selectedClass.id}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'enrollments',
+          filter: `class_id=eq.${selectedClass.id}`
+        },
+        (payload) => {
+          console.log('Enrollment change detected:', payload);
+          // Reload enrollments when any change occurs
+          loadClassData();
+          
+          // Show toast notification for new enrollments
+          if (payload.eventType === 'INSERT') {
+            toast.success(t('student.addSuccess').replace('{count}', '1'));
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      enrollmentSubscription.unsubscribe();
+    };
+  }, [selectedClass, t]);
 
   const handleLogout = async () => {
     await logout();
