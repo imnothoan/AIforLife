@@ -428,7 +428,33 @@ function AddStudentForm({ classId, onClose, onSuccess }) {
   const [bulkEmails, setBulkEmails] = useState('');
   const [mode, setMode] = useState('single'); // 'single' | 'bulk'
 
-  // Direct method to add student (fallback when RPC not available)
+  // Add student using RPC function (preferred method - bypasses RLS issues)
+  const addStudentViaRPC = async (studentEmail) => {
+    try {
+      const { data, error } = await supabase.rpc('add_student_to_class', {
+        p_class_id: classId,
+        p_student_email: studentEmail.toLowerCase().trim()
+      });
+
+      if (error) {
+        console.error('RPC add_student_to_class error:', error);
+        return { success: false, error: 'rpc_failed' };
+      }
+
+      // RPC returns JSONB with success and optional error
+      if (data && data.success) {
+        return { success: true, student_id: data.student_id };
+      }
+      
+      // Return the error code from RPC response
+      return { success: false, error: data?.error || 'unknown_error' };
+    } catch (err) {
+      console.error('RPC call exception:', err);
+      return { success: false, error: 'rpc_exception' };
+    }
+  };
+
+  // Fallback direct method (used if RPC is not available)
   const addStudentDirect = async (studentEmail) => {
     // Find user by email directly
     const { data: profileData, error: profileError } = await supabase
@@ -449,9 +475,6 @@ function AddStudentForm({ classId, onClose, onSuccess }) {
       return { success: false, error: 'student_not_found' };
     }
 
-    // Note: We allow adding any user (student or instructor) for flexibility
-    // Role validation can be added here if needed in the future
-
     // Add enrollment directly
     const { error: enrollError } = await supabase
       .from('enrollments')
@@ -470,6 +493,25 @@ function AddStudentForm({ classId, onClose, onSuccess }) {
     }
 
     return { success: true };
+  };
+
+  // Try RPC first, fallback to direct method
+  const addStudent = async (studentEmail) => {
+    // First try RPC (preferred - bypasses RLS)
+    const rpcResult = await addStudentViaRPC(studentEmail);
+    
+    if (rpcResult.success) {
+      return rpcResult;
+    }
+    
+    // If RPC failed due to function not existing, try direct method
+    if (rpcResult.error === 'rpc_failed' || rpcResult.error === 'rpc_exception') {
+      console.log('RPC not available, falling back to direct method');
+      return addStudentDirect(studentEmail);
+    }
+    
+    // Return the RPC error (student_not_found, already_enrolled, etc.)
+    return rpcResult;
   };
 
   const handleSubmit = async (e) => {
@@ -513,9 +555,9 @@ function AddStudentForm({ classId, onClose, onSuccess }) {
           setTimeout(() => reject(new Error('REQUEST_TIMEOUT')), TIMEOUT_MS)
         );
 
-        // Use direct method (more reliable than RPC which may not exist)
-        const directPromise = addStudentDirect(studentEmail);
-        const result = await Promise.race([directPromise, timeoutPromise]);
+        // Use unified method (RPC first, then direct fallback)
+        const addPromise = addStudent(studentEmail);
+        const result = await Promise.race([addPromise, timeoutPromise]);
 
         if (result.success) {
           successCount++;
@@ -526,6 +568,10 @@ function AddStudentForm({ classId, onClose, onSuccess }) {
             errorMessages.push(`${studentEmail}: ${t('student.notRegistered')}`);
           } else if (errorKey === 'already_enrolled') {
             errorMessages.push(`${studentEmail}: ${t('student.alreadyInClass')}`);
+          } else if (errorKey === 'class_not_found') {
+            errorMessages.push(`${studentEmail}: ${t('error.classNotFound')}`);
+          } else if (errorKey === 'not_authorized') {
+            errorMessages.push(`${studentEmail}: ${t('error.permission')}`);
           } else {
             errorMessages.push(`${studentEmail}: ${t('student.addError')}`);
           }
