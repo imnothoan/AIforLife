@@ -928,6 +928,57 @@ $$ LANGUAGE plpgsql SECURITY DEFINER;
 GRANT EXECUTE ON FUNCTION public.add_student_to_class(UUID, TEXT) TO authenticated;
 
 -- ================================================
+-- SECTION 10b: CLASS CREATION FUNCTION
+-- ================================================
+-- This function bypasses RLS to ensure reliable class creation
+-- Role verification is done within the function itself
+
+CREATE OR REPLACE FUNCTION public.create_class(
+  p_name TEXT,
+  p_code TEXT,
+  p_description TEXT DEFAULT NULL,
+  p_semester TEXT DEFAULT NULL,
+  p_academic_year TEXT DEFAULT NULL
+)
+RETURNS JSONB AS $$
+DECLARE
+  v_user_role TEXT;
+  v_new_class_id UUID;
+BEGIN
+  -- Check if the user is an instructor or admin
+  SELECT role INTO v_user_role
+  FROM public.profiles
+  WHERE id = auth.uid();
+  
+  IF v_user_role IS NULL THEN
+    RETURN jsonb_build_object('success', false, 'error', 'profile_not_found', 'message', 'User profile not found');
+  END IF;
+  
+  IF v_user_role NOT IN ('instructor', 'admin') THEN
+    RETURN jsonb_build_object('success', false, 'error', 'not_authorized', 'message', 'Only instructors can create classes');
+  END IF;
+  
+  -- Check if class code already exists
+  IF EXISTS (SELECT 1 FROM public.classes WHERE code = p_code) THEN
+    RETURN jsonb_build_object('success', false, 'error', 'duplicate_code', 'message', 'Class code already exists');
+  END IF;
+  
+  -- Create the class
+  INSERT INTO public.classes (name, code, description, instructor_id, semester, academic_year, is_active)
+  VALUES (p_name, p_code, p_description, auth.uid(), p_semester, p_academic_year, true)
+  RETURNING id INTO v_new_class_id;
+  
+  RETURN jsonb_build_object('success', true, 'class_id', v_new_class_id);
+EXCEPTION
+  WHEN OTHERS THEN
+    RETURN jsonb_build_object('success', false, 'error', 'database_error', 'message', SQLERRM);
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- Grant execute permission to authenticated users
+GRANT EXECUTE ON FUNCTION public.create_class(TEXT, TEXT, TEXT, TEXT, TEXT) TO authenticated;
+
+-- ================================================
 -- SECTION 11: FACE VERIFICATION
 -- ================================================
 
