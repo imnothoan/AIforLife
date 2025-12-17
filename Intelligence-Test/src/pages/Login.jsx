@@ -46,14 +46,13 @@ export default function Login() {
   const hasRedirectedRef = useRef(false);
 
   // Redirect if already authenticated (prevents showing login when already logged in)
+  // Uses ref guard to ensure navigation only happens once even if effect re-runs
   useEffect(() => {
+    // Only redirect when auth is fully loaded and user exists
     if (!authLoading && user && !hasRedirectedRef.current) {
       hasRedirectedRef.current = true;
-      // Use a small delay to allow auth state to stabilize
-      const timeoutId = setTimeout(() => {
-        navigate('/', { replace: true });
-      }, 100);
-      return () => clearTimeout(timeoutId);
+      // Navigate immediately - the ref guard prevents multiple calls
+      navigate('/', { replace: true });
     }
   }, [user, authLoading, navigate]);
 

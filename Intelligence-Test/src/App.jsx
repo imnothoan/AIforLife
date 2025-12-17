@@ -6,7 +6,7 @@ import 'react-toastify/dist/ReactToastify.css';
 import ErrorBoundary from './components/ErrorBoundary';
 import './index.css';
 import axios from 'axios';
-import { Suspense, lazy, useEffect, useRef } from 'react';
+import { Suspense, lazy, useEffect, useRef, useMemo } from 'react';
 import { t } from './lib/i18n';
 
 // Lazy load pages for better performance and smaller initial bundle
@@ -84,24 +84,20 @@ function HomeRoute() {
   const { user, profile, profileLoading, isInstructor, loading } = useAuth();
   const navigate = useNavigate();
   const hasNavigatedRef = useRef(false);
-  const lastAuthStateRef = useRef(null);
+  const lastUserIdRef = useRef(null);
+  const lastRoleRef = useRef(null);
   
   // Check role from multiple sources (profile, user metadata)
-  const userRole = profile?.role || user?.user_metadata?.role || 'student';
-  const shouldRedirectToInstructor = isInstructor() || 
-    userRole === 'instructor' || 
-    userRole === 'admin';
+  const userRole = useMemo(() => {
+    return profile?.role || user?.user_metadata?.role || 'student';
+  }, [profile?.role, user?.user_metadata?.role]);
   
-  // Create a stable auth state key to detect actual changes
-  const authStateKey = `${user?.id || 'none'}-${userRole}-${loading}-${profileLoading}`;
+  const shouldRedirectToInstructor = useMemo(() => {
+    return isInstructor() || userRole === 'instructor' || userRole === 'admin';
+  }, [isInstructor, userRole]);
   
   // Handle navigation in useEffect to prevent multiple Navigate component renders
   useEffect(() => {
-    // Prevent re-navigation if auth state hasn't actually changed
-    if (lastAuthStateRef.current === authStateKey && hasNavigatedRef.current) {
-      return;
-    }
-    
     // Don't navigate while loading
     if (loading) {
       return;
@@ -109,10 +105,9 @@ function HomeRoute() {
     
     // Redirect to login if not authenticated
     if (!user) {
-      // Only navigate if we haven't already navigated to prevent loops
+      // Only navigate if we haven't already for this state
       if (!hasNavigatedRef.current) {
         hasNavigatedRef.current = true;
-        lastAuthStateRef.current = authStateKey;
         navigate('/login', { replace: true });
       }
       return;
@@ -123,11 +118,19 @@ function HomeRoute() {
       return;
     }
     
+    // Check if user or role has changed since last navigation decision
+    const userChanged = lastUserIdRef.current !== user.id;
+    const roleChanged = lastRoleRef.current !== userRole;
+    
+    // Update refs for next comparison
+    lastUserIdRef.current = user.id;
+    lastRoleRef.current = userRole;
+    
     // Only redirect instructors - students stay on this route to show Dashboard
     if (shouldRedirectToInstructor) {
-      if (!hasNavigatedRef.current || lastAuthStateRef.current !== authStateKey) {
+      // Navigate if user/role changed or we haven't navigated yet
+      if (userChanged || roleChanged || !hasNavigatedRef.current) {
         hasNavigatedRef.current = true;
-        lastAuthStateRef.current = authStateKey;
         
         // Debug logging for auth issues (only in development mode)
         if (import.meta.env.DEV) {
@@ -144,11 +147,10 @@ function HomeRoute() {
       return;
     }
     
-    // For students, update refs but don't navigate (will render Dashboard)
-    lastAuthStateRef.current = authStateKey;
-    hasNavigatedRef.current = false; // Reset so students can see Dashboard
+    // For students, reset navigation flag so they can see Dashboard
+    hasNavigatedRef.current = false;
     
-  }, [user, profile, profileLoading, loading, navigate, shouldRedirectToInstructor, authStateKey, userRole]);
+  }, [user, profile, profileLoading, loading, navigate, shouldRedirectToInstructor, userRole]);
   
   // Show loading while auth is being checked
   if (loading) {
