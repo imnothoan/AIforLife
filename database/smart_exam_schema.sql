@@ -539,10 +539,14 @@ CREATE POLICY "Students can insert own sessions"
   ON public.exam_sessions FOR INSERT
   WITH CHECK (student_id = auth.uid());
 
+-- Students can update their own sessions that are in progress
+-- USING clause: selects which rows can be updated (must be in_progress)
+-- WITH CHECK clause: validates the new row (only need to check ownership, status can change)
 DROP POLICY IF EXISTS "Students can update own active sessions" ON public.exam_sessions;
 CREATE POLICY "Students can update own active sessions"
   ON public.exam_sessions FOR UPDATE
-  USING (student_id = auth.uid() AND status = 'in_progress');
+  USING (student_id = auth.uid() AND status = 'in_progress')
+  WITH CHECK (student_id = auth.uid());
 
 DROP POLICY IF EXISTS "Instructors can view sessions for own exams" ON public.exam_sessions;
 CREATE POLICY "Instructors can view sessions for own exams"

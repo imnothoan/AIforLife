@@ -213,22 +213,42 @@ export default function FaceVerification({
   // Initialize MediaPipe Face Landmarker
   useEffect(() => {
     let isMounted = true;
+    let timeoutId = null;
+    
+    // Helper to add timeout to promises
+    const withTimeout = (promise, ms, name) => {
+      return Promise.race([
+        promise,
+        new Promise((_, reject) => 
+          setTimeout(() => reject(new Error(`${name} timeout after ${ms}ms`)), ms)
+        )
+      ]);
+    };
     
     const initFaceLandmarker = async () => {
       try {
-        // Using shared constants for stability
-        const vision = await FilesetResolver.forVisionTasks(MEDIAPIPE_CONFIG.WASM_PATH);
+        // Add timeout for WASM loading (10 seconds)
+        const vision = await withTimeout(
+          FilesetResolver.forVisionTasks(MEDIAPIPE_CONFIG.WASM_PATH),
+          10000,
+          'MediaPipe WASM'
+        );
         
-        const landmarker = await FaceLandmarker.createFromOptions(vision, {
-          baseOptions: {
-            modelAssetPath: MEDIAPIPE_CONFIG.MODEL_PATH,
-            delegate: "GPU"
-          },
-          runningMode: "IMAGE",
-          numFaces: 2, // Detect up to 2 to check for multiple people
-          minFaceDetectionConfidence: FACE_CONFIG.MIN_DETECTION_CONFIDENCE,
-          minTrackingConfidence: 0.5,
-        });
+        // Add timeout for model loading (15 seconds)
+        const landmarker = await withTimeout(
+          FaceLandmarker.createFromOptions(vision, {
+            baseOptions: {
+              modelAssetPath: MEDIAPIPE_CONFIG.MODEL_PATH,
+              delegate: "GPU"
+            },
+            runningMode: "IMAGE",
+            numFaces: 2, // Detect up to 2 to check for multiple people
+            minFaceDetectionConfidence: FACE_CONFIG.MIN_DETECTION_CONFIDENCE,
+            minTrackingConfidence: 0.5,
+          }),
+          15000,
+          'FaceLandmarker model'
+        );
         
         if (isMounted) {
           faceLandmarkerRef.current = landmarker;
@@ -238,15 +258,30 @@ export default function FaceVerification({
         console.error('Face landmarker initialization error:', error);
         if (isMounted) {
           setStatus('failed');
-          setErrorMessage(t('error.general'));
+          // Provide more specific error message for timeout
+          if (error.message?.includes('timeout')) {
+            setErrorMessage(t('error.timeout'));
+          } else {
+            setErrorMessage(t('error.general'));
+          }
         }
       }
     };
+    
+    // Set a global timeout to prevent infinite initialization
+    timeoutId = setTimeout(() => {
+      if (isMounted && status === 'initializing') {
+        console.warn('FaceVerification: Global initialization timeout');
+        setStatus('failed');
+        setErrorMessage(t('error.timeout'));
+      }
+    }, 30000); // 30 second global timeout
     
     initFaceLandmarker();
     
     return () => {
       isMounted = false;
+      if (timeoutId) clearTimeout(timeoutId);
       if (faceLandmarkerRef.current) {
         faceLandmarkerRef.current.close();
       }

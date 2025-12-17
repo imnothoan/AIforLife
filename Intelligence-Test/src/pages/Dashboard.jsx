@@ -15,19 +15,43 @@ export default function Dashboard() {
 
   const [exams, setExams] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [profileTimeoutReached, setProfileTimeoutReached] = useState(false);
+
+  // Profile loading timeout - prevent infinite waiting
+  useEffect(() => {
+    if (!profileLoading) {
+      setProfileTimeoutReached(false);
+      return;
+    }
+    
+    const timeout = setTimeout(() => {
+      console.warn('Dashboard: Profile loading timeout reached, proceeding with user metadata');
+      setProfileTimeoutReached(true);
+    }, 2000);
+    
+    return () => clearTimeout(timeout);
+  }, [profileLoading]);
 
   // Load available exams for student
   useEffect(() => {
     const loadExams = async () => {
-      // Wait for profile to be loaded before checking role
-      if (profileLoading) return;
+      // If no user, nothing to load
+      if (!user) {
+        setLoading(false);
+        return;
+      }
       
-      // Dashboard is only for students - instructors should be redirected by HomeRoute
-      // This is a fallback check
-      const isInstructorUser = profile?.role === 'instructor' || profile?.role === 'admin' ||
-        user?.user_metadata?.role === 'instructor' || user?.user_metadata?.role === 'admin';
+      // Wait for profile to load OR timeout to be reached
+      if (profileLoading && !profile && !profileTimeoutReached) {
+        return;
+      }
       
-      if (!user || isInstructorUser) {
+      // Check role from profile or user metadata (fallback)
+      const userRole = profile?.role || user?.user_metadata?.role || 'student';
+      const isInstructorUser = userRole === 'instructor' || userRole === 'admin';
+      
+      // Dashboard is only for students - instructors should be redirected
+      if (isInstructorUser) {
         setLoading(false);
         return;
       }
@@ -97,7 +121,7 @@ export default function Dashboard() {
     };
 
     loadExams();
-  }, [user, profile, profileLoading, t]);
+  }, [user, profile, profileLoading, profileTimeoutReached, t]);
 
   const handleLogout = async () => {
     await logout();
