@@ -72,8 +72,10 @@ export const AuthProvider = ({ children }) => {
     // Calculate exponential backoff delay
     const getBackoffDelay = (attempt) => BASE_RETRY_DELAY * Math.pow(2, attempt);
     
-    // Helper to add timeout to any promise
-    const withTimeout = (promise, ms, fallback) => {
+    // Helper to add timeout to any promise with graceful fallback
+    // This resolves with fallback value instead of rejecting to enable graceful degradation
+    // The caller can check the fallback's error property to detect timeout
+    const withTimeoutFallback = (promise, ms, fallback) => {
       return Promise.race([
         promise,
         new Promise((resolve) => setTimeout(() => resolve(fallback), ms))
@@ -82,7 +84,7 @@ export const AuthProvider = ({ children }) => {
     
     try {
       // First, get the current user for fallback (with timeout)
-      const authResult = await withTimeout(
+      const authResult = await withTimeoutFallback(
         supabase.auth.getUser(),
         FETCH_TIMEOUT,
         { data: { user: null }, error: { message: 'Auth timeout' } }
@@ -94,7 +96,7 @@ export const AuthProvider = ({ children }) => {
       }
       
       // Try to fetch existing profile (with timeout)
-      const profileResult = await withTimeout(
+      const profileResult = await withTimeoutFallback(
         supabase
           .from('profiles')
           .select('*')
