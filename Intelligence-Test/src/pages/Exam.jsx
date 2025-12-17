@@ -1358,10 +1358,22 @@ export default function Exam() {
           <div className="mb-6">
             <p className="text-sm font-medium text-gray-700 mb-2">{t('exam.rules.cameraCheck')}</p>
             <div className="relative bg-gray-900 rounded-lg overflow-hidden aspect-video">
+              {cameraStatus === 'loading' && (
+                <div className="absolute inset-0 flex items-center justify-center">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white"></div>
+                </div>
+              )}
+              {cameraStatus === 'error' && (
+                <div className="absolute inset-0 flex items-center justify-center flex-col">
+                  <AlertTriangle className="w-12 h-12 text-danger mb-2" />
+                  <p className="text-white text-sm">{t('anticheat.cameraAccess')}</p>
+                </div>
+              )}
               <video ref={videoRef} autoPlay playsInline muted className="w-full h-full object-cover" />
               <div className="absolute bottom-2 left-2 flex items-center space-x-1 bg-black/50 text-white text-xs px-2 py-1 rounded">
                 <Camera className="w-3 h-3" />
                 <span>{t('proctoring.camera')}</span>
+                {cameraStatus === 'ready' && <span className="w-2 h-2 rounded-full bg-green-500 ml-1"></span>}
               </div>
             </div>
           </div>
