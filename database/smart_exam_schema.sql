@@ -1461,7 +1461,7 @@ BEGIN
     'success', true, 
     'action', 'created',
     'id', p_user_id,
-    'role', p_role
+    'role', COALESCE(p_role, 'student')
   );
 EXCEPTION
   WHEN OTHERS THEN

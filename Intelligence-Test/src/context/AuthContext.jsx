@@ -448,13 +448,16 @@ export const AuthProvider = ({ children }) => {
     setLoading(false);
     
     try {
-      // Add timeout to prevent hanging
+      // Add timeout to prevent hanging with proper cleanup
+      let timeoutId;
       const signOutPromise = supabase.auth.signOut();
-      const timeoutPromise = new Promise((resolve) => 
-        setTimeout(() => resolve({ error: { message: 'Logout timeout' } }), 3000)
-      );
+      const timeoutPromise = new Promise((resolve) => {
+        timeoutId = setTimeout(() => resolve({ error: { message: 'Logout timeout' } }), 3000);
+      });
       
-      await Promise.race([signOutPromise, timeoutPromise]);
+      await Promise.race([signOutPromise, timeoutPromise]).finally(() => {
+        clearTimeout(timeoutId);
+      });
     } catch (error) {
       console.warn('Logout error:', error);
       // Even if signOut fails, we've cleared local state

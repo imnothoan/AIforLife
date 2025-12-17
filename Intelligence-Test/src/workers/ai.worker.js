@@ -103,23 +103,28 @@ async function initializeAI() {
   self.postMessage({ type: 'STATUS', payload: 'Đang tải model AI...', code: 'aiLoading' });
 
   // Helper to add timeout to promises - resolves with fallback value instead of rejecting
+  // Uses AbortController pattern to properly cleanup timeout
   const withTimeoutFallback = (promise, ms, fallbackValue = null) => {
-    return Promise.race([
-      promise,
-      new Promise((resolve) => 
-        setTimeout(() => resolve(fallbackValue), ms)
-      )
-    ]);
+    let timeoutId;
+    const timeoutPromise = new Promise((resolve) => {
+      timeoutId = setTimeout(() => resolve(fallbackValue), ms);
+    });
+    
+    return Promise.race([promise, timeoutPromise]).finally(() => {
+      clearTimeout(timeoutId);
+    });
   };
 
-  // Helper that rejects on timeout
+  // Helper that rejects on timeout - also cleans up timeout
   const withTimeout = (promise, ms, name) => {
-    return Promise.race([
-      promise,
-      new Promise((_, reject) => 
-        setTimeout(() => reject(new Error(`${name} timeout after ${ms}ms`)), ms)
-      )
-    ]);
+    let timeoutId;
+    const timeoutPromise = new Promise((_, reject) => {
+      timeoutId = setTimeout(() => reject(new Error(`${name} timeout after ${ms}ms`)), ms);
+    });
+    
+    return Promise.race([promise, timeoutPromise]).finally(() => {
+      clearTimeout(timeoutId);
+    });
   };
 
   let mediaPipeLoaded = false;
