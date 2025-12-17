@@ -484,19 +484,24 @@ export default function Exam() {
       setStatus('AI Worker error - basic mode');
     };
 
-    // Start frame processing when exam starts
-    if (examStarted && videoRef.current && ctxRef.current) {
+    // Start frame processing when exam starts AND camera is ready
+    // We need to check cameraStatus to ensure canvas context is available
+    if (examStarted && cameraStatus === 'ready' && videoRef.current && ctxRef.current) {
+      console.log('🎬 Starting AI frame processing...');
       frameIntervalRef.current = setInterval(() => {
-        if (videoRef.current && workerRef.current && !isSubmittingRef.current) {
+        if (videoRef.current && workerRef.current && ctxRef.current && !isSubmittingRef.current) {
           try {
-            ctxRef.current.drawImage(videoRef.current, 0, 0, 640, 480);
-            const imageData = ctxRef.current.getImageData(0, 0, 640, 480);
-            // Only send if we have valid image data
-            if (imageData.data && imageData.data.length > 0) {
-              workerRef.current.postMessage(
-                { type: 'PROCESS_FRAME', payload: imageData }, 
-                [imageData.data.buffer]
-              );
+            // Ensure video is playing and has dimensions
+            if (videoRef.current.readyState >= 2 && videoRef.current.videoWidth > 0) {
+              ctxRef.current.drawImage(videoRef.current, 0, 0, 640, 480);
+              const imageData = ctxRef.current.getImageData(0, 0, 640, 480);
+              // Only send if we have valid image data
+              if (imageData.data && imageData.data.length > 0) {
+                workerRef.current.postMessage(
+                  { type: 'PROCESS_FRAME', payload: imageData }, 
+                  [imageData.data.buffer]
+                );
+              }
             }
           } catch (err) {
             console.warn('Error sending frame to worker:', err);
@@ -512,14 +517,16 @@ export default function Exam() {
       // Clear the frame interval
       if (frameIntervalRef.current) {
         clearInterval(frameIntervalRef.current);
+        frameIntervalRef.current = null;
       }
       
       // Terminate worker
       if (workerRef.current) {
         workerRef.current.terminate();
+        workerRef.current = null;
       }
     };
-  }, [examStarted]);
+  }, [examStarted, cameraStatus]);
 
   // ============================================
   // TIMER

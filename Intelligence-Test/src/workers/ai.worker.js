@@ -189,7 +189,7 @@ async function initializeAI() {
     
     self.postMessage({ type: 'STATUS', payload: 'Đang tải YOLO...', code: 'yoloLoading' });
 
-    // Load YOLO ONNX model
+    // Load YOLO ONNX model with timeout
     try {
       ort.env.wasm.wasmPaths = 'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.20.1/dist/';
       
@@ -208,13 +208,22 @@ async function initializeAI() {
       let loadError = null;
       const pathsToTry = [absoluteModelPath, modelPath, `./models/${modelFilename}`];
       
+      // Add 30 second timeout for YOLO model loading (model is ~40MB)
+      const loadWithTimeout = async (path) => {
+        return withTimeout(
+          ort.InferenceSession.create(path, {
+            executionProviders: ['wasm'],
+            graphOptimizationLevel: 'all'
+          }),
+          30000,
+          `YOLO model from ${path}`
+        );
+      };
+      
       for (const tryPath of pathsToTry) {
         try {
           console.log('Trying to load from:', tryPath);
-          yoloSession = await ort.InferenceSession.create(tryPath, {
-            executionProviders: ['wasm'],
-            graphOptimizationLevel: 'all'
-          });
+          yoloSession = await loadWithTimeout(tryPath);
           console.log('✅ Successfully loaded from:', tryPath);
           loadError = null;
           break;
