@@ -72,7 +72,7 @@ export default function Login() {
       }
       
       // Limit total redirects to prevent loops
-      if (state.redirectCount > MAX_NAVIGATION_ATTEMPTS) {
+      if (state.redirectCount >= MAX_NAVIGATION_ATTEMPTS) {
         console.warn('[Login] Too many redirect attempts, stopping');
         return;
       }

@@ -124,7 +124,7 @@ function HomeRoute() {
       }
       
       // Limit total navigations to prevent loops
-      if (state.navigationCount > MAX_NAVIGATION_ATTEMPTS) {
+      if (state.navigationCount >= MAX_NAVIGATION_ATTEMPTS) {
         console.warn('[HomeRoute] Too many navigation attempts, stopping');
         return;
       }
@@ -160,7 +160,7 @@ function HomeRoute() {
       }
       
       // Limit total navigations
-      if (state.navigationCount > MAX_NAVIGATION_ATTEMPTS) {
+      if (state.navigationCount >= MAX_NAVIGATION_ATTEMPTS) {
         console.warn('[HomeRoute] Too many navigation attempts, stopping');
         return;
       }
