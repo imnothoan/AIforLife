@@ -310,6 +310,21 @@ export default function Exam() {
   const canvasRef = useRef(null);
   const ctxRef = useRef(null);
   
+  // Helper function to setup camera stream and canvas
+  const setupCameraWithCanvas = (stream) => {
+    cameraStreamRef.current = stream;
+    if (videoRef.current) {
+      videoRef.current.srcObject = stream;
+    }
+    // Create canvas for frame processing (used later by AI worker)
+    if (!canvasRef.current) {
+      canvasRef.current = document.createElement('canvas');
+      canvasRef.current.width = 640;
+      canvasRef.current.height = 480;
+      ctxRef.current = canvasRef.current.getContext('2d', { willReadFrequently: true });
+    }
+  };
+  
   useEffect(() => {
     const startCamera = async () => {
       try {
@@ -324,17 +339,7 @@ export default function Exam() {
         };
         
         const stream = await navigator.mediaDevices.getUserMedia(constraints);
-        cameraStreamRef.current = stream;
-        
-        if (videoRef.current) {
-          videoRef.current.srcObject = stream;
-          
-          // Create canvas for frame processing (used later by AI worker)
-          canvasRef.current = document.createElement('canvas');
-          canvasRef.current.width = 640;
-          canvasRef.current.height = 480;
-          ctxRef.current = canvasRef.current.getContext('2d', { willReadFrequently: true });
-        }
+        setupCameraWithCanvas(stream);
       } catch (err) {
         console.error('Camera access error:', err);
         // Provide more specific error messages based on error type
@@ -348,10 +353,7 @@ export default function Exam() {
           // Try with simpler constraints
           try {
             const simpleStream = await navigator.mediaDevices.getUserMedia({ video: true });
-            cameraStreamRef.current = simpleStream;
-            if (videoRef.current) {
-              videoRef.current.srcObject = simpleStream;
-            }
+            setupCameraWithCanvas(simpleStream);
           } catch (fallbackErr) {
             console.error('Camera fallback failed:', fallbackErr);
             toast.error(t('anticheat.cameraAccess'));
