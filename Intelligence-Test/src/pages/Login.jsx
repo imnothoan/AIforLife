@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useLanguage } from '../context/LanguageContext';
 import { useNavigate } from 'react-router-dom';
@@ -40,9 +40,22 @@ export default function Login() {
   const [studentId, setStudentId] = useState('');
   const [role, setRole] = useState('student');
 
-  const { login, register } = useAuth();
+  const { user, login, register, loading: authLoading } = useAuth();
   const { t } = useLanguage();
   const navigate = useNavigate();
+  const hasRedirectedRef = useRef(false);
+
+  // Redirect if already authenticated (prevents showing login when already logged in)
+  useEffect(() => {
+    if (!authLoading && user && !hasRedirectedRef.current) {
+      hasRedirectedRef.current = true;
+      // Use a small delay to allow auth state to stabilize
+      const timeoutId = setTimeout(() => {
+        navigate('/', { replace: true });
+      }, 100);
+      return () => clearTimeout(timeoutId);
+    }
+  }, [user, authLoading, navigate]);
 
   const resetForm = () => {
     setEmail('');
@@ -140,7 +153,8 @@ export default function Login() {
       const { error } = await login(email, password);
       if (error) throw error;
       toast.success(t('auth.loginSuccess'));
-      navigate('/');
+      // Navigation is now handled by the useEffect that watches for user auth state
+      // This prevents race conditions between auth state updates and navigation
     } catch (error) {
       let errorMessage = t('auth.loginFailed');
 
@@ -236,6 +250,20 @@ export default function Login() {
     setIsRegister(!isRegister);
     resetForm();
   };
+
+  // Show loading if user is authenticated and we're about to redirect
+  if (!authLoading && user) {
+    return (
+      <div className="flex items-center justify-center min-h-screen bg-gradient-to-br from-primary-50 via-background to-primary-100">
+        <div className="text-center">
+          <div className="inline-flex items-center justify-center w-16 h-16 mb-4">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+          </div>
+          <p className="text-gray-600 text-sm">{t('auth.redirecting')}</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex items-center justify-center min-h-screen bg-gradient-to-br from-primary-50 via-background to-primary-100">
