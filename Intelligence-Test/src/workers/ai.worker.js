@@ -100,7 +100,7 @@ let lastEyeGazeAlert = 0;
 // INITIALIZATION
 // ============================================
 async function initializeAI() {
-  self.postMessage({ type: 'STATUS', payload: 'Đang tải model AI...' });
+  self.postMessage({ type: 'STATUS', payload: 'Đang tải model AI...', code: 'aiLoading' });
 
   try {
     // Load MediaPipe Face Landmarker
@@ -111,21 +111,38 @@ async function initializeAI() {
     
     const vision = await FilesetResolver.forVisionTasks(MEDIAPIPE_WASM);
     
-    faceLandmarker = await FaceLandmarker.createFromOptions(vision, {
-      baseOptions: {
-        modelAssetPath: MEDIAPIPE_MODEL,
-        delegate: "GPU"
-      },
-      runningMode: "IMAGE",
-      numFaces: 1,
-      minFaceDetectionConfidence: CONFIG.FACE.MIN_DETECTION_CONFIDENCE,
-      minTrackingConfidence: CONFIG.FACE.MIN_TRACKING_CONFIDENCE,
-      outputFaceBlendshapes: false,
-      outputFacialTransformationMatrixes: true // For head pose
-    });
+    // Try GPU first, fallback to CPU if it fails
+    let delegateOptions = ["GPU", "CPU"];
+    let lastError = null;
     
-    console.log('MediaPipe Face Landmarker loaded successfully');
-    self.postMessage({ type: 'STATUS', payload: 'Đang tải YOLO...' });
+    for (const delegate of delegateOptions) {
+      try {
+        faceLandmarker = await FaceLandmarker.createFromOptions(vision, {
+          baseOptions: {
+            modelAssetPath: MEDIAPIPE_MODEL,
+            delegate: delegate
+          },
+          runningMode: "IMAGE",
+          numFaces: 1,
+          minFaceDetectionConfidence: CONFIG.FACE.MIN_DETECTION_CONFIDENCE,
+          minTrackingConfidence: CONFIG.FACE.MIN_TRACKING_CONFIDENCE,
+          outputFaceBlendshapes: false,
+          outputFacialTransformationMatrixes: true // For head pose
+        });
+        console.log(`MediaPipe Face Landmarker loaded successfully with ${delegate} delegate`);
+        lastError = null;
+        break;
+      } catch (err) {
+        console.warn(`Failed to load MediaPipe with ${delegate} delegate:`, err.message);
+        lastError = err;
+      }
+    }
+    
+    if (lastError) {
+      throw lastError;
+    }
+    
+    self.postMessage({ type: 'STATUS', payload: 'Đang tải YOLO...', code: 'yoloLoading' });
 
     // Load YOLO ONNX model
     try {
@@ -177,19 +194,19 @@ async function initializeAI() {
         console.log('Confidence threshold:', CONFIG.YOLO.CONFIDENCE_THRESHOLD);
       }
       
-      self.postMessage({ type: 'STATUS', payload: 'AI proctoring active (Face + YOLO)' });
+      self.postMessage({ type: 'STATUS', payload: 'AI proctoring active (Face + YOLO)', code: 'monitoring' });
     } catch (yoloError) {
       console.warn('YOLO model not available');
       console.warn('Error details:', yoloError.message);
       console.warn('Stack:', yoloError.stack);
       // Still allow face detection to work
-      self.postMessage({ type: 'STATUS', payload: 'Face monitoring active (YOLO unavailable)' });
+      self.postMessage({ type: 'STATUS', payload: 'Face monitoring active (YOLO unavailable)', code: 'faceOnly' });
     }
 
     isInitialized = true;
   } catch (error) {
     console.error('AI initialization error:', error);
-    self.postMessage({ type: 'STATUS', payload: 'Lỗi khởi tạo AI - Sử dụng chế độ cơ bản' });
+    self.postMessage({ type: 'STATUS', payload: 'Lỗi khởi tạo AI - Sử dụng chế độ cơ bản', code: 'error' });
     
     // Fallback: basic detection mode
     isInitialized = true;
