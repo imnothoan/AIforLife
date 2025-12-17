@@ -76,6 +76,7 @@ export default function Exam() {
   const [remoteDesktopDetected, setRemoteDesktopDetected] = useState(false);
   const [examStarted, setExamStarted] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [cameraStatus, setCameraStatus] = useState('loading'); // 'loading' | 'ready' | 'error'
 
   // UI State
   const [showNotes, setShowNotes] = useState(false);
@@ -327,6 +328,7 @@ export default function Exam() {
   
   useEffect(() => {
     const startCamera = async () => {
+      setCameraStatus('loading');
       try {
         // Request camera with multiple fallback options for better browser compatibility
         const constraints = { 
@@ -340,8 +342,10 @@ export default function Exam() {
         
         const stream = await navigator.mediaDevices.getUserMedia(constraints);
         setupCameraWithCanvas(stream);
+        setCameraStatus('ready');
       } catch (err) {
         console.error('Camera access error:', err);
+        setCameraStatus('error');
         // Provide more specific error messages based on error type
         if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
           toast.error(t('anticheat.cameraAccess') + ' (Permission denied)');
@@ -354,6 +358,7 @@ export default function Exam() {
           try {
             const simpleStream = await navigator.mediaDevices.getUserMedia({ video: true });
             setupCameraWithCanvas(simpleStream);
+            setCameraStatus('ready');
           } catch (fallbackErr) {
             console.error('Camera fallback failed:', fallbackErr);
             toast.error(t('anticheat.cameraAccess'));
@@ -1353,10 +1358,22 @@ export default function Exam() {
           <div className="mb-6">
             <p className="text-sm font-medium text-gray-700 mb-2">{t('exam.rules.cameraCheck')}</p>
             <div className="relative bg-gray-900 rounded-lg overflow-hidden aspect-video">
+              {cameraStatus === 'loading' && (
+                <div className="absolute inset-0 flex items-center justify-center">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white"></div>
+                </div>
+              )}
+              {cameraStatus === 'error' && (
+                <div className="absolute inset-0 flex items-center justify-center flex-col">
+                  <AlertTriangle className="w-12 h-12 text-danger mb-2" />
+                  <p className="text-white text-sm">{t('anticheat.cameraAccess')}</p>
+                </div>
+              )}
               <video ref={videoRef} autoPlay playsInline muted className="w-full h-full object-cover" />
               <div className="absolute bottom-2 left-2 flex items-center space-x-1 bg-black/50 text-white text-xs px-2 py-1 rounded">
                 <Camera className="w-3 h-3" />
                 <span>{t('proctoring.camera')}</span>
+                {cameraStatus === 'ready' && <span className="w-2 h-2 rounded-full bg-green-500 ml-1"></span>}
               </div>
             </div>
           </div>

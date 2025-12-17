@@ -284,21 +284,42 @@ export const AuthProvider = ({ children }) => {
         
         if (currentUser && isMounted) {
           setProfileLoading(true);
-          try {
-            const userProfile = await fetchProfile(currentUser.id);
-            if (isMounted) {
-              setProfile(userProfile || createFallbackProfile(currentUser));
+          // Track locally whether profile was successfully set
+          let profileWasSet = false;
+          
+          // Add overall timeout to prevent infinite loading
+          const profileFetchPromise = (async () => {
+            try {
+              const userProfile = await fetchProfile(currentUser.id);
+              if (isMounted) {
+                setProfile(userProfile || createFallbackProfile(currentUser));
+                profileWasSet = true;
+              }
+            } catch (profileError) {
+              console.error('Error fetching profile:', profileError);
+              // Use helper function for fallback profile
+              if (isMounted) {
+                setProfile(createFallbackProfile(currentUser));
+                profileWasSet = true;
+              }
             }
-          } catch (profileError) {
-            console.error('Error fetching profile:', profileError);
-            // Use helper function for fallback profile
-            if (isMounted) {
+          })();
+          
+          const timeoutPromise = new Promise((resolve) => {
+            setTimeout(() => {
+              console.warn('Profile fetch timeout in initAuth - using fallback');
+              resolve();
+            }, 5000); // 5 second overall timeout
+          });
+          
+          await Promise.race([profileFetchPromise, timeoutPromise]);
+          
+          if (isMounted) {
+            // Ensure fallback profile is set if profile wasn't set during fetch
+            if (!profileWasSet) {
               setProfile(createFallbackProfile(currentUser));
             }
-          } finally {
-            if (isMounted) {
-              setProfileLoading(false);
-            }
+            setProfileLoading(false);
           }
         }
         
@@ -332,21 +353,42 @@ export const AuthProvider = ({ children }) => {
       
       if (currentUser) {
         setProfileLoading(true);
-        try {
-          const userProfile = await fetchProfile(currentUser.id);
-          if (isMounted) {
-            setProfile(userProfile || createFallbackProfile(currentUser));
+        // Track locally whether profile was successfully set
+        let profileWasSet = false;
+        
+        // Add overall timeout to prevent infinite loading
+        const profileFetchPromise = (async () => {
+          try {
+            const userProfile = await fetchProfile(currentUser.id);
+            if (isMounted) {
+              setProfile(userProfile || createFallbackProfile(currentUser));
+              profileWasSet = true;
+            }
+          } catch (profileError) {
+            console.error('Error fetching profile on auth change:', profileError);
+            // Use helper function for fallback profile
+            if (isMounted) {
+              setProfile(createFallbackProfile(currentUser));
+              profileWasSet = true;
+            }
           }
-        } catch (profileError) {
-          console.error('Error fetching profile on auth change:', profileError);
-          // Use helper function for fallback profile
-          if (isMounted) {
+        })();
+        
+        const timeoutPromise = new Promise((resolve) => {
+          setTimeout(() => {
+            console.warn('Profile fetch timeout in onAuthStateChange - using fallback');
+            resolve();
+          }, 5000); // 5 second overall timeout
+        });
+        
+        await Promise.race([profileFetchPromise, timeoutPromise]);
+        
+        if (isMounted) {
+          // Ensure fallback profile is set if profile wasn't set during fetch
+          if (!profileWasSet) {
             setProfile(createFallbackProfile(currentUser));
           }
-        } finally {
-          if (isMounted) {
-            setProfileLoading(false);
-          }
+          setProfileLoading(false);
         }
       } else {
         // User logged out

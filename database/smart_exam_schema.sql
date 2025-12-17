@@ -697,6 +697,9 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
+-- Grant execute permission for start_exam_session
+GRANT EXECUTE ON FUNCTION public.start_exam_session(UUID, TEXT, TEXT) TO authenticated;
+
 -- Function to safely submit an answer (with optimistic locking)
 CREATE OR REPLACE FUNCTION public.submit_answer(
   p_session_id UUID,
@@ -762,6 +765,9 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
+-- Grant execute permission for submit_answer
+GRANT EXECUTE ON FUNCTION public.submit_answer(UUID, UUID, JSONB, INTEGER) TO authenticated;
+
 -- Function to submit exam
 CREATE OR REPLACE FUNCTION public.submit_exam(
   p_session_id UUID,
@@ -821,6 +827,9 @@ BEGIN
   );
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- Grant execute permission for submit_exam
+GRANT EXECUTE ON FUNCTION public.submit_exam(UUID, BOOLEAN) TO authenticated;
 
 -- ================================================
 -- SECTION 8: INDEXES FOR PERFORMANCE
