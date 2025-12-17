@@ -8,6 +8,7 @@ import './index.css';
 import axios from 'axios';
 import { Suspense, lazy, useEffect, useRef, useState } from 'react';
 import { t } from './lib/i18n';
+import { PROFILE_LOADING_TIMEOUT_MS } from './lib/constants';
 
 // Lazy load pages for better performance and smaller initial bundle
 const Login = lazy(() => import('./pages/Login'));
@@ -97,7 +98,7 @@ function HomeRoute() {
       profileTimeoutRef.current = setTimeout(() => {
         console.warn('Profile loading timeout in HomeRoute - using metadata role');
         setForceRender(true);
-      }, 3000); // 3 second timeout
+      }, PROFILE_LOADING_TIMEOUT_MS);
     }
     
     return () => {

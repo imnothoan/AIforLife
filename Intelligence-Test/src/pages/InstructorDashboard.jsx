@@ -11,6 +11,7 @@ import {
   Edit2, GraduationCap, Activity, AlertTriangle, Search, LogOut, User
 } from 'lucide-react';
 import LanguageSwitcher from '../components/LanguageSwitcher';
+import { ACADEMIC_YEAR_PAST_YEARS, ACADEMIC_YEAR_FUTURE_YEARS } from '../lib/constants';
 
 // ============================================
 // UTILITY FUNCTIONS
@@ -1356,8 +1357,8 @@ function StudentAnalyticsTab({ classId, exams }) {
 function generateAcademicYearOptions() {
   const currentYear = new Date().getFullYear();
   const options = [];
-  // Generate 5 years back and 2 years forward
-  for (let i = -5; i <= 2; i++) {
+  // Generate past and future years based on configuration
+  for (let i = -ACADEMIC_YEAR_PAST_YEARS; i <= ACADEMIC_YEAR_FUTURE_YEARS; i++) {
     const startYear = currentYear + i;
     options.push(`${startYear}-${startYear + 1}`);
   }
