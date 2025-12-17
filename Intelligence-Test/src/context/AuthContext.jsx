@@ -65,28 +65,53 @@ export const AuthProvider = ({ children }) => {
 
   // Fetch user profile from database with retry logic
   const fetchProfile = useCallback(async (userId, retryCount = 0) => {
-    const MAX_RETRIES = 3;
-    const BASE_RETRY_DELAY = 500; // ms
+    const MAX_RETRIES = 2; // Reduced retries for faster failure
+    const BASE_RETRY_DELAY = 300; // Reduced delay
+    const FETCH_TIMEOUT = 3000; // 3 second timeout per fetch attempt
     
     // Calculate exponential backoff delay
     const getBackoffDelay = (attempt) => BASE_RETRY_DELAY * Math.pow(2, attempt);
     
+    // Helper to add timeout to any promise
+    const withTimeout = (promise, ms, fallback) => {
+      return Promise.race([
+        promise,
+        new Promise((resolve) => setTimeout(() => resolve(fallback), ms))
+      ]);
+    };
+    
     try {
-      // First, get the current user for fallback
-      const { data: { user: authUser } } = await supabase.auth.getUser();
+      // First, get the current user for fallback (with timeout)
+      const authResult = await withTimeout(
+        supabase.auth.getUser(),
+        FETCH_TIMEOUT,
+        { data: { user: null }, error: { message: 'Auth timeout' } }
+      );
+      const authUser = authResult?.data?.user;
       if (!authUser) {
         console.warn('fetchProfile: No authenticated user found');
         return null;
       }
       
-      // Try to fetch existing profile
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', userId)
-        .single();
+      // Try to fetch existing profile (with timeout)
+      const profileResult = await withTimeout(
+        supabase
+          .from('profiles')
+          .select('*')
+          .eq('id', userId)
+          .single(),
+        FETCH_TIMEOUT,
+        { data: null, error: { code: 'TIMEOUT', message: 'Profile fetch timeout' } }
+      );
+      const { data, error } = profileResult;
       
       if (error) {
+        // Handle timeout - return fallback immediately
+        if (error.code === 'TIMEOUT') {
+          console.warn('Profile fetch timeout, using fallback');
+          return createFallbackProfile(authUser);
+        }
+        
         // PGRST116 means no rows returned - profile may not exist yet
         if (error.code === 'PGRST116') {
           console.log('Profile not found, attempting to create...');

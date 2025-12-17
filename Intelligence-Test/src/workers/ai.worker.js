@@ -102,6 +102,16 @@ let lastEyeGazeAlert = 0;
 async function initializeAI() {
   self.postMessage({ type: 'STATUS', payload: 'Đang tải model AI...', code: 'aiLoading' });
 
+  // Helper to add timeout to promises
+  const withTimeout = (promise, ms, name) => {
+    return Promise.race([
+      promise,
+      new Promise((_, reject) => 
+        setTimeout(() => reject(new Error(`${name} timeout after ${ms}ms`)), ms)
+      )
+    ]);
+  };
+
   try {
     // Load MediaPipe Face Landmarker
     // NOTE: These values must match MEDIAPIPE_CONFIG in lib/constants.js
@@ -109,7 +119,12 @@ async function initializeAI() {
     const MEDIAPIPE_WASM = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.18/wasm";
     const MEDIAPIPE_MODEL = "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task";
     
-    const vision = await FilesetResolver.forVisionTasks(MEDIAPIPE_WASM);
+    // Add 10 second timeout for vision tasks initialization
+    const vision = await withTimeout(
+      FilesetResolver.forVisionTasks(MEDIAPIPE_WASM),
+      10000,
+      'MediaPipe WASM'
+    );
     
     // Try GPU first, fallback to CPU if it fails
     let delegateOptions = ["GPU", "CPU"];
@@ -117,18 +132,23 @@ async function initializeAI() {
     
     for (const delegate of delegateOptions) {
       try {
-        faceLandmarker = await FaceLandmarker.createFromOptions(vision, {
-          baseOptions: {
-            modelAssetPath: MEDIAPIPE_MODEL,
-            delegate: delegate
-          },
-          runningMode: "IMAGE",
-          numFaces: 1,
-          minFaceDetectionConfidence: CONFIG.FACE.MIN_DETECTION_CONFIDENCE,
-          minTrackingConfidence: CONFIG.FACE.MIN_TRACKING_CONFIDENCE,
-          outputFaceBlendshapes: false,
-          outputFacialTransformationMatrixes: true // For head pose
-        });
+        // Add 15 second timeout for model loading
+        faceLandmarker = await withTimeout(
+          FaceLandmarker.createFromOptions(vision, {
+            baseOptions: {
+              modelAssetPath: MEDIAPIPE_MODEL,
+              delegate: delegate
+            },
+            runningMode: "IMAGE",
+            numFaces: 1,
+            minFaceDetectionConfidence: CONFIG.FACE.MIN_DETECTION_CONFIDENCE,
+            minTrackingConfidence: CONFIG.FACE.MIN_TRACKING_CONFIDENCE,
+            outputFaceBlendshapes: false,
+            outputFacialTransformationMatrixes: true // For head pose
+          }),
+          15000,
+          `FaceLandmarker (${delegate})`
+        );
         console.log(`MediaPipe Face Landmarker loaded successfully with ${delegate} delegate`);
         lastError = null;
         break;
