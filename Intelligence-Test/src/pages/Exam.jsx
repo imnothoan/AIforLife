@@ -1402,7 +1402,7 @@ export default function Exam() {
                     className="flex items-center space-x-2 bg-primary hover:bg-primary-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
                   >
                     <Camera className="w-4 h-4" />
-                    <span>{t('face.retake') || 'Thử lại'}</span>
+                    <span>{t('face.retake')}</span>
                   </button>
                 </div>
               )}

@@ -1743,7 +1743,7 @@ export default function InstructorDashboard() {
           
           // Show toast notification for new enrollments
           if (payload.eventType === 'INSERT') {
-            toast.success(t('student.addSuccess').replace('{count}', '1'));
+            toast.success(t('student.studentJoined'));
           }
         }
       )

@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="vi">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>SmartExamPro - Đang chuyển hướng...</title>
+    <meta name="robots" content="noindex" />
+    <script>
+      // Single Page Apps for GitHub Pages
+      // MIT License - https://github.com/rafgraph/spa-github-pages
+      // This script takes the current URL and converts the path and query
+      // string into just a query string, and then redirects the browser
+      // to the new URL with only a query string and hash fragment.
+      
+      // Encode the path as a query parameter
+      var pathSegmentsToKeep = 0; // Keep no path segments for custom domain
+      
+      var l = window.location;
+      var pathWithoutSlash = l.pathname.slice(1);
+      var queryString = l.search || '';
+      
+      // Redirect to index.html with the path stored in sessionStorage
+      // This is cleaner than using query params and works better with React Router
+      sessionStorage.setItem('spa-redirect-path', l.pathname + queryString + l.hash);
+      
+      l.replace(
+        l.protocol + '//' + l.hostname + (l.port ? ':' + l.port : '') + '/'
+      );
+    </script>
+  </head>
+  <body>
+    <div style="text-align: center; padding: 50px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
+      <div style="width: 40px; height: 40px; border: 4px solid #e5e7eb; border-top-color: #2563eb; border-radius: 50%; animation: spin 1s linear infinite; margin: 0 auto 20px;"></div>
+      <h2 style="color: #1f2937; margin-bottom: 10px;">Đang chuyển hướng...</h2>
+      <p style="color: #6b7280;">Vui lòng đợi trong giây lát.</p>
+    </div>
+    <style>
+      @keyframes spin {
+        to { transform: rotate(360deg); }
+      }
+    </style>
+  </body>
+</html>
