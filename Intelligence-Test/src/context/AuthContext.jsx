@@ -142,17 +142,20 @@ export const AuthProvider = ({ children }) => {
 
   useEffect(() => {
     let isMounted = true;
+    let sessionCheckComplete = false;
     
     // Add timeout to prevent infinite loading
     const loadingTimeout = setTimeout(() => {
-      if (isMounted && loading) {
+      if (isMounted && !sessionCheckComplete) {
         console.warn('Auth loading timeout - forcing completion');
-        setLoading(false);
-        setProfileLoading(false);
+        if (isMounted) {
+          setLoading(false);
+          setProfileLoading(false);
+        }
       }
-    }, 8000); // 8 second timeout (reduced for better UX)
+    }, 10000); // 10 second timeout for better reliability
 
-    // Check active session on mount with timeout
+    // Check active session on mount
     const initAuth = async () => {
       try {
         // Add timeout to getSession call
@@ -180,7 +183,7 @@ export const AuthProvider = ({ children }) => {
           try {
             const userProfile = await fetchProfile(currentUser.id);
             if (isMounted) {
-              setProfile(userProfile);
+              setProfile(userProfile || createFallbackProfile(currentUser));
             }
           } catch (profileError) {
             console.error('Error fetching profile:', profileError);
@@ -195,11 +198,13 @@ export const AuthProvider = ({ children }) => {
           }
         }
         
+        sessionCheckComplete = true;
         if (isMounted) {
           setLoading(false);
         }
       } catch (error) {
         console.error('Error getting session:', error);
+        sessionCheckComplete = true;
         if (isMounted) {
           setLoading(false);
           setProfileLoading(false);
@@ -209,20 +214,24 @@ export const AuthProvider = ({ children }) => {
     
     initAuth();
 
-    // Listen for changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
+    // Listen for auth state changes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (!isMounted) return;
+      
       const currentUser = session?.user ?? null;
       
-      if (isMounted) {
-        setUser(currentUser);
+      if (import.meta.env.DEV) {
+        console.log('[AuthContext] Auth state changed:', event, currentUser?.id);
       }
       
-      if (currentUser && isMounted) {
+      setUser(currentUser);
+      
+      if (currentUser) {
         setProfileLoading(true);
         try {
           const userProfile = await fetchProfile(currentUser.id);
           if (isMounted) {
-            setProfile(userProfile);
+            setProfile(userProfile || createFallbackProfile(currentUser));
           }
         } catch (profileError) {
           console.error('Error fetching profile on auth change:', profileError);
@@ -235,12 +244,14 @@ export const AuthProvider = ({ children }) => {
             setProfileLoading(false);
           }
         }
-      } else if (isMounted) {
+      } else {
+        // User logged out
         setProfile(null);
         setProfileLoading(false);
       }
       
-      if (isMounted) {
+      // Mark auth as loaded (only set to false, never back to true after initial load)
+      if (loading && isMounted) {
         setLoading(false);
       }
     });
