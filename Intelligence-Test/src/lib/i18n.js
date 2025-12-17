@@ -64,6 +64,7 @@ const translations = {
     'auth.loginNow': 'Đăng nhập ngay',
     'auth.optional': 'tuỳ chọn',
     'auth.processing': 'Đang xử lý...',
+    'auth.redirecting': 'Đang chuyển hướng...',
     
     // Dashboard - Student
     'dashboard.hello': 'Xin chào',
@@ -478,6 +479,7 @@ const translations = {
     'auth.loginNow': 'Login now',
     'auth.optional': 'optional',
     'auth.processing': 'Processing...',
+    'auth.redirecting': 'Redirecting...',
     
     // Dashboard - Student
     'dashboard.hello': 'Hello',
