@@ -60,7 +60,9 @@ export default function Login() {
     // Only redirect when auth is fully loaded and user exists
     if (!authLoading && user) {
       // Check if we already redirected for this user
-      if (state.hasRedirected && state.lastUserId === user.id) {
+      // Use optional chaining for safety during state transitions
+      const userId = user?.id || 'unknown';
+      if (state.hasRedirected && state.lastUserId === userId) {
         return;
       }
       
@@ -76,7 +78,7 @@ export default function Login() {
       }
       
       state.hasRedirected = true;
-      state.lastUserId = user.id;
+      state.lastUserId = userId;
       state.redirectCount++;
       state.lastRedirectTime = now;
       

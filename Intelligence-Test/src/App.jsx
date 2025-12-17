@@ -145,7 +145,8 @@ function HomeRoute() {
     }
     
     // Check if we already navigated for this user/role combination
-    const userRoleKey = `${user.id}:${computedRole}`;
+    // Use optional chaining for safety during state transitions
+    const userRoleKey = `${user?.id || 'unknown'}:${computedRole}`;
     if (state.hasNavigated && state.lastUserRoleKey === userRoleKey) {
       return;
     }
