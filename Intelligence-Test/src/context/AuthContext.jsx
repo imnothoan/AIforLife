@@ -116,14 +116,37 @@ export const AuthProvider = ({ children }) => {
         
         // PGRST116 means no rows returned - profile may not exist yet
         if (error.code === 'PGRST116') {
-          console.log('Profile not found, attempting to create...');
+          console.log('Profile not found, attempting to create via RPC...');
           
           // Profile doesn't exist yet, try to create it from user metadata
           const metadata = authUser.user_metadata || {};
           const role = metadata.role || 'student';
           const fullName = metadata.full_name || authUser.email?.split('@')[0] || 'User';
           
-          // Try to create profile with upsert (safer for concurrent requests)
+          // Try RPC first as it has SECURITY DEFINER and is more reliable
+          try {
+            const { data: rpcResult, error: rpcError } = await supabase.rpc('ensure_profile_exists', {
+              p_user_id: userId,
+              p_email: authUser.email,
+              p_full_name: fullName,
+              p_role: role
+            });
+            
+            if (!rpcError && rpcResult?.success) {
+              console.log('Profile created via RPC:', rpcResult.action);
+              return {
+                id: userId,
+                email: authUser.email,
+                full_name: fullName,
+                role: rpcResult.role || role,
+                student_id: metadata.student_id || null
+              };
+            }
+          } catch (rpcErr) {
+            console.warn('RPC ensure_profile_exists failed:', rpcErr);
+          }
+          
+          // Fallback: Try direct upsert if RPC fails
           const { data: newProfile, error: createError } = await supabase
             .from('profiles')
             .upsert({
@@ -134,7 +157,6 @@ export const AuthProvider = ({ children }) => {
               student_id: metadata.student_id || null
             }, { 
               onConflict: 'id',
-              // Returns the record whether it was inserted or updated
               ignoreDuplicates: false
             })
             .select()
@@ -143,51 +165,7 @@ export const AuthProvider = ({ children }) => {
           if (createError) {
             console.error('Error creating profile:', createError);
             
-            // If it's a permission error, try the RPC function as fallback
-            if (createError.code === '42501' || createError.message?.includes('permission')) {
-              console.warn('Permission denied creating profile directly, trying RPC fallback...');
-              
-              try {
-                const { data: rpcResult, error: rpcError } = await supabase.rpc('ensure_profile_exists', {
-                  p_user_id: userId,
-                  p_email: authUser.email,
-                  p_full_name: fullName,
-                  p_role: role
-                });
-                
-                if (!rpcError && rpcResult?.success) {
-                  console.log('Profile created via RPC:', rpcResult.action);
-                  return {
-                    id: userId,
-                    email: authUser.email,
-                    full_name: fullName,
-                    role: rpcResult.role || role,
-                    student_id: metadata.student_id || null
-                  };
-                }
-              } catch (rpcErr) {
-                console.warn('RPC fallback failed:', rpcErr);
-              }
-              
-              // Return fallback profile if all else fails
-              return {
-                id: userId,
-                email: authUser.email,
-                full_name: fullName,
-                role: role,
-                student_id: metadata.student_id || null
-              };
-            }
-            
-            // If creation failed and we haven't retried too many times, wait and retry with exponential backoff
-            if (retryCount < MAX_RETRIES) {
-              console.log(`Retrying profile fetch (attempt ${retryCount + 1}/${MAX_RETRIES})...`);
-              await new Promise(resolve => setTimeout(resolve, getBackoffDelay(retryCount)));
-              return fetchProfile(userId, retryCount + 1);
-            }
-            
-            // Return a fallback profile based on user metadata
-            console.warn('Max retries reached, using fallback profile');
+            // Return fallback profile if all else fails
             return {
               id: userId,
               email: authUser.email,
