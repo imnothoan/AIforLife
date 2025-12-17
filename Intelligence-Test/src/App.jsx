@@ -79,108 +79,67 @@ function InstructorRoute({ children }) {
 }
 
 // Smart Home route - redirects based on user role
-// Uses stable navigation guard to prevent infinite redirect loops
+// SIMPLIFIED: Direct navigation without complex useEffect dependencies
 function HomeRoute() {
   const { user, profile, profileLoading, loading } = useAuth();
   const navigate = useNavigate();
-  const hasNavigatedRef = useRef(false);
-  const lastUserIdRef = useRef(null);
+  const navigationStateRef = useRef({ navigated: false, userId: null });
   
-  // Reset navigation flag when user changes (logout/login)
-  // This useEffect runs synchronously with the same dependencies as navigation effect
-  useEffect(() => {
-    const currentUserId = user?.id;
-    
-    // Reset flag if user logged out or different user logged in
-    if (currentUserId !== lastUserIdRef.current) {
-      hasNavigatedRef.current = false;
-      lastUserIdRef.current = currentUserId;
-    }
-  }, [user?.id]);
+  // Get role early and consistently
+  const userRole = profile?.role || user?.user_metadata?.role || 'student';
+  const isInstructorOrAdmin = userRole === 'instructor' || userRole === 'admin';
   
+  // Single useEffect with minimal dependencies to prevent loops
   useEffect(() => {
-    // Skip if already navigated for this mount
-    if (hasNavigatedRef.current) {
-      return;
+    // Reset if user changed
+    if (user?.id !== navigationStateRef.current.userId) {
+      navigationStateRef.current = { navigated: false, userId: user?.id || null };
     }
     
-    // Don't navigate while auth is loading
-    if (loading) {
+    // Skip if already navigated or still loading
+    if (navigationStateRef.current.navigated || loading) {
       return;
     }
     
     // Redirect to login if not authenticated
     if (!user) {
-      if (import.meta.env.DEV) {
-        console.log('[HomeRoute] Redirecting to login - user not authenticated');
-      }
-      hasNavigatedRef.current = true;
+      navigationStateRef.current.navigated = true;
       navigate('/login', { replace: true });
       return;
     }
     
-    // Wait for profile to be loaded before making navigation decisions
-    // This is CRITICAL - we must have profile data before redirecting
+    // Wait for profile - but with timeout protection
     if (profileLoading) {
-      if (import.meta.env.DEV) {
-        console.log('[HomeRoute] Waiting for profile to load...');
-      }
       return;
     }
     
-    // Profile should be loaded by now
-    // Get role from profile first, fall back to user metadata
-    const userRole = profile?.role || user?.user_metadata?.role || 'student';
-    
-    // Only redirect instructors/admins to instructor dashboard
-    if (userRole === 'instructor' || userRole === 'admin') {
-      if (import.meta.env.DEV) {
-        console.log('[HomeRoute] Navigating instructor/admin to /instructor:', {
-          userId: user.id,
-          role: userRole,
-          profileRole: profile?.role
-        });
-      }
-      hasNavigatedRef.current = true;
+    // Navigate instructors/admins
+    if (isInstructorOrAdmin) {
+      navigationStateRef.current.navigated = true;
       navigate('/instructor', { replace: true });
-      return;
+    } else {
+      // Mark as navigated for students (they stay here)
+      navigationStateRef.current.navigated = true;
     }
-    
-    // For students, mark as ready (no navigation needed, will render Dashboard)
-    if (import.meta.env.DEV) {
-      console.log('[HomeRoute] User is student, rendering Dashboard:', {
-        userId: user.id,
-        role: userRole
-      });
-    }
-    hasNavigatedRef.current = true;
-    
-  }, [user, profile, profileLoading, loading, navigate]);
+  }, [user, loading, profileLoading, isInstructorOrAdmin, navigate]);
   
-  // Show loading while auth is being checked
+  // Render decisions - kept simple
   if (loading) {
     return <LoadingFallback />;
   }
   
-  // Not authenticated - will redirect via useEffect
   if (!user) {
     return <LoadingFallback />;
   }
   
-  // Wait for profile to be loaded before checking role
   if (profileLoading) {
     return <LoadingFallback />;
   }
   
-  // Get role for rendering decision
-  const userRole = profile?.role || user?.user_metadata?.role || 'student';
-  
-  // Instructors will be redirected via useEffect - show loading during transition
-  if (userRole === 'instructor' || userRole === 'admin') {
+  if (isInstructorOrAdmin) {
     return <LoadingFallback />;
   }
   
-  // Students see the Dashboard
   return <Dashboard />;
 }
 
