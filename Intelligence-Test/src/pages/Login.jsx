@@ -43,15 +43,47 @@ export default function Login() {
   const { user, login, register, loading: authLoading } = useAuth();
   const { t } = useLanguage();
   const navigate = useNavigate();
-  const hasRedirectedRef = useRef(false);
+  const navigationStateRef = useRef({
+    hasRedirected: false,
+    lastUserId: null,
+    redirectCount: 0,
+    lastRedirectTime: 0
+  });
 
   // Redirect if already authenticated (prevents showing login when already logged in)
-  // Uses ref guard to ensure navigation only happens once even if effect re-runs
+  // Uses ref guard with throttling to ensure navigation only happens once
   useEffect(() => {
+    const state = navigationStateRef.current;
+    const now = Date.now();
+    
     // Only redirect when auth is fully loaded and user exists
-    if (!authLoading && user && !hasRedirectedRef.current) {
-      hasRedirectedRef.current = true;
-      // Navigate immediately - the ref guard prevents multiple calls
+    if (!authLoading && user) {
+      // Check if we already redirected for this user
+      if (state.hasRedirected && state.lastUserId === user.id) {
+        return;
+      }
+      
+      // Throttle navigation - max once per 500ms
+      if ((now - state.lastRedirectTime) < 500) {
+        return;
+      }
+      
+      // Limit total redirects to prevent loops
+      if (state.redirectCount > 5) {
+        console.warn('[Login] Too many redirect attempts, stopping');
+        return;
+      }
+      
+      state.hasRedirected = true;
+      state.lastUserId = user.id;
+      state.redirectCount++;
+      state.lastRedirectTime = now;
+      
+      if (import.meta.env.DEV) {
+        console.log('[Login] User authenticated, redirecting to home');
+      }
+      
+      // Navigate to home - the ref guard prevents multiple calls
       navigate('/', { replace: true });
     }
   }, [user, authLoading, navigate]);

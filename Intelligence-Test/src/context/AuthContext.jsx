@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState, useCallback } from 'react';
+import { createContext, useContext, useEffect, useState, useCallback, useMemo } from 'react';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
 
 const AuthContext = createContext();
@@ -347,17 +347,33 @@ export const AuthProvider = ({ children }) => {
     return { data, error };
   };
 
-  // Check if user has a specific role
-  const hasRole = (requiredRole) => {
+  // Check if user has a specific role - using useCallback for stable reference
+  const hasRole = useCallback((requiredRole) => {
     if (!profile) return false;
     if (requiredRole === 'admin') return profile.role === 'admin';
     if (requiredRole === 'instructor') return profile.role === 'instructor' || profile.role === 'admin';
     return true; // student or any authenticated user
-  };
+  }, [profile]);
 
-  const isInstructor = () => hasRole('instructor');
-  const isAdmin = () => hasRole('admin');
-  const isStudent = () => profile?.role === 'student';
+  // Memoized role check results to prevent infinite loops
+  const isInstructorResult = useMemo(() => {
+    if (!profile) return false;
+    return profile.role === 'instructor' || profile.role === 'admin';
+  }, [profile]);
+
+  const isAdminResult = useMemo(() => {
+    if (!profile) return false;
+    return profile.role === 'admin';
+  }, [profile]);
+
+  const isStudentResult = useMemo(() => {
+    return profile?.role === 'student';
+  }, [profile]);
+
+  // Stable function references using useCallback
+  const isInstructor = useCallback(() => isInstructorResult, [isInstructorResult]);
+  const isAdmin = useCallback(() => isAdminResult, [isAdminResult]);
+  const isStudent = useCallback(() => isStudentResult, [isStudentResult]);
 
   // Check if Supabase is configured
   if (!isSupabaseConfigured()) {

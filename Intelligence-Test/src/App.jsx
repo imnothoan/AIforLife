@@ -79,25 +79,35 @@ function InstructorRoute({ children }) {
 }
 
 // Smart Home route - redirects based on user role
-// Uses useNavigate + useEffect to prevent infinite redirect loops
+// Uses useNavigate + useEffect with stable refs to prevent infinite redirect loops
 function HomeRoute() {
-  const { user, profile, profileLoading, isInstructor, loading } = useAuth();
+  const { user, profile, profileLoading, loading } = useAuth();
   const navigate = useNavigate();
-  const hasNavigatedRef = useRef(false);
-  const lastUserIdRef = useRef(null);
-  const lastRoleRef = useRef(null);
+  const navigationStateRef = useRef({
+    hasNavigated: false,
+    lastNavigationTarget: null,
+    lastUserId: null,
+    navigationCount: 0,
+    lastNavigationTime: 0
+  });
   
-  // Check role from multiple sources (profile, user metadata)
-  const userRole = useMemo(() => {
+  // Get the computed role directly from profile or user metadata
+  // Using useMemo to ensure stable value
+  const computedRole = useMemo(() => {
     return profile?.role || user?.user_metadata?.role || 'student';
   }, [profile?.role, user?.user_metadata?.role]);
   
-  const shouldRedirectToInstructor = useMemo(() => {
-    return isInstructor() || userRole === 'instructor' || userRole === 'admin';
-  }, [isInstructor, userRole]);
+  // Determine if user should be redirected to instructor page
+  // Based on computed role only, not on unstable function references
+  const isInstructorOrAdmin = useMemo(() => {
+    return computedRole === 'instructor' || computedRole === 'admin';
+  }, [computedRole]);
   
-  // Handle navigation in useEffect to prevent multiple Navigate component renders
+  // Handle navigation in useEffect with throttling to prevent loops
   useEffect(() => {
+    const state = navigationStateRef.current;
+    const now = Date.now();
+    
     // Don't navigate while loading
     if (loading) {
       return;
@@ -105,11 +115,26 @@ function HomeRoute() {
     
     // Redirect to login if not authenticated
     if (!user) {
-      // Only navigate if we haven't already for this state
-      if (!hasNavigatedRef.current) {
-        hasNavigatedRef.current = true;
-        navigate('/login', { replace: true });
+      // Throttle navigation - max once per 500ms to same target
+      if (state.lastNavigationTarget === '/login' && (now - state.lastNavigationTime) < 500) {
+        return;
       }
+      
+      // Limit total navigations to prevent loops
+      if (state.navigationCount > 10) {
+        console.warn('[HomeRoute] Too many navigation attempts, stopping');
+        return;
+      }
+      
+      state.navigationCount++;
+      state.lastNavigationTarget = '/login';
+      state.lastNavigationTime = now;
+      
+      if (import.meta.env.DEV) {
+        console.log('[HomeRoute] Redirecting to login - user not authenticated');
+      }
+      
+      navigate('/login', { replace: true });
       return;
     }
     
@@ -118,39 +143,49 @@ function HomeRoute() {
       return;
     }
     
-    // Check if user or role has changed since last navigation decision
-    const userChanged = lastUserIdRef.current !== user.id;
-    const roleChanged = lastRoleRef.current !== userRole;
-    
-    // Update refs for next comparison
-    lastUserIdRef.current = user.id;
-    lastRoleRef.current = userRole;
-    
-    // Only redirect instructors - students stay on this route to show Dashboard
-    if (shouldRedirectToInstructor) {
-      // Navigate if user/role changed or we haven't navigated yet
-      if (userChanged || roleChanged || !hasNavigatedRef.current) {
-        hasNavigatedRef.current = true;
-        
-        // Debug logging for auth issues (only in development mode)
-        if (import.meta.env.DEV) {
-          console.log('[HomeRoute] Navigating instructor to /instructor:', {
-            userId: user?.id,
-            profileRole: profile?.role,
-            metadataRole: user?.user_metadata?.role,
-            userRole
-          });
-        }
-        
-        navigate('/instructor', { replace: true });
-      }
+    // Check if we already navigated for this user/role combination
+    const userKey = `${user.id}:${computedRole}`;
+    if (state.hasNavigated && state.lastUserId === userKey) {
       return;
     }
     
-    // For students, reset navigation flag so they can see Dashboard
-    hasNavigatedRef.current = false;
+    // Only redirect instructors/admins
+    if (isInstructorOrAdmin) {
+      // Throttle navigation
+      if (state.lastNavigationTarget === '/instructor' && (now - state.lastNavigationTime) < 500) {
+        return;
+      }
+      
+      // Limit total navigations
+      if (state.navigationCount > 10) {
+        console.warn('[HomeRoute] Too many navigation attempts, stopping');
+        return;
+      }
+      
+      state.hasNavigated = true;
+      state.lastUserId = userKey;
+      state.navigationCount++;
+      state.lastNavigationTarget = '/instructor';
+      state.lastNavigationTime = now;
+      
+      if (import.meta.env.DEV) {
+        console.log('[HomeRoute] Navigating instructor to /instructor:', {
+          userId: user?.id,
+          profileRole: profile?.role,
+          metadataRole: user?.user_metadata?.role,
+          computedRole
+        });
+      }
+      
+      navigate('/instructor', { replace: true });
+      return;
+    }
     
-  }, [user, profile, profileLoading, loading, navigate, shouldRedirectToInstructor, userRole]);
+    // For students, mark as navigated to prevent further navigation attempts
+    state.hasNavigated = true;
+    state.lastUserId = userKey;
+    
+  }, [user, profile, profileLoading, loading, navigate, isInstructorOrAdmin, computedRole]);
   
   // Show loading while auth is being checked
   if (loading) {
@@ -168,7 +203,7 @@ function HomeRoute() {
   }
   
   // Instructors will be redirected via useEffect - show loading during transition
-  if (shouldRedirectToInstructor) {
+  if (isInstructorOrAdmin) {
     return <LoadingFallback />;
   }
   
@@ -177,7 +212,7 @@ function HomeRoute() {
     console.log('[HomeRoute] Rendering Dashboard for student:', {
       userId: user?.id,
       profileRole: profile?.role,
-      userRole
+      computedRole
     });
   }
   
