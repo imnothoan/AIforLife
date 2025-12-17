@@ -848,14 +848,17 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+DROP TRIGGER IF EXISTS set_profiles_updated_at ON public.profiles;
 CREATE TRIGGER set_profiles_updated_at
   BEFORE UPDATE ON public.profiles
   FOR EACH ROW EXECUTE FUNCTION public.update_updated_at();
 
+DROP TRIGGER IF EXISTS set_classes_updated_at ON public.classes;
 CREATE TRIGGER set_classes_updated_at
   BEFORE UPDATE ON public.classes
   FOR EACH ROW EXECUTE FUNCTION public.update_updated_at();
 
+DROP TRIGGER IF EXISTS set_exams_updated_at ON public.exams;
 CREATE TRIGGER set_exams_updated_at
   BEFORE UPDATE ON public.exams
   FOR EACH ROW EXECUTE FUNCTION public.update_updated_at();
@@ -1410,3 +1413,60 @@ $$ LANGUAGE plpgsql;
 
 GRANT EXECUTE ON FUNCTION public.acquire_exam_lock(UUID) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.acquire_session_lock(UUID) TO authenticated;
+
+-- ================================================
+-- SECTION 17: PROFILE CREATION HELPER
+-- ================================================
+-- This function ensures user profile is created if it doesn't exist
+-- Used as a fallback when the trigger on auth.users doesn't fire properly
+
+CREATE OR REPLACE FUNCTION public.ensure_profile_exists(
+  p_user_id UUID,
+  p_email TEXT,
+  p_full_name TEXT DEFAULT NULL,
+  p_role TEXT DEFAULT 'student'
+)
+RETURNS JSONB AS $$
+DECLARE
+  v_existing_profile RECORD;
+BEGIN
+  -- Check if profile already exists
+  SELECT * INTO v_existing_profile
+  FROM public.profiles
+  WHERE id = p_user_id;
+  
+  IF FOUND THEN
+    -- Profile exists, return it
+    RETURN jsonb_build_object(
+      'success', true, 
+      'action', 'found',
+      'id', v_existing_profile.id,
+      'role', v_existing_profile.role
+    );
+  END IF;
+  
+  -- Create new profile
+  INSERT INTO public.profiles (id, email, full_name, role)
+  VALUES (
+    p_user_id, 
+    LOWER(TRIM(p_email)), 
+    COALESCE(p_full_name, split_part(p_email, '@', 1)),
+    COALESCE(p_role, 'student')
+  )
+  ON CONFLICT (id) DO UPDATE SET
+    email = EXCLUDED.email,
+    full_name = COALESCE(EXCLUDED.full_name, profiles.full_name);
+  
+  RETURN jsonb_build_object(
+    'success', true, 
+    'action', 'created',
+    'id', p_user_id,
+    'role', p_role
+  );
+EXCEPTION
+  WHEN OTHERS THEN
+    RETURN jsonb_build_object('success', false, 'error', SQLERRM);
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+GRANT EXECUTE ON FUNCTION public.ensure_profile_exists(UUID, TEXT, TEXT, TEXT) TO authenticated, service_role;

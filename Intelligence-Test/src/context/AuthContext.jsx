@@ -143,9 +143,33 @@ export const AuthProvider = ({ children }) => {
           if (createError) {
             console.error('Error creating profile:', createError);
             
-            // If it's a permission error, return fallback immediately
+            // If it's a permission error, try the RPC function as fallback
             if (createError.code === '42501' || createError.message?.includes('permission')) {
-              console.warn('Permission denied creating profile, using fallback');
+              console.warn('Permission denied creating profile directly, trying RPC fallback...');
+              
+              try {
+                const { data: rpcResult, error: rpcError } = await supabase.rpc('ensure_profile_exists', {
+                  p_user_id: userId,
+                  p_email: authUser.email,
+                  p_full_name: fullName,
+                  p_role: role
+                });
+                
+                if (!rpcError && rpcResult?.success) {
+                  console.log('Profile created via RPC:', rpcResult.action);
+                  return {
+                    id: userId,
+                    email: authUser.email,
+                    full_name: fullName,
+                    role: rpcResult.role || role,
+                    student_id: metadata.student_id || null
+                  };
+                }
+              } catch (rpcErr) {
+                console.warn('RPC fallback failed:', rpcErr);
+              }
+              
+              // Return fallback profile if all else fails
               return {
                 id: userId,
                 email: authUser.email,
