@@ -420,9 +420,16 @@ export const AuthProvider = ({ children }) => {
     setUser(null);
     setProfile(null);
     setProfileLoading(false);
+    setLoading(false);
     
     try {
-      await supabase.auth.signOut();
+      // Add timeout to prevent hanging
+      const signOutPromise = supabase.auth.signOut();
+      const timeoutPromise = new Promise((resolve) => 
+        setTimeout(() => resolve({ error: { message: 'Logout timeout' } }), 3000)
+      );
+      
+      await Promise.race([signOutPromise, timeoutPromise]);
     } catch (error) {
       console.warn('Logout error:', error);
       // Even if signOut fails, we've cleared local state
