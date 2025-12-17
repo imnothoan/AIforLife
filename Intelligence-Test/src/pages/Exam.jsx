@@ -492,7 +492,8 @@ export default function Exam() {
         if (videoRef.current && workerRef.current && ctxRef.current && !isSubmittingRef.current) {
           try {
             // Ensure video is playing and has dimensions
-            if (videoRef.current.readyState >= 2 && videoRef.current.videoWidth > 0) {
+            // HTMLMediaElement.HAVE_CURRENT_DATA = 2
+            if (videoRef.current.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA && videoRef.current.videoWidth > 0) {
               ctxRef.current.drawImage(videoRef.current, 0, 0, 640, 480);
               const imageData = ctxRef.current.getImageData(0, 0, 640, 480);
               // Only send if we have valid image data
@@ -517,13 +518,11 @@ export default function Exam() {
       // Clear the frame interval
       if (frameIntervalRef.current) {
         clearInterval(frameIntervalRef.current);
-        frameIntervalRef.current = null;
       }
       
       // Terminate worker
       if (workerRef.current) {
         workerRef.current.terminate();
-        workerRef.current = null;
       }
     };
   }, [examStarted, cameraStatus]);
