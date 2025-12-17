@@ -303,7 +303,79 @@ export default function Exam() {
   }, [examStarted]);
 
   // ============================================
-  // NETWORK & CAMERA SETUP
+  // CAMERA SETUP - Start camera immediately for preview
+  // ============================================
+  const cameraStreamRef = useRef(null);
+  const frameIntervalRef = useRef(null);
+  const canvasRef = useRef(null);
+  const ctxRef = useRef(null);
+  
+  // Helper function to setup camera stream and canvas
+  const setupCameraWithCanvas = (stream) => {
+    cameraStreamRef.current = stream;
+    if (videoRef.current) {
+      videoRef.current.srcObject = stream;
+    }
+    // Create canvas for frame processing (used later by AI worker)
+    if (!canvasRef.current) {
+      canvasRef.current = document.createElement('canvas');
+      canvasRef.current.width = 640;
+      canvasRef.current.height = 480;
+      ctxRef.current = canvasRef.current.getContext('2d', { willReadFrequently: true });
+    }
+  };
+  
+  useEffect(() => {
+    const startCamera = async () => {
+      try {
+        // Request camera with multiple fallback options for better browser compatibility
+        const constraints = { 
+          video: { 
+            width: { ideal: 640, min: 320 }, 
+            height: { ideal: 480, min: 240 },
+            facingMode: 'user'
+          },
+          audio: false // Explicitly disable audio to avoid permission issues
+        };
+        
+        const stream = await navigator.mediaDevices.getUserMedia(constraints);
+        setupCameraWithCanvas(stream);
+      } catch (err) {
+        console.error('Camera access error:', err);
+        // Provide more specific error messages based on error type
+        if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
+          toast.error(t('anticheat.cameraAccess') + ' (Permission denied)');
+        } else if (err.name === 'NotFoundError' || err.name === 'DevicesNotFoundError') {
+          toast.error(t('anticheat.cameraAccess') + ' (No camera found)');
+        } else if (err.name === 'NotReadableError' || err.name === 'TrackStartError') {
+          toast.error(t('anticheat.cameraAccess') + ' (Camera in use by another app)');
+        } else if (err.name === 'OverconstrainedError') {
+          // Try with simpler constraints
+          try {
+            const simpleStream = await navigator.mediaDevices.getUserMedia({ video: true });
+            setupCameraWithCanvas(simpleStream);
+          } catch (fallbackErr) {
+            console.error('Camera fallback failed:', fallbackErr);
+            toast.error(t('anticheat.cameraAccess'));
+          }
+        } else {
+          toast.error(t('anticheat.cameraAccess'));
+        }
+      }
+    };
+    
+    startCamera();
+
+    return () => {
+      // Stop camera stream on unmount
+      if (cameraStreamRef.current) {
+        cameraStreamRef.current.getTracks().forEach(track => track.stop());
+      }
+    };
+  }, []); // Run once on mount
+
+  // ============================================
+  // NETWORK & AI WORKER SETUP - Only active during exam
   // ============================================
   useEffect(() => {
     const handleOnline = () => { setIsOffline(false); toast.success(translate('anticheat.networkOnline')); };
@@ -372,67 +444,34 @@ export default function Exam() {
       setStatus('AI Worker error - basic mode');
     };
 
-    let frameInterval = null;
-    let streamRef = null;
-
-    const startCamera = async () => {
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({ 
-          video: { 
-            width: { ideal: 640 }, 
-            height: { ideal: 480 },
-            facingMode: 'user'
-          } 
-        });
-        streamRef = stream;
-        
-        if (videoRef.current) {
-          videoRef.current.srcObject = stream;
-          videoRef.current.onloadeddata = () => {
-            const canvas = document.createElement('canvas');
-            canvas.width = 640;
-            canvas.height = 480;
-            const ctx = canvas.getContext('2d', { willReadFrequently: true });
-            
-            // Send frames to worker every 200ms
-            frameInterval = setInterval(() => {
-              if (videoRef.current && workerRef.current && examStarted && !isSubmittingRef.current) {
-                try {
-                  ctx.drawImage(videoRef.current, 0, 0, 640, 480);
-                  const imageData = ctx.getImageData(0, 0, 640, 480);
-                  // Only send if we have valid image data
-                  if (imageData.data && imageData.data.length > 0) {
-                    workerRef.current.postMessage(
-                      { type: 'PROCESS_FRAME', payload: imageData }, 
-                      [imageData.data.buffer]
-                    );
-                  }
-                } catch (err) {
-                  console.warn('Error sending frame to worker:', err);
-                }
-              }
-            }, 200);
-          };
+    // Start frame processing when exam starts
+    if (examStarted && videoRef.current && ctxRef.current) {
+      frameIntervalRef.current = setInterval(() => {
+        if (videoRef.current && workerRef.current && !isSubmittingRef.current) {
+          try {
+            ctxRef.current.drawImage(videoRef.current, 0, 0, 640, 480);
+            const imageData = ctxRef.current.getImageData(0, 0, 640, 480);
+            // Only send if we have valid image data
+            if (imageData.data && imageData.data.length > 0) {
+              workerRef.current.postMessage(
+                { type: 'PROCESS_FRAME', payload: imageData }, 
+                [imageData.data.buffer]
+              );
+            }
+          } catch (err) {
+            console.warn('Error sending frame to worker:', err);
+          }
         }
-      } catch (err) {
-        console.error('Camera access error:', err);
-        toast.error(t('anticheat.cameraAccess'));
-      }
-    };
-    startCamera();
+      }, 200);
+    }
 
     return () => {
       window.removeEventListener('online', handleOnline);
       window.removeEventListener('offline', handleOffline);
       
       // Clear the frame interval
-      if (frameInterval) {
-        clearInterval(frameInterval);
-      }
-      
-      // Stop camera stream
-      if (streamRef) {
-        streamRef.getTracks().forEach(track => track.stop());
+      if (frameIntervalRef.current) {
+        clearInterval(frameIntervalRef.current);
       }
       
       // Terminate worker

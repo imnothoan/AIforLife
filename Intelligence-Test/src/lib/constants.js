@@ -7,6 +7,18 @@
 export const MAX_NAVIGATION_ATTEMPTS = 10;
 export const NAVIGATION_THROTTLE_MS = 500;
 
+// Auth timeout constants
+export const AUTH_LOADING_TIMEOUT_MS = 5000;
+export const AUTH_SESSION_TIMEOUT_MS = 3000;
+export const PROFILE_LOADING_TIMEOUT_MS = 3000;
+
+// Academic year configuration (for Vietnamese education system)
+export const ACADEMIC_YEAR_PAST_YEARS = 5;
+export const ACADEMIC_YEAR_FUTURE_YEARS = 2;
+
+// AI Worker configuration
+export const AI_DELEGATE_OPTIONS = ['GPU', 'CPU'];
+
 // MediaPipe Face Landmarker configuration
 // Pinned versions for stability across components
 export const MEDIAPIPE_CONFIG = {

@@ -6,8 +6,9 @@ import 'react-toastify/dist/ReactToastify.css';
 import ErrorBoundary from './components/ErrorBoundary';
 import './index.css';
 import axios from 'axios';
-import { Suspense, lazy, useEffect, useRef } from 'react';
+import { Suspense, lazy, useEffect, useRef, useState } from 'react';
 import { t } from './lib/i18n';
+import { PROFILE_LOADING_TIMEOUT_MS } from './lib/constants';
 
 // Lazy load pages for better performance and smaller initial bundle
 const Login = lazy(() => import('./pages/Login'));
@@ -84,10 +85,28 @@ function HomeRoute() {
   const { user, profile, profileLoading, loading } = useAuth();
   const navigate = useNavigate();
   const navigationStateRef = useRef({ navigated: false, userId: null });
+  const profileTimeoutRef = useRef(null);
+  const [forceRender, setForceRender] = useState(false);
   
-  // Get role early and consistently
+  // Get role early and consistently - check both profile and user metadata
   const userRole = profile?.role || user?.user_metadata?.role || 'student';
   const isInstructorOrAdmin = userRole === 'instructor' || userRole === 'admin';
+  
+  // Add a timeout for profile loading to prevent infinite wait
+  useEffect(() => {
+    if (profileLoading && !forceRender) {
+      profileTimeoutRef.current = setTimeout(() => {
+        console.warn('Profile loading timeout in HomeRoute - using metadata role');
+        setForceRender(true);
+      }, PROFILE_LOADING_TIMEOUT_MS);
+    }
+    
+    return () => {
+      if (profileTimeoutRef.current) {
+        clearTimeout(profileTimeoutRef.current);
+      }
+    };
+  }, [profileLoading, forceRender]);
   
   // Single useEffect with minimal dependencies to prevent loops
   useEffect(() => {
@@ -109,7 +128,8 @@ function HomeRoute() {
     }
     
     // Wait for profile to load before making navigation decisions
-    if (profileLoading) {
+    // But respect the forceRender timeout
+    if (profileLoading && !forceRender) {
       return;
     }
     
@@ -121,7 +141,7 @@ function HomeRoute() {
       // Mark as navigated for students (they stay here)
       navigationStateRef.current.navigated = true;
     }
-  }, [user, loading, profileLoading, isInstructorOrAdmin, navigate]);
+  }, [user, loading, profileLoading, isInstructorOrAdmin, navigate, forceRender]);
   
   // Render decisions - kept simple
   if (loading) {
@@ -132,7 +152,8 @@ function HomeRoute() {
     return <LoadingFallback />;
   }
   
-  if (profileLoading) {
+  // Allow render if forceRender is true (timeout occurred)
+  if (profileLoading && !forceRender) {
     return <LoadingFallback />;
   }
   
