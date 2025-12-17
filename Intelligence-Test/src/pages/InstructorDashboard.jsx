@@ -1423,23 +1423,33 @@ function CreateClassForm({ onClose, onSuccess }) {
           setTimeout(() => reject(new Error('REQUEST_TIMEOUT')), TIMEOUT_MS)
         );
 
-        const supabasePromise = supabase
-          .from('classes')
-          .insert({
-            name: trimmedName,
-            code: trimmedCode,
-            description: formData.description?.trim() || null,
-            semester: formData.semester || null,
-            academic_year: formData.academic_year || null,
-            instructor_id: user.id,
-            is_active: true
-          })
-          .select()
-          .single();
+        // Use RPC function for reliable class creation (bypasses RLS issues)
+        const supabasePromise = supabase.rpc('create_class', {
+          p_name: trimmedName,
+          p_code: trimmedCode,
+          p_description: formData.description?.trim() || null,
+          p_semester: formData.semester || null,
+          p_academic_year: formData.academic_year || null
+        });
 
         const { data, error } = await Promise.race([supabasePromise, timeoutPromise]);
 
         if (error) throw error;
+        
+        // Check the result from RPC function
+        if (data && !data.success) {
+          // Handle RPC-level errors
+          if (data.error === 'duplicate_code') {
+            toast.error(t('class.duplicateCode'));
+          } else if (data.error === 'not_authorized') {
+            toast.error(t('class.noPermission'));
+          } else if (data.error === 'profile_not_found') {
+            toast.error(t('error.sessionExpired'));
+          } else {
+            toast.error(t('class.createError'));
+          }
+          return;
+        }
 
         toast.success(t('class.createSuccess'));
         onSuccess?.(data);

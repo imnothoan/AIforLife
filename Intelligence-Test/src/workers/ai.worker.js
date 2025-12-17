@@ -102,15 +102,32 @@ let lastEyeGazeAlert = 0;
 async function initializeAI() {
   self.postMessage({ type: 'STATUS', payload: 'Đang tải model AI...', code: 'aiLoading' });
 
-  // Helper to add timeout to promises
-  const withTimeout = (promise, ms, name) => {
-    return Promise.race([
-      promise,
-      new Promise((_, reject) => 
-        setTimeout(() => reject(new Error(`${name} timeout after ${ms}ms`)), ms)
-      )
-    ]);
+  // Helper to add timeout to promises - resolves with fallback value instead of rejecting
+  // Uses AbortController pattern to properly cleanup timeout
+  const withTimeoutFallback = (promise, ms, fallbackValue = null) => {
+    let timeoutId;
+    const timeoutPromise = new Promise((resolve) => {
+      timeoutId = setTimeout(() => resolve(fallbackValue), ms);
+    });
+    
+    return Promise.race([promise, timeoutPromise]).finally(() => {
+      clearTimeout(timeoutId);
+    });
   };
+
+  // Helper that rejects on timeout - also cleans up timeout
+  const withTimeout = (promise, ms, name) => {
+    let timeoutId;
+    const timeoutPromise = new Promise((_, reject) => {
+      timeoutId = setTimeout(() => reject(new Error(`${name} timeout after ${ms}ms`)), ms);
+    });
+    
+    return Promise.race([promise, timeoutPromise]).finally(() => {
+      clearTimeout(timeoutId);
+    });
+  };
+
+  let mediaPipeLoaded = false;
 
   try {
     // Load MediaPipe Face Landmarker
@@ -119,12 +136,19 @@ async function initializeAI() {
     const MEDIAPIPE_WASM = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.18/wasm";
     const MEDIAPIPE_MODEL = "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task";
     
-    // Add 10 second timeout for vision tasks initialization
-    const vision = await withTimeout(
+    // Add 15 second timeout for vision tasks initialization (increased from 10)
+    const vision = await withTimeoutFallback(
       FilesetResolver.forVisionTasks(MEDIAPIPE_WASM),
-      10000,
-      'MediaPipe WASM'
+      15000,
+      null
     );
+    
+    if (!vision) {
+      console.warn('MediaPipe WASM loading timed out - using basic mode');
+      self.postMessage({ type: 'STATUS', payload: 'AI monitoring active (basic mode)', code: 'basicMode' });
+      isInitialized = true;
+      return;
+    }
     
     // Try GPU first, fallback to CPU if it fails
     let delegateOptions = ["GPU", "CPU"];
@@ -132,7 +156,7 @@ async function initializeAI() {
     
     for (const delegate of delegateOptions) {
       try {
-        // Add 15 second timeout for model loading
+        // Add 20 second timeout for model loading (increased from 15)
         faceLandmarker = await withTimeout(
           FaceLandmarker.createFromOptions(vision, {
             baseOptions: {
@@ -146,11 +170,12 @@ async function initializeAI() {
             outputFaceBlendshapes: false,
             outputFacialTransformationMatrixes: true // For head pose
           }),
-          15000,
+          20000,
           `FaceLandmarker (${delegate})`
         );
         console.log(`MediaPipe Face Landmarker loaded successfully with ${delegate} delegate`);
         lastError = null;
+        mediaPipeLoaded = true;
         break;
       } catch (err) {
         console.warn(`Failed to load MediaPipe with ${delegate} delegate:`, err.message);
@@ -158,8 +183,8 @@ async function initializeAI() {
       }
     }
     
-    if (lastError) {
-      throw lastError;
+    if (lastError && !mediaPipeLoaded) {
+      console.warn('MediaPipe failed to load - continuing with basic mode');
     }
     
     self.postMessage({ type: 'STATUS', payload: 'Đang tải YOLO...', code: 'yoloLoading' });
@@ -214,21 +239,32 @@ async function initializeAI() {
         console.log('Confidence threshold:', CONFIG.YOLO.CONFIDENCE_THRESHOLD);
       }
       
-      self.postMessage({ type: 'STATUS', payload: 'AI proctoring active (Face + YOLO)', code: 'monitoring' });
+      // Status will be reported in the final status update block below
     } catch (yoloError) {
       console.warn('YOLO model not available');
       console.warn('Error details:', yoloError.message);
       console.warn('Stack:', yoloError.stack);
-      // Still allow face detection to work
-      self.postMessage({ type: 'STATUS', payload: 'Face monitoring active (YOLO unavailable)', code: 'faceOnly' });
+      // Status will be reported in the final status update block below
     }
 
     isInitialized = true;
+    
+    // Report final status based on what loaded
+    if (mediaPipeLoaded && yoloSession) {
+      self.postMessage({ type: 'STATUS', payload: 'AI proctoring active (Face + YOLO)', code: 'monitoring' });
+    } else if (mediaPipeLoaded) {
+      self.postMessage({ type: 'STATUS', payload: 'Face monitoring active (YOLO unavailable)', code: 'faceOnly' });
+    } else if (yoloSession) {
+      self.postMessage({ type: 'STATUS', payload: 'Object detection active (Face detection unavailable)', code: 'yoloOnly' });
+    } else {
+      self.postMessage({ type: 'STATUS', payload: 'AI monitoring active (basic mode)', code: 'basicMode' });
+    }
   } catch (error) {
     console.error('AI initialization error:', error);
-    self.postMessage({ type: 'STATUS', payload: 'Lỗi khởi tạo AI - Sử dụng chế độ cơ bản', code: 'error' });
+    // Continue with whatever was loaded - don't fail completely
+    self.postMessage({ type: 'STATUS', payload: 'AI monitoring active (basic mode)', code: 'basicMode' });
     
-    // Fallback: basic detection mode
+    // Fallback: basic detection mode still works
     isInitialized = true;
   }
 }

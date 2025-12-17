@@ -143,9 +143,33 @@ export const AuthProvider = ({ children }) => {
           if (createError) {
             console.error('Error creating profile:', createError);
             
-            // If it's a permission error, return fallback immediately
+            // If it's a permission error, try the RPC function as fallback
             if (createError.code === '42501' || createError.message?.includes('permission')) {
-              console.warn('Permission denied creating profile, using fallback');
+              console.warn('Permission denied creating profile directly, trying RPC fallback...');
+              
+              try {
+                const { data: rpcResult, error: rpcError } = await supabase.rpc('ensure_profile_exists', {
+                  p_user_id: userId,
+                  p_email: authUser.email,
+                  p_full_name: fullName,
+                  p_role: role
+                });
+                
+                if (!rpcError && rpcResult?.success) {
+                  console.log('Profile created via RPC:', rpcResult.action);
+                  return {
+                    id: userId,
+                    email: authUser.email,
+                    full_name: fullName,
+                    role: rpcResult.role || role,
+                    student_id: metadata.student_id || null
+                  };
+                }
+              } catch (rpcErr) {
+                console.warn('RPC fallback failed:', rpcErr);
+              }
+              
+              // Return fallback profile if all else fails
               return {
                 id: userId,
                 email: authUser.email,
@@ -222,7 +246,8 @@ export const AuthProvider = ({ children }) => {
     let sessionCheckComplete = false;
     
     // Add timeout to prevent infinite loading
-    // This timeout will fire if initAuth doesn't complete within 5 seconds
+    // This timeout will fire if initAuth doesn't complete within 3 seconds
+    // Reduced from 5s to 3s for better UX on slow networks
     const loadingTimeout = setTimeout(() => {
       if (isMounted && !sessionCheckComplete) {
         console.warn('Auth loading timeout - forcing completion');
@@ -232,7 +257,7 @@ export const AuthProvider = ({ children }) => {
           setProfileLoading(false);
         }
       }
-    }, 5000); // 5 second timeout for better UX
+    }, 3000); // 3 second timeout for better UX
 
     // Check active session on mount
     const initAuth = async () => {
@@ -420,9 +445,19 @@ export const AuthProvider = ({ children }) => {
     setUser(null);
     setProfile(null);
     setProfileLoading(false);
+    setLoading(false);
     
     try {
-      await supabase.auth.signOut();
+      // Add timeout to prevent hanging with proper cleanup
+      let timeoutId;
+      const signOutPromise = supabase.auth.signOut();
+      const timeoutPromise = new Promise((resolve) => {
+        timeoutId = setTimeout(() => resolve({ error: { message: 'Logout timeout' } }), 3000);
+      });
+      
+      await Promise.race([signOutPromise, timeoutPromise]).finally(() => {
+        clearTimeout(timeoutId);
+      });
     } catch (error) {
       console.warn('Logout error:', error);
       // Even if signOut fails, we've cleared local state

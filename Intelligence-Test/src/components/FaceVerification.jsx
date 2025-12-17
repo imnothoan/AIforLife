@@ -227,30 +227,48 @@ export default function FaceVerification({
     
     const initFaceLandmarker = async () => {
       try {
-        // Add timeout for WASM loading (10 seconds)
+        // Add timeout for WASM loading (15 seconds - increased for slow connections)
         const vision = await withTimeout(
           FilesetResolver.forVisionTasks(MEDIAPIPE_CONFIG.WASM_PATH),
-          10000,
+          15000,
           'MediaPipe WASM'
         );
         
-        // Add timeout for model loading (15 seconds)
-        const landmarker = await withTimeout(
-          FaceLandmarker.createFromOptions(vision, {
-            baseOptions: {
-              modelAssetPath: MEDIAPIPE_CONFIG.MODEL_PATH,
-              delegate: "GPU"
-            },
-            runningMode: "IMAGE",
-            numFaces: 2, // Detect up to 2 to check for multiple people
-            minFaceDetectionConfidence: FACE_CONFIG.MIN_DETECTION_CONFIDENCE,
-            minTrackingConfidence: 0.5,
-          }),
-          15000,
-          'FaceLandmarker model'
-        );
+        // Try GPU first, fallback to CPU if it fails
+        const delegates = ["GPU", "CPU"];
+        let landmarker = null;
+        let lastError = null;
         
-        if (isMounted) {
+        for (const delegate of delegates) {
+          try {
+            // Add timeout for model loading (20 seconds per delegate)
+            landmarker = await withTimeout(
+              FaceLandmarker.createFromOptions(vision, {
+                baseOptions: {
+                  modelAssetPath: MEDIAPIPE_CONFIG.MODEL_PATH,
+                  delegate: delegate
+                },
+                runningMode: "IMAGE",
+                numFaces: 2, // Detect up to 2 to check for multiple people
+                minFaceDetectionConfidence: FACE_CONFIG.MIN_DETECTION_CONFIDENCE,
+                minTrackingConfidence: 0.5,
+              }),
+              20000,
+              `FaceLandmarker model (${delegate})`
+            );
+            console.log(`FaceVerification: Loaded with ${delegate} delegate`);
+            break;
+          } catch (delegateError) {
+            console.warn(`FaceVerification: ${delegate} delegate failed:`, delegateError.message);
+            lastError = delegateError;
+          }
+        }
+        
+        if (!landmarker && lastError) {
+          throw lastError;
+        }
+        
+        if (isMounted && landmarker) {
           faceLandmarkerRef.current = landmarker;
           await startCamera();
         }
@@ -275,7 +293,7 @@ export default function FaceVerification({
         setStatus('failed');
         setErrorMessage(t('error.timeout'));
       }
-    }, 30000); // 30 second global timeout
+    }, 45000); // 45 second global timeout (increased for slow connections)
     
     initFaceLandmarker();
     

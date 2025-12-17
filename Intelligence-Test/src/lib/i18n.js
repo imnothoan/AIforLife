@@ -157,6 +157,11 @@ const translations = {
     'anticheat.headphonesDetected': 'Phát hiện tai nghe!',
     'anticheat.monitoring': 'Đang giám sát...',
     'anticheat.aiWarning': 'AI Cảnh báo',
+    'anticheat.aiLoading': 'Đang tải model AI...',
+    'anticheat.yoloLoading': 'Đang tải YOLO...',
+    'anticheat.basicMode': 'Giám sát cơ bản (mạng chậm)',
+    'anticheat.faceOnly': 'Giám sát khuôn mặt hoạt động',
+    'anticheat.yoloOnly': 'Phát hiện vật thể hoạt động',
     
     // AI Proctoring
     'ai.loading': 'Đang tải model AI...',
@@ -572,6 +577,11 @@ const translations = {
     'anticheat.headphonesDetected': 'Headphones detected!',
     'anticheat.monitoring': 'Monitoring...',
     'anticheat.aiWarning': 'AI Warning',
+    'anticheat.aiLoading': 'Loading AI model...',
+    'anticheat.yoloLoading': 'Loading YOLO...',
+    'anticheat.basicMode': 'Basic monitoring (slow network)',
+    'anticheat.faceOnly': 'Face monitoring active',
+    'anticheat.yoloOnly': 'Object detection active',
     
     // AI Proctoring
     'ai.loading': 'Loading AI model...',

@@ -848,14 +848,17 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+DROP TRIGGER IF EXISTS set_profiles_updated_at ON public.profiles;
 CREATE TRIGGER set_profiles_updated_at
   BEFORE UPDATE ON public.profiles
   FOR EACH ROW EXECUTE FUNCTION public.update_updated_at();
 
+DROP TRIGGER IF EXISTS set_classes_updated_at ON public.classes;
 CREATE TRIGGER set_classes_updated_at
   BEFORE UPDATE ON public.classes
   FOR EACH ROW EXECUTE FUNCTION public.update_updated_at();
 
+DROP TRIGGER IF EXISTS set_exams_updated_at ON public.exams;
 CREATE TRIGGER set_exams_updated_at
   BEFORE UPDATE ON public.exams
   FOR EACH ROW EXECUTE FUNCTION public.update_updated_at();
@@ -926,6 +929,57 @@ $$ LANGUAGE plpgsql SECURITY DEFINER;
 
 -- Grant execute permission
 GRANT EXECUTE ON FUNCTION public.add_student_to_class(UUID, TEXT) TO authenticated;
+
+-- ================================================
+-- SECTION 10b: CLASS CREATION FUNCTION
+-- ================================================
+-- This function bypasses RLS to ensure reliable class creation
+-- Role verification is done within the function itself
+
+CREATE OR REPLACE FUNCTION public.create_class(
+  p_name TEXT,
+  p_code TEXT,
+  p_description TEXT DEFAULT NULL,
+  p_semester TEXT DEFAULT NULL,
+  p_academic_year TEXT DEFAULT NULL
+)
+RETURNS JSONB AS $$
+DECLARE
+  v_user_role TEXT;
+  v_new_class_id UUID;
+BEGIN
+  -- Check if the user is an instructor or admin
+  SELECT role INTO v_user_role
+  FROM public.profiles
+  WHERE id = auth.uid();
+  
+  IF v_user_role IS NULL THEN
+    RETURN jsonb_build_object('success', false, 'error', 'profile_not_found', 'message', 'User profile not found');
+  END IF;
+  
+  IF v_user_role NOT IN ('instructor', 'admin') THEN
+    RETURN jsonb_build_object('success', false, 'error', 'not_authorized', 'message', 'Only instructors can create classes');
+  END IF;
+  
+  -- Check if class code already exists
+  IF EXISTS (SELECT 1 FROM public.classes WHERE code = p_code) THEN
+    RETURN jsonb_build_object('success', false, 'error', 'duplicate_code', 'message', 'Class code already exists');
+  END IF;
+  
+  -- Create the class
+  INSERT INTO public.classes (name, code, description, instructor_id, semester, academic_year, is_active)
+  VALUES (p_name, p_code, p_description, auth.uid(), p_semester, p_academic_year, true)
+  RETURNING id INTO v_new_class_id;
+  
+  RETURN jsonb_build_object('success', true, 'class_id', v_new_class_id);
+EXCEPTION
+  WHEN OTHERS THEN
+    RETURN jsonb_build_object('success', false, 'error', 'database_error', 'message', SQLERRM);
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- Grant execute permission to authenticated users
+GRANT EXECUTE ON FUNCTION public.create_class(TEXT, TEXT, TEXT, TEXT, TEXT) TO authenticated;
 
 -- ================================================
 -- SECTION 11: FACE VERIFICATION
@@ -1359,3 +1413,60 @@ $$ LANGUAGE plpgsql;
 
 GRANT EXECUTE ON FUNCTION public.acquire_exam_lock(UUID) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.acquire_session_lock(UUID) TO authenticated;
+
+-- ================================================
+-- SECTION 17: PROFILE CREATION HELPER
+-- ================================================
+-- This function ensures user profile is created if it doesn't exist
+-- Used as a fallback when the trigger on auth.users doesn't fire properly
+
+CREATE OR REPLACE FUNCTION public.ensure_profile_exists(
+  p_user_id UUID,
+  p_email TEXT,
+  p_full_name TEXT DEFAULT NULL,
+  p_role TEXT DEFAULT 'student'
+)
+RETURNS JSONB AS $$
+DECLARE
+  v_existing_profile RECORD;
+BEGIN
+  -- Check if profile already exists
+  SELECT * INTO v_existing_profile
+  FROM public.profiles
+  WHERE id = p_user_id;
+  
+  IF FOUND THEN
+    -- Profile exists, return it
+    RETURN jsonb_build_object(
+      'success', true, 
+      'action', 'found',
+      'id', v_existing_profile.id,
+      'role', v_existing_profile.role
+    );
+  END IF;
+  
+  -- Create new profile
+  INSERT INTO public.profiles (id, email, full_name, role)
+  VALUES (
+    p_user_id, 
+    LOWER(TRIM(p_email)), 
+    COALESCE(p_full_name, split_part(p_email, '@', 1)),
+    COALESCE(p_role, 'student')
+  )
+  ON CONFLICT (id) DO UPDATE SET
+    email = EXCLUDED.email,
+    full_name = COALESCE(EXCLUDED.full_name, profiles.full_name);
+  
+  RETURN jsonb_build_object(
+    'success', true, 
+    'action', 'created',
+    'id', p_user_id,
+    'role', COALESCE(p_role, 'student')
+  );
+EXCEPTION
+  WHEN OTHERS THEN
+    RETURN jsonb_build_object('success', false, 'error', SQLERRM);
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+GRANT EXECUTE ON FUNCTION public.ensure_profile_exists(UUID, TEXT, TEXT, TEXT) TO authenticated, service_role;
