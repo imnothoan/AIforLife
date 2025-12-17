@@ -7,6 +7,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { z } from 'zod';
 import { FileText, Eye, EyeOff, Loader2, Mail, Lock, User, IdCard } from 'lucide-react';
 import LanguageSwitcher from '../components/LanguageSwitcher';
+import { MAX_NAVIGATION_ATTEMPTS, NAVIGATION_THROTTLE_MS } from '../lib/constants';
 
 // Validation schemas with error codes (not messages)
 const loginSchema = z.object({
@@ -24,9 +25,6 @@ const registerSchema = z.object({
 }).refine((data) => data.password === data.confirmPassword, {
   path: ["confirmPassword"],
 });
-
-// Maximum navigation attempts to prevent infinite loops
-const MAX_NAVIGATION_ATTEMPTS = 10;
 
 export default function Login() {
   const [isRegister, setIsRegister] = useState(false);
@@ -66,8 +64,8 @@ export default function Login() {
         return;
       }
       
-      // Throttle navigation - max once per 500ms
-      if ((now - state.lastRedirectTime) < 500) {
+      // Throttle navigation - max once per NAVIGATION_THROTTLE_MS
+      if ((now - state.lastRedirectTime) < NAVIGATION_THROTTLE_MS) {
         return;
       }
       

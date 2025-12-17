@@ -8,9 +8,7 @@ import './index.css';
 import axios from 'axios';
 import { Suspense, lazy, useEffect, useRef, useMemo } from 'react';
 import { t } from './lib/i18n';
-
-// Maximum navigation attempts to prevent infinite loops
-const MAX_NAVIGATION_ATTEMPTS = 10;
+import { MAX_NAVIGATION_ATTEMPTS, NAVIGATION_THROTTLE_MS } from './lib/constants';
 
 // Lazy load pages for better performance and smaller initial bundle
 const Login = lazy(() => import('./pages/Login'));
@@ -118,8 +116,8 @@ function HomeRoute() {
     
     // Redirect to login if not authenticated
     if (!user) {
-      // Throttle navigation - max once per 500ms to same target
-      if (state.lastNavigationTarget === '/login' && (now - state.lastNavigationTime) < 500) {
+      // Throttle navigation - max once per NAVIGATION_THROTTLE_MS to same target
+      if (state.lastNavigationTarget === '/login' && (now - state.lastNavigationTime) < NAVIGATION_THROTTLE_MS) {
         return;
       }
       
@@ -155,7 +153,7 @@ function HomeRoute() {
     // Only redirect instructors/admins
     if (isInstructorOrAdmin) {
       // Throttle navigation
-      if (state.lastNavigationTarget === '/instructor' && (now - state.lastNavigationTime) < 500) {
+      if (state.lastNavigationTarget === '/instructor' && (now - state.lastNavigationTime) < NAVIGATION_THROTTLE_MS) {
         return;
       }
       
