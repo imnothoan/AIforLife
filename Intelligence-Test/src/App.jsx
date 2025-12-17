@@ -108,7 +108,7 @@ function HomeRoute() {
       return;
     }
     
-    // Wait for profile - but with timeout protection
+    // Wait for profile to load before making navigation decisions
     if (profileLoading) {
       return;
     }

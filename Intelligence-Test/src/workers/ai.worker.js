@@ -104,13 +104,16 @@ async function initializeAI() {
 
   try {
     // Load MediaPipe Face Landmarker
-    const vision = await FilesetResolver.forVisionTasks(
-      "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest/wasm"
-    );
+    // NOTE: These values must match MEDIAPIPE_CONFIG in lib/constants.js
+    // Workers cannot import from main bundle, so values are duplicated here
+    const MEDIAPIPE_WASM = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.18/wasm";
+    const MEDIAPIPE_MODEL = "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task";
+    
+    const vision = await FilesetResolver.forVisionTasks(MEDIAPIPE_WASM);
     
     faceLandmarker = await FaceLandmarker.createFromOptions(vision, {
       baseOptions: {
-        modelAssetPath: "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/latest/face_landmarker.task",
+        modelAssetPath: MEDIAPIPE_MODEL,
         delegate: "GPU"
       },
       runningMode: "IMAGE",

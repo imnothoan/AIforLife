@@ -3,6 +3,7 @@ import { motion } from 'framer-motion';
 import { Camera, RefreshCw, CheckCircle, XCircle, Loader2, AlertTriangle, User } from 'lucide-react';
 import { useLanguage } from '../context/LanguageContext';
 import { FaceLandmarker, FilesetResolver } from "@mediapipe/tasks-vision";
+import { MEDIAPIPE_CONFIG } from '../lib/constants';
 
 // ============================================
 // FACE VERIFICATION COMPONENT
@@ -215,14 +216,12 @@ export default function FaceVerification({
     
     const initFaceLandmarker = async () => {
       try {
-        // Using pinned version for stability
-        const vision = await FilesetResolver.forVisionTasks(
-          "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.18/wasm"
-        );
+        // Using shared constants for stability
+        const vision = await FilesetResolver.forVisionTasks(MEDIAPIPE_CONFIG.WASM_PATH);
         
         const landmarker = await FaceLandmarker.createFromOptions(vision, {
           baseOptions: {
-            modelAssetPath: "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task",
+            modelAssetPath: MEDIAPIPE_CONFIG.MODEL_PATH,
             delegate: "GPU"
           },
           runningMode: "IMAGE",
