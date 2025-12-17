@@ -6,9 +6,8 @@ import 'react-toastify/dist/ReactToastify.css';
 import ErrorBoundary from './components/ErrorBoundary';
 import './index.css';
 import axios from 'axios';
-import { Suspense, lazy, useEffect, useRef, useMemo } from 'react';
+import { Suspense, lazy, useEffect, useRef } from 'react';
 import { t } from './lib/i18n';
-import { MAX_NAVIGATION_ATTEMPTS, NAVIGATION_THROTTLE_MS } from './lib/constants';
 
 // Lazy load pages for better performance and smaller initial bundle
 const Login = lazy(() => import('./pages/Login'));
@@ -80,114 +79,83 @@ function InstructorRoute({ children }) {
 }
 
 // Smart Home route - redirects based on user role
-// Uses useNavigate + useEffect with stable refs to prevent infinite redirect loops
+// Uses stable navigation guard to prevent infinite redirect loops
 function HomeRoute() {
   const { user, profile, profileLoading, loading } = useAuth();
   const navigate = useNavigate();
-  const navigationStateRef = useRef({
-    hasNavigated: false,
-    lastNavigationTarget: null,
-    lastUserRoleKey: null,
-    navigationCount: 0,
-    lastNavigationTime: 0
-  });
+  const hasNavigatedRef = useRef(false);
+  const lastUserIdRef = useRef(null);
   
-  // Get the computed role directly from profile or user metadata
-  // Using useMemo to ensure stable value
-  const computedRole = useMemo(() => {
-    return profile?.role || user?.user_metadata?.role || 'student';
-  }, [profile?.role, user?.user_metadata?.role]);
-  
-  // Determine if user should be redirected to instructor page
-  // Based on computed role only, not on unstable function references
-  const isInstructorOrAdmin = useMemo(() => {
-    return computedRole === 'instructor' || computedRole === 'admin';
-  }, [computedRole]);
-  
-  // Handle navigation in useEffect with throttling to prevent loops
+  // Reset navigation flag when user changes (logout/login)
+  // This useEffect runs synchronously with the same dependencies as navigation effect
   useEffect(() => {
-    const state = navigationStateRef.current;
-    const now = Date.now();
+    const currentUserId = user?.id;
     
-    // Don't navigate while loading
+    // Reset flag if user logged out or different user logged in
+    if (currentUserId !== lastUserIdRef.current) {
+      hasNavigatedRef.current = false;
+      lastUserIdRef.current = currentUserId;
+    }
+  }, [user?.id]);
+  
+  useEffect(() => {
+    // Skip if already navigated for this mount
+    if (hasNavigatedRef.current) {
+      return;
+    }
+    
+    // Don't navigate while auth is loading
     if (loading) {
       return;
     }
     
     // Redirect to login if not authenticated
     if (!user) {
-      // Throttle navigation - max once per NAVIGATION_THROTTLE_MS to same target
-      if (state.lastNavigationTarget === '/login' && (now - state.lastNavigationTime) < NAVIGATION_THROTTLE_MS) {
-        return;
-      }
-      
-      // Limit total navigations to prevent loops
-      if (state.navigationCount >= MAX_NAVIGATION_ATTEMPTS) {
-        console.warn('[HomeRoute] Too many navigation attempts, stopping');
-        return;
-      }
-      
-      state.navigationCount++;
-      state.lastNavigationTarget = '/login';
-      state.lastNavigationTime = now;
-      
       if (import.meta.env.DEV) {
         console.log('[HomeRoute] Redirecting to login - user not authenticated');
       }
-      
+      hasNavigatedRef.current = true;
       navigate('/login', { replace: true });
       return;
     }
     
-    // Wait for profile to be loaded before checking role
-    if (profileLoading && !profile) {
-      return;
-    }
-    
-    // Check if we already navigated for this user/role combination
-    // Use optional chaining for safety during state transitions
-    const userRoleKey = `${user?.id || 'unknown'}:${computedRole}`;
-    if (state.hasNavigated && state.lastUserRoleKey === userRoleKey) {
-      return;
-    }
-    
-    // Only redirect instructors/admins
-    if (isInstructorOrAdmin) {
-      // Throttle navigation
-      if (state.lastNavigationTarget === '/instructor' && (now - state.lastNavigationTime) < NAVIGATION_THROTTLE_MS) {
-        return;
-      }
-      
-      // Limit total navigations
-      if (state.navigationCount >= MAX_NAVIGATION_ATTEMPTS) {
-        console.warn('[HomeRoute] Too many navigation attempts, stopping');
-        return;
-      }
-      
-      state.hasNavigated = true;
-      state.lastUserRoleKey = userRoleKey;
-      state.navigationCount++;
-      state.lastNavigationTarget = '/instructor';
-      state.lastNavigationTime = now;
-      
+    // Wait for profile to be loaded before making navigation decisions
+    // This is CRITICAL - we must have profile data before redirecting
+    if (profileLoading) {
       if (import.meta.env.DEV) {
-        console.log('[HomeRoute] Navigating instructor to /instructor:', {
-          userId: user?.id,
-          profileRole: profile?.role,
-          metadataRole: user?.user_metadata?.role,
-          computedRole
+        console.log('[HomeRoute] Waiting for profile to load...');
+      }
+      return;
+    }
+    
+    // Profile should be loaded by now
+    // Get role from profile first, fall back to user metadata
+    const userRole = profile?.role || user?.user_metadata?.role || 'student';
+    
+    // Only redirect instructors/admins to instructor dashboard
+    if (userRole === 'instructor' || userRole === 'admin') {
+      if (import.meta.env.DEV) {
+        console.log('[HomeRoute] Navigating instructor/admin to /instructor:', {
+          userId: user.id,
+          role: userRole,
+          profileRole: profile?.role
         });
       }
-      
+      hasNavigatedRef.current = true;
       navigate('/instructor', { replace: true });
       return;
     }
     
-    // For students, mark as navigated to prevent further navigation attempts
-    state.hasNavigated = true;
-    state.lastUserRoleKey = userRoleKey;
+    // For students, mark as ready (no navigation needed, will render Dashboard)
+    if (import.meta.env.DEV) {
+      console.log('[HomeRoute] User is student, rendering Dashboard:', {
+        userId: user.id,
+        role: userRole
+      });
+    }
+    hasNavigatedRef.current = true;
     
-  }, [user, profile, profileLoading, loading, navigate, isInstructorOrAdmin, computedRole]);
+  }, [user, profile, profileLoading, loading, navigate]);
   
   // Show loading while auth is being checked
   if (loading) {
@@ -200,22 +168,16 @@ function HomeRoute() {
   }
   
   // Wait for profile to be loaded before checking role
-  if (profileLoading && !profile) {
+  if (profileLoading) {
     return <LoadingFallback />;
   }
+  
+  // Get role for rendering decision
+  const userRole = profile?.role || user?.user_metadata?.role || 'student';
   
   // Instructors will be redirected via useEffect - show loading during transition
-  if (isInstructorOrAdmin) {
+  if (userRole === 'instructor' || userRole === 'admin') {
     return <LoadingFallback />;
-  }
-  
-  // Debug logging for student dashboard render
-  if (import.meta.env.DEV) {
-    console.log('[HomeRoute] Rendering Dashboard for student:', {
-      userId: user?.id,
-      profileRole: profile?.role,
-      computedRole
-    });
   }
   
   // Students see the Dashboard

@@ -72,6 +72,14 @@ export const AuthProvider = ({ children }) => {
     const getBackoffDelay = (attempt) => BASE_RETRY_DELAY * Math.pow(2, attempt);
     
     try {
+      // First, get the current user for fallback
+      const { data: { user: authUser } } = await supabase.auth.getUser();
+      if (!authUser) {
+        console.warn('fetchProfile: No authenticated user found');
+        return null;
+      }
+      
+      // Try to fetch existing profile
       const { data, error } = await supabase
         .from('profiles')
         .select('*')
@@ -81,34 +89,36 @@ export const AuthProvider = ({ children }) => {
       if (error) {
         // PGRST116 means no rows returned - profile may not exist yet
         if (error.code === 'PGRST116') {
+          console.log('Profile not found, attempting to create...');
+          
           // Profile doesn't exist yet, try to create it from user metadata
-          const { data: { user: authUser } } = await supabase.auth.getUser();
-          if (authUser) {
-            const metadata = authUser.user_metadata || {};
-            const role = metadata.role || 'student';
-            const fullName = metadata.full_name || authUser.email?.split('@')[0] || 'User';
+          const metadata = authUser.user_metadata || {};
+          const role = metadata.role || 'student';
+          const fullName = metadata.full_name || authUser.email?.split('@')[0] || 'User';
+          
+          // Try to create profile with upsert (safer for concurrent requests)
+          const { data: newProfile, error: createError } = await supabase
+            .from('profiles')
+            .upsert({
+              id: userId,
+              email: authUser.email,
+              full_name: fullName,
+              role: role,
+              student_id: metadata.student_id || null
+            }, { 
+              onConflict: 'id',
+              // Returns the record whether it was inserted or updated
+              ignoreDuplicates: false
+            })
+            .select()
+            .single();
+          
+          if (createError) {
+            console.error('Error creating profile:', createError);
             
-            // Try to create profile
-            const { data: newProfile, error: createError } = await supabase
-              .from('profiles')
-              .upsert({
-                id: userId,
-                email: authUser.email,
-                full_name: fullName,
-                role: role,
-                student_id: metadata.student_id || null
-              }, { onConflict: 'id' })
-              .select()
-              .single();
-            
-            if (createError) {
-              console.error('Error creating profile:', createError);
-              // If creation failed and we haven't retried too many times, wait and retry with exponential backoff
-              if (retryCount < MAX_RETRIES) {
-                await new Promise(resolve => setTimeout(resolve, getBackoffDelay(retryCount)));
-                return fetchProfile(userId, retryCount + 1);
-              }
-              // Return a fallback profile based on user metadata
+            // If it's a permission error, return fallback immediately
+            if (createError.code === '42501' || createError.message?.includes('permission')) {
+              console.warn('Permission denied creating profile, using fallback');
               return {
                 id: userId,
                 email: authUser.email,
@@ -117,42 +127,87 @@ export const AuthProvider = ({ children }) => {
                 student_id: metadata.student_id || null
               };
             }
-            return newProfile;
+            
+            // If creation failed and we haven't retried too many times, wait and retry with exponential backoff
+            if (retryCount < MAX_RETRIES) {
+              console.log(`Retrying profile fetch (attempt ${retryCount + 1}/${MAX_RETRIES})...`);
+              await new Promise(resolve => setTimeout(resolve, getBackoffDelay(retryCount)));
+              return fetchProfile(userId, retryCount + 1);
+            }
+            
+            // Return a fallback profile based on user metadata
+            console.warn('Max retries reached, using fallback profile');
+            return {
+              id: userId,
+              email: authUser.email,
+              full_name: fullName,
+              role: role,
+              student_id: metadata.student_id || null
+            };
           }
+          
+          console.log('Profile created successfully');
+          return newProfile;
         } else {
           console.error('Error fetching profile:', error);
+          
           // Retry on other errors with exponential backoff
           if (retryCount < MAX_RETRIES) {
+            console.log(`Retrying profile fetch (attempt ${retryCount + 1}/${MAX_RETRIES})...`);
             await new Promise(resolve => setTimeout(resolve, getBackoffDelay(retryCount)));
             return fetchProfile(userId, retryCount + 1);
           }
+          
+          // Return fallback after retries exhausted
+          console.warn('Max retries reached, using fallback profile');
+          return createFallbackProfile(authUser);
         }
-        return null;
       }
+      
+      console.log('Profile fetched successfully');
       return data;
     } catch (err) {
       console.error('Profile fetch error:', err);
+      
       if (retryCount < MAX_RETRIES) {
+        console.log(`Retrying profile fetch (attempt ${retryCount + 1}/${MAX_RETRIES})...`);
         await new Promise(resolve => setTimeout(resolve, getBackoffDelay(retryCount)));
         return fetchProfile(userId, retryCount + 1);
       }
+      
+      // Last resort: try to get user and create fallback
+      try {
+        const { data: { user: authUser } } = await supabase.auth.getUser();
+        if (authUser) {
+          console.warn('Creating fallback profile after error');
+          return createFallbackProfile(authUser);
+        }
+      } catch {
+        // Silent fail
+      }
+      
       return null;
     }
   }, []);
 
   useEffect(() => {
     let isMounted = true;
+    let sessionCheckComplete = false;
     
     // Add timeout to prevent infinite loading
+    // This timeout will fire if initAuth doesn't complete within 10 seconds
     const loadingTimeout = setTimeout(() => {
-      if (isMounted && loading) {
+      if (isMounted && !sessionCheckComplete) {
         console.warn('Auth loading timeout - forcing completion');
-        setLoading(false);
-        setProfileLoading(false);
+        sessionCheckComplete = true; // Mark as complete to prevent future timeouts
+        if (isMounted) {
+          setLoading(false);
+          setProfileLoading(false);
+        }
       }
-    }, 8000); // 8 second timeout (reduced for better UX)
+    }, 10000); // 10 second timeout for better reliability
 
-    // Check active session on mount with timeout
+    // Check active session on mount
     const initAuth = async () => {
       try {
         // Add timeout to getSession call
@@ -180,7 +235,7 @@ export const AuthProvider = ({ children }) => {
           try {
             const userProfile = await fetchProfile(currentUser.id);
             if (isMounted) {
-              setProfile(userProfile);
+              setProfile(userProfile || createFallbackProfile(currentUser));
             }
           } catch (profileError) {
             console.error('Error fetching profile:', profileError);
@@ -195,11 +250,13 @@ export const AuthProvider = ({ children }) => {
           }
         }
         
+        sessionCheckComplete = true;
         if (isMounted) {
           setLoading(false);
         }
       } catch (error) {
         console.error('Error getting session:', error);
+        sessionCheckComplete = true;
         if (isMounted) {
           setLoading(false);
           setProfileLoading(false);
@@ -209,20 +266,24 @@ export const AuthProvider = ({ children }) => {
     
     initAuth();
 
-    // Listen for changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
+    // Listen for auth state changes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (!isMounted) return;
+      
       const currentUser = session?.user ?? null;
       
-      if (isMounted) {
-        setUser(currentUser);
+      if (import.meta.env.DEV) {
+        console.log('[AuthContext] Auth state changed:', event, currentUser?.id);
       }
       
-      if (currentUser && isMounted) {
+      setUser(currentUser);
+      
+      if (currentUser) {
         setProfileLoading(true);
         try {
           const userProfile = await fetchProfile(currentUser.id);
           if (isMounted) {
-            setProfile(userProfile);
+            setProfile(userProfile || createFallbackProfile(currentUser));
           }
         } catch (profileError) {
           console.error('Error fetching profile on auth change:', profileError);
@@ -235,12 +296,14 @@ export const AuthProvider = ({ children }) => {
             setProfileLoading(false);
           }
         }
-      } else if (isMounted) {
+      } else {
+        // User logged out
         setProfile(null);
         setProfileLoading(false);
       }
       
-      if (isMounted) {
+      // Mark auth as loaded (only set to false, never back to true after initial load)
+      if (loading && isMounted) {
         setLoading(false);
       }
     });
