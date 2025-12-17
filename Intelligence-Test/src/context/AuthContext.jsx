@@ -195,7 +195,7 @@ export const AuthProvider = ({ children }) => {
     let sessionCheckComplete = false;
     
     // Add timeout to prevent infinite loading
-    // This timeout will fire if initAuth doesn't complete within 10 seconds
+    // This timeout will fire if initAuth doesn't complete within 5 seconds
     const loadingTimeout = setTimeout(() => {
       if (isMounted && !sessionCheckComplete) {
         console.warn('Auth loading timeout - forcing completion');
@@ -205,7 +205,7 @@ export const AuthProvider = ({ children }) => {
           setProfileLoading(false);
         }
       }
-    }, 10000); // 10 second timeout for better reliability
+    }, 5000); // 5 second timeout for better UX
 
     // Check active session on mount
     const initAuth = async () => {
@@ -213,7 +213,7 @@ export const AuthProvider = ({ children }) => {
         // Add timeout to getSession call
         const sessionPromise = supabase.auth.getSession();
         const timeoutPromise = new Promise((_, reject) => 
-          setTimeout(() => reject(new Error('Session check timeout')), 5000)
+          setTimeout(() => reject(new Error('Session check timeout')), 3000)
         );
         
         let session = null;
@@ -389,8 +389,19 @@ export const AuthProvider = ({ children }) => {
   };
 
   const logout = async () => {
+    // Clear state immediately for responsive UI
+    setUser(null);
     setProfile(null);
-    return supabase.auth.signOut();
+    setProfileLoading(false);
+    
+    try {
+      await supabase.auth.signOut();
+    } catch (error) {
+      console.warn('Logout error:', error);
+      // Even if signOut fails, we've cleared local state
+    }
+    
+    return { error: null };
   };
 
   const updateProfile = async (updates) => {

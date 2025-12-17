@@ -1352,19 +1352,34 @@ function StudentAnalyticsTab({ classId, exams }) {
 // CREATE CLASS FORM
 // ============================================
 
+// Generate academic year options (Vietnamese format: YYYY-YYYY+1)
+function generateAcademicYearOptions() {
+  const currentYear = new Date().getFullYear();
+  const options = [];
+  // Generate 5 years back and 2 years forward
+  for (let i = -5; i <= 2; i++) {
+    const startYear = currentYear + i;
+    options.push(`${startYear}-${startYear + 1}`);
+  }
+  return options;
+}
+
 function CreateClassForm({ onClose, onSuccess }) {
   const { user } = useAuth();
   const { t } = useLanguage();
   const [loading, setLoading] = useState(false);
   const [retryCount, setRetryCount] = useState(0);
   const MAX_RETRIES = 3;
+  const currentYear = new Date().getFullYear();
   const [formData, setFormData] = useState({
     name: '',
     code: '',
     description: '',
     semester: '',
-    academic_year: new Date().getFullYear().toString(),
+    academic_year: `${currentYear}-${currentYear + 1}`, // Vietnamese format: 2025-2026
   });
+  
+  const academicYearOptions = generateAcademicYearOptions();
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -1523,14 +1538,16 @@ function CreateClassForm({ onClose, onSuccess }) {
           <label className="block text-sm font-medium text-gray-700 mb-1">
             {t('class.year')}
           </label>
-          <input
-            type="text"
+          <select
             name="academic_year"
             value={formData.academic_year}
             onChange={handleChange}
-            placeholder="2024"
             className="input"
-          />
+          >
+            {academicYearOptions.map((year) => (
+              <option key={year} value={year}>{year}</option>
+            ))}
+          </select>
         </div>
       </div>
 
