@@ -9,6 +9,9 @@ import axios from 'axios';
 import { Suspense, lazy, useEffect, useRef, useMemo } from 'react';
 import { t } from './lib/i18n';
 
+// Maximum navigation attempts to prevent infinite loops
+const MAX_NAVIGATION_ATTEMPTS = 10;
+
 // Lazy load pages for better performance and smaller initial bundle
 const Login = lazy(() => import('./pages/Login'));
 const Dashboard = lazy(() => import('./pages/Dashboard'));
@@ -86,7 +89,7 @@ function HomeRoute() {
   const navigationStateRef = useRef({
     hasNavigated: false,
     lastNavigationTarget: null,
-    lastUserId: null,
+    lastUserRoleKey: null,
     navigationCount: 0,
     lastNavigationTime: 0
   });
@@ -121,7 +124,7 @@ function HomeRoute() {
       }
       
       // Limit total navigations to prevent loops
-      if (state.navigationCount > 10) {
+      if (state.navigationCount > MAX_NAVIGATION_ATTEMPTS) {
         console.warn('[HomeRoute] Too many navigation attempts, stopping');
         return;
       }
@@ -144,8 +147,8 @@ function HomeRoute() {
     }
     
     // Check if we already navigated for this user/role combination
-    const userKey = `${user.id}:${computedRole}`;
-    if (state.hasNavigated && state.lastUserId === userKey) {
+    const userRoleKey = `${user.id}:${computedRole}`;
+    if (state.hasNavigated && state.lastUserRoleKey === userRoleKey) {
       return;
     }
     
@@ -157,13 +160,13 @@ function HomeRoute() {
       }
       
       // Limit total navigations
-      if (state.navigationCount > 10) {
+      if (state.navigationCount > MAX_NAVIGATION_ATTEMPTS) {
         console.warn('[HomeRoute] Too many navigation attempts, stopping');
         return;
       }
       
       state.hasNavigated = true;
-      state.lastUserId = userKey;
+      state.lastUserRoleKey = userRoleKey;
       state.navigationCount++;
       state.lastNavigationTarget = '/instructor';
       state.lastNavigationTime = now;
@@ -183,7 +186,7 @@ function HomeRoute() {
     
     // For students, mark as navigated to prevent further navigation attempts
     state.hasNavigated = true;
-    state.lastUserId = userKey;
+    state.lastUserRoleKey = userRoleKey;
     
   }, [user, profile, profileLoading, loading, navigate, isInstructorOrAdmin, computedRole]);
   

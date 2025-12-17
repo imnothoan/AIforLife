@@ -25,6 +25,9 @@ const registerSchema = z.object({
   path: ["confirmPassword"],
 });
 
+// Maximum navigation attempts to prevent infinite loops
+const MAX_NAVIGATION_ATTEMPTS = 10;
+
 export default function Login() {
   const [isRegister, setIsRegister] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
@@ -69,7 +72,7 @@ export default function Login() {
       }
       
       // Limit total redirects to prevent loops
-      if (state.redirectCount > 5) {
+      if (state.redirectCount > MAX_NAVIGATION_ATTEMPTS) {
         console.warn('[Login] Too many redirect attempts, stopping');
         return;
       }

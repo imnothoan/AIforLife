@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState, useCallback, useMemo } from 'react';
+import { createContext, useContext, useEffect, useState, useCallback } from 'react';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
 
 const AuthContext = createContext();
@@ -355,25 +355,20 @@ export const AuthProvider = ({ children }) => {
     return true; // student or any authenticated user
   }, [profile]);
 
-  // Memoized role check results to prevent infinite loops
-  const isInstructorResult = useMemo(() => {
+  // Stable function references using useCallback
+  const isInstructor = useCallback(() => {
     if (!profile) return false;
     return profile.role === 'instructor' || profile.role === 'admin';
   }, [profile]);
-
-  const isAdminResult = useMemo(() => {
+  
+  const isAdmin = useCallback(() => {
     if (!profile) return false;
     return profile.role === 'admin';
   }, [profile]);
-
-  const isStudentResult = useMemo(() => {
+  
+  const isStudent = useCallback(() => {
     return profile?.role === 'student';
   }, [profile]);
-
-  // Stable function references using useCallback
-  const isInstructor = useCallback(() => isInstructorResult, [isInstructorResult]);
-  const isAdmin = useCallback(() => isAdminResult, [isAdminResult]);
-  const isStudent = useCallback(() => isStudentResult, [isStudentResult]);
 
   // Check if Supabase is configured
   if (!isSupabaseConfigured()) {
