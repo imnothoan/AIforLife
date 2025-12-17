@@ -438,11 +438,9 @@ export const AuthProvider = ({ children }) => {
     return <ConfigurationError />;
   }
 
-  // Show loading screen while auth is loading
-  if (loading) {
-    return <LoadingScreen />;
-  }
-
+  // CRITICAL FIX: Don't block render with loading screen
+  // Instead, pass loading state to children and let them decide
+  // This prevents infinite loading issues when auth check hangs
   return (
     <AuthContext.Provider value={{ 
       user, 
