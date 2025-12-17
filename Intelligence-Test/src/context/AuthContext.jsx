@@ -222,7 +222,8 @@ export const AuthProvider = ({ children }) => {
     let sessionCheckComplete = false;
     
     // Add timeout to prevent infinite loading
-    // This timeout will fire if initAuth doesn't complete within 5 seconds
+    // This timeout will fire if initAuth doesn't complete within 3 seconds
+    // Reduced from 5s to 3s for better UX on slow networks
     const loadingTimeout = setTimeout(() => {
       if (isMounted && !sessionCheckComplete) {
         console.warn('Auth loading timeout - forcing completion');
@@ -232,7 +233,7 @@ export const AuthProvider = ({ children }) => {
           setProfileLoading(false);
         }
       }
-    }, 5000); // 5 second timeout for better UX
+    }, 3000); // 3 second timeout for better UX
 
     // Check active session on mount
     const initAuth = async () => {

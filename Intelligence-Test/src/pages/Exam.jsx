@@ -411,6 +411,12 @@ export default function Exam() {
         'materialDetected': translate('anticheat.materialDetected'),
         'headphonesDetected': translate('anticheat.headphonesDetected'),
         'monitoring': translate('anticheat.monitoring'),
+        // AI initialization status codes
+        'aiLoading': translate('anticheat.aiLoading'),
+        'yoloLoading': translate('anticheat.yoloLoading'),
+        'basicMode': translate('anticheat.basicMode'),
+        'faceOnly': translate('anticheat.faceOnly'),
+        'yoloOnly': translate('anticheat.yoloOnly'),
       };
       
       // Handle detection messages with confidence

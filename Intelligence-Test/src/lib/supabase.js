@@ -18,7 +18,30 @@ export const isSupabaseConfigured = () => {
 let supabaseClient;
 
 if (isSupabaseConfigured()) {
-  supabaseClient = createClient(supabaseUrl, supabaseAnonKey);
+  supabaseClient = createClient(supabaseUrl, supabaseAnonKey, {
+    auth: {
+      // Persist session in localStorage for faster initialization
+      persistSession: true,
+      // Auto-refresh token before expiry
+      autoRefreshToken: true,
+      // Detect session from URL (for OAuth redirects)
+      detectSessionInUrl: true,
+      // Storage key for session
+      storageKey: 'smartexampro-auth',
+    },
+    // Global options for all requests
+    global: {
+      headers: {
+        'x-application-name': 'SmartExamPro',
+      },
+    },
+    // Realtime disabled for better performance (not needed for exam platform)
+    realtime: {
+      params: {
+        eventsPerSecond: 2,
+      },
+    },
+  });
 } else {
   // Create a mock client that won't crash but will indicate configuration error
   console.error('Supabase is not configured. Please check your .env file.');
@@ -29,6 +52,7 @@ if (isSupabaseConfigured()) {
   supabaseClient = {
     auth: {
       getSession: async () => ({ data: { session: null }, error: null }),
+      getUser: async () => ({ data: { user: null }, error: null }),
       signInWithPassword: async () => ({ data: null, error: { message: 'Supabase not configured' } }),
       signUp: async () => ({ data: null, error: { message: 'Supabase not configured' } }),
       signOut: async () => ({ error: null }),
@@ -60,6 +84,7 @@ if (isSupabaseConfigured()) {
         eq: async () => ({ data: null, error: { message: 'Supabase not configured' } }),
       }),
     }),
+    rpc: async () => ({ data: null, error: { message: 'Supabase not configured' } }),
   };
 }
 

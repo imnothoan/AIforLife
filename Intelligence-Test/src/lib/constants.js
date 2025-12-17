@@ -7,10 +7,10 @@
 export const MAX_NAVIGATION_ATTEMPTS = 10;
 export const NAVIGATION_THROTTLE_MS = 500;
 
-// Auth timeout constants
-export const AUTH_LOADING_TIMEOUT_MS = 5000;
-export const AUTH_SESSION_TIMEOUT_MS = 3000;
-export const PROFILE_LOADING_TIMEOUT_MS = 3000;
+// Auth timeout constants - reduced for better UX on slow networks
+export const AUTH_LOADING_TIMEOUT_MS = 3000;
+export const AUTH_SESSION_TIMEOUT_MS = 2500;
+export const PROFILE_LOADING_TIMEOUT_MS = 2500;
 
 // Academic year configuration (for Vietnamese education system)
 export const ACADEMIC_YEAR_PAST_YEARS = 5;
