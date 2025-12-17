@@ -107,7 +107,8 @@ export const AuthProvider = ({ children }) => {
               student_id: metadata.student_id || null
             }, { 
               onConflict: 'id',
-              ignoreDuplicates: false // Get back existing if already created
+              // Returns the record whether it was inserted or updated
+              ignoreDuplicates: false
             })
             .select()
             .single();
@@ -194,9 +195,11 @@ export const AuthProvider = ({ children }) => {
     let sessionCheckComplete = false;
     
     // Add timeout to prevent infinite loading
+    // This timeout will fire if initAuth doesn't complete within 10 seconds
     const loadingTimeout = setTimeout(() => {
       if (isMounted && !sessionCheckComplete) {
         console.warn('Auth loading timeout - forcing completion');
+        sessionCheckComplete = true; // Mark as complete to prevent future timeouts
         if (isMounted) {
           setLoading(false);
           setProfileLoading(false);

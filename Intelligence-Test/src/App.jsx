@@ -84,13 +84,17 @@ function HomeRoute() {
   const { user, profile, profileLoading, loading } = useAuth();
   const navigate = useNavigate();
   const hasNavigatedRef = useRef(false);
+  const lastUserIdRef = useRef(null);
   
-  // Handle navigation once when auth state is ready
+  // Reset navigation flag when user changes (logout/login)
+  // This useEffect runs synchronously with the same dependencies as navigation effect
   useEffect(() => {
-    // Reset navigation flag if user changes (logout/login)
     const currentUserId = user?.id;
-    if (hasNavigatedRef.current && !currentUserId) {
+    
+    // Reset flag if user logged out or different user logged in
+    if (currentUserId !== lastUserIdRef.current) {
       hasNavigatedRef.current = false;
+      lastUserIdRef.current = currentUserId;
     }
   }, [user?.id]);
   

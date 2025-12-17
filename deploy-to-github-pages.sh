@@ -79,9 +79,8 @@ echo ""
 echo "Copying build files..."
 cd "$TEMP_DEPLOY_DIR"
 
-# Remove old files (keep CNAME, README.md, .git)
-find . -maxdepth 1 ! -name 'CNAME' ! -name 'README.md' ! -name '.git' ! -name '.' ! -name '..' -exec rm -rf {} +
-rm -rf assets models
+// Remove old files (keep CNAME, README.md, .git)
+find . -maxdepth 1 ! -name 'CNAME' ! -name 'README.md' ! -name '.git' ! -name '.' ! -name '..' -exec rm -rf {} + 2>/dev/null || true
 
 # Copy new build files
 cp -r "$OLDPWD/../dist/"* .
