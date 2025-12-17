@@ -76,6 +76,7 @@ export default function Exam() {
   const [remoteDesktopDetected, setRemoteDesktopDetected] = useState(false);
   const [examStarted, setExamStarted] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [cameraStatus, setCameraStatus] = useState('loading'); // 'loading' | 'ready' | 'error'
 
   // UI State
   const [showNotes, setShowNotes] = useState(false);
@@ -327,6 +328,7 @@ export default function Exam() {
   
   useEffect(() => {
     const startCamera = async () => {
+      setCameraStatus('loading');
       try {
         // Request camera with multiple fallback options for better browser compatibility
         const constraints = { 
@@ -340,8 +342,10 @@ export default function Exam() {
         
         const stream = await navigator.mediaDevices.getUserMedia(constraints);
         setupCameraWithCanvas(stream);
+        setCameraStatus('ready');
       } catch (err) {
         console.error('Camera access error:', err);
+        setCameraStatus('error');
         // Provide more specific error messages based on error type
         if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
           toast.error(t('anticheat.cameraAccess') + ' (Permission denied)');
@@ -354,6 +358,7 @@ export default function Exam() {
           try {
             const simpleStream = await navigator.mediaDevices.getUserMedia({ video: true });
             setupCameraWithCanvas(simpleStream);
+            setCameraStatus('ready');
           } catch (fallbackErr) {
             console.error('Camera fallback failed:', fallbackErr);
             toast.error(t('anticheat.cameraAccess'));
