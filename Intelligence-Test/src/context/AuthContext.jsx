@@ -72,6 +72,14 @@ export const AuthProvider = ({ children }) => {
     const getBackoffDelay = (attempt) => BASE_RETRY_DELAY * Math.pow(2, attempt);
     
     try {
+      // First, get the current user for fallback
+      const { data: { user: authUser } } = await supabase.auth.getUser();
+      if (!authUser) {
+        console.warn('fetchProfile: No authenticated user found');
+        return null;
+      }
+      
+      // Try to fetch existing profile
       const { data, error } = await supabase
         .from('profiles')
         .select('*')
@@ -81,34 +89,35 @@ export const AuthProvider = ({ children }) => {
       if (error) {
         // PGRST116 means no rows returned - profile may not exist yet
         if (error.code === 'PGRST116') {
+          console.log('Profile not found, attempting to create...');
+          
           // Profile doesn't exist yet, try to create it from user metadata
-          const { data: { user: authUser } } = await supabase.auth.getUser();
-          if (authUser) {
-            const metadata = authUser.user_metadata || {};
-            const role = metadata.role || 'student';
-            const fullName = metadata.full_name || authUser.email?.split('@')[0] || 'User';
+          const metadata = authUser.user_metadata || {};
+          const role = metadata.role || 'student';
+          const fullName = metadata.full_name || authUser.email?.split('@')[0] || 'User';
+          
+          // Try to create profile with upsert (safer for concurrent requests)
+          const { data: newProfile, error: createError } = await supabase
+            .from('profiles')
+            .upsert({
+              id: userId,
+              email: authUser.email,
+              full_name: fullName,
+              role: role,
+              student_id: metadata.student_id || null
+            }, { 
+              onConflict: 'id',
+              ignoreDuplicates: false // Get back existing if already created
+            })
+            .select()
+            .single();
+          
+          if (createError) {
+            console.error('Error creating profile:', createError);
             
-            // Try to create profile
-            const { data: newProfile, error: createError } = await supabase
-              .from('profiles')
-              .upsert({
-                id: userId,
-                email: authUser.email,
-                full_name: fullName,
-                role: role,
-                student_id: metadata.student_id || null
-              }, { onConflict: 'id' })
-              .select()
-              .single();
-            
-            if (createError) {
-              console.error('Error creating profile:', createError);
-              // If creation failed and we haven't retried too many times, wait and retry with exponential backoff
-              if (retryCount < MAX_RETRIES) {
-                await new Promise(resolve => setTimeout(resolve, getBackoffDelay(retryCount)));
-                return fetchProfile(userId, retryCount + 1);
-              }
-              // Return a fallback profile based on user metadata
+            // If it's a permission error, return fallback immediately
+            if (createError.code === '42501' || createError.message?.includes('permission')) {
+              console.warn('Permission denied creating profile, using fallback');
               return {
                 id: userId,
                 email: authUser.email,
@@ -117,25 +126,65 @@ export const AuthProvider = ({ children }) => {
                 student_id: metadata.student_id || null
               };
             }
-            return newProfile;
+            
+            // If creation failed and we haven't retried too many times, wait and retry with exponential backoff
+            if (retryCount < MAX_RETRIES) {
+              console.log(`Retrying profile fetch (attempt ${retryCount + 1}/${MAX_RETRIES})...`);
+              await new Promise(resolve => setTimeout(resolve, getBackoffDelay(retryCount)));
+              return fetchProfile(userId, retryCount + 1);
+            }
+            
+            // Return a fallback profile based on user metadata
+            console.warn('Max retries reached, using fallback profile');
+            return {
+              id: userId,
+              email: authUser.email,
+              full_name: fullName,
+              role: role,
+              student_id: metadata.student_id || null
+            };
           }
+          
+          console.log('Profile created successfully');
+          return newProfile;
         } else {
           console.error('Error fetching profile:', error);
+          
           // Retry on other errors with exponential backoff
           if (retryCount < MAX_RETRIES) {
+            console.log(`Retrying profile fetch (attempt ${retryCount + 1}/${MAX_RETRIES})...`);
             await new Promise(resolve => setTimeout(resolve, getBackoffDelay(retryCount)));
             return fetchProfile(userId, retryCount + 1);
           }
+          
+          // Return fallback after retries exhausted
+          console.warn('Max retries reached, using fallback profile');
+          return createFallbackProfile(authUser);
         }
-        return null;
       }
+      
+      console.log('Profile fetched successfully');
       return data;
     } catch (err) {
       console.error('Profile fetch error:', err);
+      
       if (retryCount < MAX_RETRIES) {
+        console.log(`Retrying profile fetch (attempt ${retryCount + 1}/${MAX_RETRIES})...`);
         await new Promise(resolve => setTimeout(resolve, getBackoffDelay(retryCount)));
         return fetchProfile(userId, retryCount + 1);
       }
+      
+      // Last resort: try to get user and create fallback
+      try {
+        const { data: { user: authUser } } = await supabase.auth.getUser();
+        if (authUser) {
+          console.warn('Creating fallback profile after error');
+          return createFallbackProfile(authUser);
+        }
+      } catch {
+        // Silent fail
+      }
+      
       return null;
     }
   }, []);
