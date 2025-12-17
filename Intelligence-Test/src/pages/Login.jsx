@@ -7,6 +7,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { z } from 'zod';
 import { FileText, Eye, EyeOff, Loader2, Mail, Lock, User, IdCard } from 'lucide-react';
 import LanguageSwitcher from '../components/LanguageSwitcher';
+import { MAX_NAVIGATION_ATTEMPTS, NAVIGATION_THROTTLE_MS } from '../lib/constants';
 
 // Validation schemas with error codes (not messages)
 const loginSchema = z.object({
@@ -43,15 +44,49 @@ export default function Login() {
   const { user, login, register, loading: authLoading } = useAuth();
   const { t } = useLanguage();
   const navigate = useNavigate();
-  const hasRedirectedRef = useRef(false);
+  const navigationStateRef = useRef({
+    hasRedirected: false,
+    lastUserId: null,
+    redirectCount: 0,
+    lastRedirectTime: 0
+  });
 
   // Redirect if already authenticated (prevents showing login when already logged in)
-  // Uses ref guard to ensure navigation only happens once even if effect re-runs
+  // Uses ref guard with throttling to ensure navigation only happens once
   useEffect(() => {
+    const state = navigationStateRef.current;
+    const now = Date.now();
+    
     // Only redirect when auth is fully loaded and user exists
-    if (!authLoading && user && !hasRedirectedRef.current) {
-      hasRedirectedRef.current = true;
-      // Navigate immediately - the ref guard prevents multiple calls
+    if (!authLoading && user) {
+      // Check if we already redirected for this user
+      // Use optional chaining for safety during state transitions
+      const userId = user?.id || 'unknown';
+      if (state.hasRedirected && state.lastUserId === userId) {
+        return;
+      }
+      
+      // Throttle navigation - max once per NAVIGATION_THROTTLE_MS
+      if ((now - state.lastRedirectTime) < NAVIGATION_THROTTLE_MS) {
+        return;
+      }
+      
+      // Limit total redirects to prevent loops
+      if (state.redirectCount >= MAX_NAVIGATION_ATTEMPTS) {
+        console.warn('[Login] Too many redirect attempts, stopping');
+        return;
+      }
+      
+      state.hasRedirected = true;
+      state.lastUserId = userId;
+      state.redirectCount++;
+      state.lastRedirectTime = now;
+      
+      if (import.meta.env.DEV) {
+        console.log('[Login] User authenticated, redirecting to home');
+      }
+      
+      // Navigate to home - the ref guard prevents multiple calls
       navigate('/', { replace: true });
     }
   }, [user, authLoading, navigate]);

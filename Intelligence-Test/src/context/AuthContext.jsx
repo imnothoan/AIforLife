@@ -347,17 +347,28 @@ export const AuthProvider = ({ children }) => {
     return { data, error };
   };
 
-  // Check if user has a specific role
-  const hasRole = (requiredRole) => {
+  // Check if user has a specific role - using useCallback for stable reference
+  const hasRole = useCallback((requiredRole) => {
     if (!profile) return false;
     if (requiredRole === 'admin') return profile.role === 'admin';
     if (requiredRole === 'instructor') return profile.role === 'instructor' || profile.role === 'admin';
     return true; // student or any authenticated user
-  };
+  }, [profile]);
 
-  const isInstructor = () => hasRole('instructor');
-  const isAdmin = () => hasRole('admin');
-  const isStudent = () => profile?.role === 'student';
+  // Stable function references using useCallback
+  const isInstructor = useCallback(() => {
+    if (!profile) return false;
+    return profile.role === 'instructor' || profile.role === 'admin';
+  }, [profile]);
+  
+  const isAdmin = useCallback(() => {
+    if (!profile) return false;
+    return profile.role === 'admin';
+  }, [profile]);
+  
+  const isStudent = useCallback(() => {
+    return profile?.role === 'student';
+  }, [profile]);
 
   // Check if Supabase is configured
   if (!isSupabaseConfigured()) {
