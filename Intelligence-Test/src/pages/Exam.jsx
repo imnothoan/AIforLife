@@ -326,6 +326,35 @@ export default function Exam() {
     }
   };
   
+  // Retry camera function for UI button
+  const retryCamera = async () => {
+    setCameraStatus('loading');
+    try {
+      // Stop existing stream first
+      if (cameraStreamRef.current) {
+        cameraStreamRef.current.getTracks().forEach(track => track.stop());
+      }
+      
+      const constraints = { 
+        video: { 
+          width: { ideal: 640, min: 320 }, 
+          height: { ideal: 480, min: 240 },
+          facingMode: 'user'
+        },
+        audio: false
+      };
+      
+      const stream = await navigator.mediaDevices.getUserMedia(constraints);
+      setupCameraWithCanvas(stream);
+      setCameraStatus('ready');
+      toast.success(t('proctoring.camera') + ' OK');
+    } catch (err) {
+      console.error('Camera retry error:', err);
+      setCameraStatus('error');
+      toast.error(t('anticheat.cameraAccess'));
+    }
+  };
+  
   useEffect(() => {
     const startCamera = async () => {
       setCameraStatus('loading');
@@ -455,19 +484,25 @@ export default function Exam() {
       setStatus('AI Worker error - basic mode');
     };
 
-    // Start frame processing when exam starts
-    if (examStarted && videoRef.current && ctxRef.current) {
+    // Start frame processing when exam starts AND camera is ready
+    // We need to check cameraStatus to ensure canvas context is available
+    if (examStarted && cameraStatus === 'ready' && videoRef.current && ctxRef.current) {
+      console.log('🎬 Starting AI frame processing...');
       frameIntervalRef.current = setInterval(() => {
-        if (videoRef.current && workerRef.current && !isSubmittingRef.current) {
+        if (videoRef.current && workerRef.current && ctxRef.current && !isSubmittingRef.current) {
           try {
-            ctxRef.current.drawImage(videoRef.current, 0, 0, 640, 480);
-            const imageData = ctxRef.current.getImageData(0, 0, 640, 480);
-            // Only send if we have valid image data
-            if (imageData.data && imageData.data.length > 0) {
-              workerRef.current.postMessage(
-                { type: 'PROCESS_FRAME', payload: imageData }, 
-                [imageData.data.buffer]
-              );
+            // Ensure video is playing and has dimensions
+            // HTMLMediaElement.HAVE_CURRENT_DATA = 2
+            if (videoRef.current.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA && videoRef.current.videoWidth > 0) {
+              ctxRef.current.drawImage(videoRef.current, 0, 0, 640, 480);
+              const imageData = ctxRef.current.getImageData(0, 0, 640, 480);
+              // Only send if we have valid image data
+              if (imageData.data && imageData.data.length > 0) {
+                workerRef.current.postMessage(
+                  { type: 'PROCESS_FRAME', payload: imageData }, 
+                  [imageData.data.buffer]
+                );
+              }
             }
           } catch (err) {
             console.warn('Error sending frame to worker:', err);
@@ -490,7 +525,7 @@ export default function Exam() {
         workerRef.current.terminate();
       }
     };
-  }, [examStarted]);
+  }, [examStarted, cameraStatus]);
 
   // ============================================
   // TIMER
@@ -1359,33 +1394,53 @@ export default function Exam() {
             <p className="text-sm font-medium text-gray-700 mb-2">{t('exam.rules.cameraCheck')}</p>
             <div className="relative bg-gray-900 rounded-lg overflow-hidden aspect-video">
               {cameraStatus === 'loading' && (
-                <div className="absolute inset-0 flex items-center justify-center">
-                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white"></div>
+                <div className="absolute inset-0 flex items-center justify-center flex-col">
+                  <Loader2 className="w-8 h-8 text-white animate-spin mb-2" />
+                  <p className="text-white text-sm">{t('common.loading')}</p>
                 </div>
               )}
               {cameraStatus === 'error' && (
-                <div className="absolute inset-0 flex items-center justify-center flex-col">
+                <div className="absolute inset-0 flex items-center justify-center flex-col p-4">
                   <AlertTriangle className="w-12 h-12 text-danger mb-2" />
-                  <p className="text-white text-sm">{t('anticheat.cameraAccess')}</p>
+                  <p className="text-white text-sm text-center mb-3">{t('anticheat.cameraAccess')}</p>
+                  <button 
+                    onClick={retryCamera}
+                    className="flex items-center space-x-2 bg-primary hover:bg-primary-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
+                  >
+                    <Camera className="w-4 h-4" />
+                    <span>{t('face.retake')}</span>
+                  </button>
                 </div>
               )}
               <video ref={videoRef} autoPlay playsInline muted className="w-full h-full object-cover" />
               <div className="absolute bottom-2 left-2 flex items-center space-x-1 bg-black/50 text-white text-xs px-2 py-1 rounded">
                 <Camera className="w-3 h-3" />
                 <span>{t('proctoring.camera')}</span>
-                {cameraStatus === 'ready' && <span className="w-2 h-2 rounded-full bg-green-500 ml-1"></span>}
+                {cameraStatus === 'ready' && <span className="w-2 h-2 rounded-full bg-green-500 ml-1 animate-pulse"></span>}
+                {cameraStatus === 'error' && <span className="w-2 h-2 rounded-full bg-red-500 ml-1"></span>}
               </div>
             </div>
+            {cameraStatus === 'error' && (
+              <p className="text-xs text-danger mt-2 text-center">
+                {t('anticheat.cameraAccess')} - {t('exam.rules.camera')}
+              </p>
+            )}
           </div>
 
           <button 
             onClick={handleStartExam} 
-            disabled={hasMultiScreen || remoteDesktopDetected}
+            disabled={hasMultiScreen || remoteDesktopDetected || cameraStatus !== 'ready'}
             className="btn-primary w-full py-3 text-lg disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <Shield className="w-5 h-5 mr-2" />
             {t('exam.rules.agree')}
           </button>
+          
+          {cameraStatus !== 'ready' && (
+            <p className="text-xs text-center text-gray-500 mt-2">
+              {t('exam.rules.cameraCheck')} {cameraStatus === 'loading' ? '...' : ''}
+            </p>
+          )}
         </motion.div>
         
         {/* Face Verification Modal */}

@@ -19,6 +19,24 @@
     <meta http-equiv="Expires" content="0" />
     
     <title>SmartExamPro - Nền tảng khảo thí thông minh</title>
+    
+    <!-- SPA Redirect Handler for GitHub Pages -->
+    <!-- This script handles redirects from 404.html for client-side routing -->
+    <script>
+      (function() {
+        // Check if there's a redirect path stored from 404.html
+        var redirectPath = sessionStorage.getItem('spa-redirect-path');
+        if (redirectPath) {
+          // Clear the stored path
+          sessionStorage.removeItem('spa-redirect-path');
+          // Navigate to the original path using history API
+          // This preserves the URL without causing a page reload
+          if (redirectPath !== '/' && redirectPath !== window.location.pathname) {
+            window.history.replaceState(null, '', redirectPath);
+          }
+        }
+      })();
+    </script>
   </head>
   <body>
     <noscript>
