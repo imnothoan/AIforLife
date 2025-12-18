@@ -412,6 +412,15 @@ export default function Exam() {
   // Use tiered delays and mutation observer to ensure the new video element has mounted before attaching stream.
   // The DOM takes variable time to update, especially with animations, so we use multiple attempts.
   const VIDEO_MOUNT_DELAYS = [50, 100, 200, 500, 1000]; // Multiple retry delays for reliability
+  const VIDEO_ATTACHMENT_TIMEOUT_MS = 3000; // Stop checking after this time
+  const VIDEO_CHECK_INTERVAL_MS = 250; // Interval for checking video readiness
+  
+  // Helper function to check if camera stream is still active
+  const isStreamActive = (stream) => {
+    if (!stream) return false;
+    const tracks = stream.getTracks();
+    return tracks.length > 0 && tracks.some(track => track.readyState === 'live');
+  };
   
   useEffect(() => {
     const attachStreamToVideo = () => {
@@ -421,10 +430,7 @@ export default function Exam() {
         const video = videoRef.current;
         
         // Check if stream is still active
-        const tracks = stream.getTracks();
-        const isStreamActive = tracks.length > 0 && tracks.some(track => track.readyState === 'live');
-        
-        if (!isStreamActive) {
+        if (!isStreamActive(stream)) {
           console.warn('[Exam] Camera stream is not active, attempting to restart camera');
           retryCamera();
           return;
@@ -465,12 +471,12 @@ export default function Exam() {
           clearInterval(checkInterval);
         }
       }
-    }, 250);
+    }, VIDEO_CHECK_INTERVAL_MS);
     
-    // Clear after 3 seconds (should be attached by then)
+    // Clear after timeout (should be attached by then)
     const cleanupTimeout = setTimeout(() => {
       clearInterval(checkInterval);
-    }, 3000);
+    }, VIDEO_ATTACHMENT_TIMEOUT_MS);
     
     return () => {
       timeoutIds.forEach(id => clearTimeout(id));

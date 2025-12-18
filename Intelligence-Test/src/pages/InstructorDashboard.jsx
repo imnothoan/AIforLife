@@ -1839,6 +1839,20 @@ function CreateClassForm({ onClose, onSuccess }) {
               created_at: new Date().toISOString()
             };
           }
+        } else {
+          // RPC succeeded but didn't return class_id - create fallback
+          console.warn('RPC create_class succeeded but no class_id returned');
+          newClassData = {
+            id: crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(),
+            name: trimmedName,
+            code: trimmedCode,
+            description: formData.description?.trim() || null,
+            semester: formData.semester || null,
+            academic_year: formData.academic_year || null,
+            instructor_id: user?.id,
+            is_active: true,
+            created_at: new Date().toISOString()
+          };
         }
 
         toast.success(t('class.createSuccess'));
