@@ -13,6 +13,10 @@ import {
 } from 'lucide-react';
 import FaceVerification from '../components/FaceVerification';
 
+// ============================================
+// CONSTANTS
+// ============================================
+
 // Remote desktop detection signatures
 const REMOTE_DESKTOP_SIGNATURES = [
   'teamviewer', 'anydesk', 'ultraviewer', 'parsec', 'vnc',
@@ -30,6 +34,10 @@ const DEMO_SESSION_IDS = ['demo-session', 'demo-session-id'];
 // Timeout constants
 const SUBMIT_TIMEOUT_MS = 30000; // Increased to 30 seconds for better reliability
 const SUBMIT_TIMEOUT_ERROR = 'SUBMIT_TIMEOUT';
+
+// Evidence capture constants
+const SCREENSHOT_QUALITY = 0.85; // JPEG quality for evidence screenshots
+const CRITICAL_EVENTS_FOR_EVIDENCE = ['phoneDetected', 'headphonesDetected', 'materialDetected', 'multiPerson'];
 
 export default function Exam() {
   const { id: examId } = useParams();
@@ -554,7 +562,9 @@ export default function Exam() {
       else if (type === 'ALERT') {
         setCheatCount(prev => prev + 1);
         toast.warning(`${translate('anticheat.aiWarning')}: ${translatedMessage}`);
-        logProctoring('ai_alert', { message: payload, code });
+        // Capture screenshot for critical AI detections
+        const shouldCaptureScreenshot = CRITICAL_EVENTS_FOR_EVIDENCE.includes(code);
+        logProctoring('ai_alert', { message: payload, code }, shouldCaptureScreenshot);
       } else if (type === 'GAZE_AWAY') {
         setGazeAwayCount(prev => prev + 1);
       }
@@ -575,17 +585,25 @@ export default function Exam() {
     const FRAME_INTERVAL_MS = 200; // Process frames every 200ms (5 FPS)
     
     const startFrameProcessing = () => {
-      if (frameIntervalRef.current) return; // Already started
+      if (frameIntervalRef.current) {
+        console.log('🎬 Frame processing already started');
+        return true; // Already started
+      }
       
       // Double-check video is ready
       if (!videoRef.current || !ctxRef.current || !workerRef.current) {
-        console.log('🎬 Frame processing prerequisites not met yet');
+        console.log('🎬 Frame processing prerequisites not met yet:', {
+          hasVideo: !!videoRef.current,
+          hasCanvas: !!ctxRef.current,
+          hasWorker: !!workerRef.current
+        });
         return false;
       }
       
       // Check if video has data AND stream is attached
       if (videoRef.current.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) {
-        console.log('🎬 Video not ready yet, readyState:', videoRef.current.readyState);
+        console.log('🎬 Video not ready yet, readyState:', videoRef.current.readyState, 
+                    '(need', HTMLMediaElement.HAVE_CURRENT_DATA, 'or higher)');
         return false;
       }
       
@@ -595,9 +613,16 @@ export default function Exam() {
         return false;
       }
       
-      console.log('🎬 Starting AI frame processing...');
+      // Additional check: ensure srcObject is set
+      if (!videoRef.current.srcObject) {
+        console.log('🎬 Video has no srcObject, stream not attached');
+        return false;
+      }
+      
+      console.log('🎬 ✅ Starting AI frame processing!');
       console.log('   Video ready:', !!videoRef.current, 'readyState:', videoRef.current?.readyState);
       console.log('   Video dimensions:', videoRef.current?.videoWidth, 'x', videoRef.current?.videoHeight);
+      console.log('   Video srcObject:', !!videoRef.current?.srcObject);
       console.log('   Canvas context ready:', !!ctxRef.current);
       console.log('   Worker ready:', !!workerRef.current);
       
@@ -615,7 +640,12 @@ export default function Exam() {
                   { type: 'PROCESS_FRAME', payload: imageData },
                   [imageData.data.buffer]
                 );
+              } else {
+                console.warn('🎬 Empty image data, skipping frame');
               }
+            } else {
+              console.warn('🎬 Video not ready in frame loop, readyState:', videoRef.current.readyState, 
+                          'dimensions:', videoRef.current.videoWidth, 'x', videoRef.current.videoHeight);
             }
           } catch (err) {
             console.warn('Error sending frame to worker:', err);
@@ -623,6 +653,7 @@ export default function Exam() {
         }
       }, FRAME_INTERVAL_MS);
       
+      console.log('🎬 Frame processing interval started (every', FRAME_INTERVAL_MS, 'ms)');
       return true;
     };
     
@@ -645,6 +676,7 @@ export default function Exam() {
         if (!frameIntervalRef.current) {
           const started = startFrameProcessing();
           if (started) {
+            console.log('🎬 Frame processing started via interval check');
             clearInterval(checkIntervalId);
           }
         } else {
@@ -652,10 +684,34 @@ export default function Exam() {
         }
       }, 400);
       
-      // Stop checking after 8 seconds (increased for reliability)
+      // Stop checking after 10 seconds (increased for reliability)
+      // If it still hasn't started by then, log a warning
       timeoutIds.push(setTimeout(() => {
         if (checkIntervalId) clearInterval(checkIntervalId);
-      }, 8000));
+        if (!frameIntervalRef.current) {
+          console.error('🎬 ❌ CRITICAL: Frame processing failed to start after 10 seconds!');
+          console.error('   This means anti-cheat AI is NOT running.');
+          console.error('   Debug info:', {
+            examStarted,
+            cameraStatus,
+            hasVideo: !!videoRef.current,
+            hasCanvas: !!ctxRef.current,
+            hasWorker: !!workerRef.current,
+            videoReadyState: videoRef.current?.readyState,
+            videoDimensions: {
+              width: videoRef.current?.videoWidth,
+              height: videoRef.current?.videoHeight
+            },
+            hasSrcObject: !!videoRef.current?.srcObject
+          });
+          // Show user-friendly warning
+          toast.error(t('anticheat.aiNotStarted') || 'Hệ thống giám sát AI không khởi động được. Vui lòng tải lại trang.', {
+            autoClose: false
+          });
+        } else {
+          console.log('🎬 ✅ Frame processing confirmed running');
+        }
+      }, 10000));
     }
 
     return () => {
@@ -951,18 +1007,109 @@ export default function Exam() {
   // ============================================
   // PROCTORING LOG HELPER
   // ============================================
-  const logProctoring = async (eventType, details) => {
+  // ============================================
+  // EVIDENCE CAPTURE FOR PROCTORING
+  // ============================================
+  
+  /**
+   * Capture screenshot from video canvas and upload to Supabase Storage
+   * Returns the public URL of the uploaded image or null if failed
+   */
+  const captureEvidenceScreenshot = async () => {
+    // Only capture in production mode with valid session
+    if (!sessionId || DEMO_SESSION_IDS.includes(sessionId) || DEMO_EXAM_IDS.includes(examId)) {
+      return null;
+    }
+    
+    if (!videoRef.current || !canvasRef.current || !ctxRef.current) {
+      console.warn('[Evidence] Cannot capture: missing video/canvas');
+      return null;
+    }
+    
+    try {
+      // Draw current video frame to canvas
+      const video = videoRef.current;
+      const canvas = canvasRef.current;
+      const ctx = ctxRef.current;
+      
+      // Ensure video is ready
+      if (video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA || !video.videoWidth) {
+        console.warn('[Evidence] Video not ready for capture');
+        return null;
+      }
+      
+      // Draw frame
+      ctx.drawImage(video, 0, 0, 640, 480);
+      
+      // Convert canvas to blob (JPEG for smaller file size)
+      const blob = await new Promise((resolve) => {
+        canvas.toBlob(resolve, 'image/jpeg', SCREENSHOT_QUALITY);
+      });
+      
+      if (!blob) {
+        console.warn('[Evidence] Failed to create blob from canvas');
+        return null;
+      }
+      
+      // Generate unique filename with timestamp (sanitize for storage)
+      const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+      const filename = `${sessionId}_${timestamp}.jpg`;
+      
+      // Upload to Supabase Storage
+      const { data, error } = await supabase.storage
+        .from('proctoring-evidence')
+        .upload(filename, blob, {
+          contentType: 'image/jpeg',
+          cacheControl: '3600',
+          upsert: false
+        });
+      
+      if (error) {
+        console.error('[Evidence] Upload failed:', error);
+        return null;
+      }
+      
+      // Get public URL
+      const { data: urlData } = supabase.storage
+        .from('proctoring-evidence')
+        .getPublicUrl(filename);
+      
+      console.log('[Evidence] Screenshot captured:', urlData.publicUrl);
+      return urlData.publicUrl;
+    } catch (err) {
+      console.error('[Evidence] Capture error:', err);
+      return null;
+    }
+  };
+  
+  // ============================================
+  // PROCTORING LOG WITH EVIDENCE
+  // ============================================
+  
+  const logProctoring = async (eventType, details, captureScreenshot = false) => {
     // Skip logging if no session or if in demo mode
     if (!sessionId) return;
     if (DEMO_SESSION_IDS.includes(sessionId) || DEMO_EXAM_IDS.includes(examId)) return;
 
     try {
+      let screenshot_url = null;
+      
+      // Capture screenshot for critical events
+      if (captureScreenshot) {
+        screenshot_url = await captureEvidenceScreenshot();
+      }
+      
       await supabase.from('proctoring_logs').insert({
         session_id: sessionId,
         event_type: eventType,
         details: details,
-        severity: eventType.includes('detected') ? 'critical' : 'warning'
+        severity: eventType.includes('detected') ? 'critical' : 'warning',
+        screenshot_url: screenshot_url
       });
+      
+      if (screenshot_url) {
+        console.log('[Evidence] Logged with screenshot:', eventType);
+      }
     } catch (e) {
       // Silently fail for proctoring logs - don't interrupt the exam
       console.warn('Failed to log proctoring event:', e?.message || e);

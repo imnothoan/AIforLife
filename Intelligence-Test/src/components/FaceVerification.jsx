@@ -217,6 +217,9 @@ export default function FaceVerification({
     setStatus(newStatus);
   }, []);
 
+  // Ref to store camera stream for cleanup
+  const cameraStreamRef = useRef(null);
+
   // Initialize MediaPipe Face Landmarker
   useEffect(() => {
     let isMounted = true;
@@ -313,6 +316,19 @@ export default function FaceVerification({
       if (faceLandmarkerRef.current) {
         faceLandmarkerRef.current.close();
       }
+      // CRITICAL FIX: Stop camera stream to release resources and turn off camera LED
+      if (cameraStreamRef.current) {
+        console.log('[FaceVerification] Stopping camera stream on component unmount');
+        cameraStreamRef.current.getTracks().forEach(track => {
+          track.stop();
+          console.log(`[FaceVerification] Stopped camera track: ${track.kind} (${track.label})`);
+        });
+        cameraStreamRef.current = null;
+      }
+      // Clear video element source
+      if (videoRef.current && videoRef.current.srcObject) {
+        videoRef.current.srcObject = null;
+      }
     };
   }, []);
 
@@ -322,6 +338,10 @@ export default function FaceVerification({
       const stream = await navigator.mediaDevices.getUserMedia({
         video: { width: 640, height: 480, facingMode: 'user' }
       });
+
+      // Store stream reference for cleanup
+      cameraStreamRef.current = stream;
+      console.log('[FaceVerification] Camera stream started');
 
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
@@ -692,11 +712,11 @@ export default function FaceVerification({
         </div>
       )}
 
-      {/* Action buttons - sticky at bottom */}
+      {/* Action buttons - at bottom */}
       {/* NOTE: Capture is now allowed when face is detected, regardless of quality (good/too_small/etc)
           This improves usability by allowing captures in suboptimal conditions while still providing
           quality feedback to the user. The face detection algorithm will verify quality on capture. */}
-      <div className="sticky bottom-0 bg-paper pt-3 -mx-4 px-4 pb-1 flex space-x-3">
+      <div className="pt-3 flex space-x-3">
         {status === 'ready' && (
           <button
             onClick={handleCapture}

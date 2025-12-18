@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useLanguage } from '../context/LanguageContext';
 import { useNavigate } from 'react-router-dom';
@@ -1441,6 +1441,8 @@ function StudentAnalyticsTab({ classId, exams }) {
   const [selectedExamId, setSelectedExamId] = useState('');
   const [sessions, setSessions] = useState([]);
   const [analyticsData, setAnalyticsData] = useState(null);
+  const [expandedSessionId, setExpandedSessionId] = useState(null);
+  const [proctoringLogs, setProctoringLogs] = useState({});
 
   // Load sessions for selected exam
   useEffect(() => {
@@ -1517,6 +1519,62 @@ function StudentAnalyticsTab({ classId, exams }) {
     if (violations === 0) return { label: t('analytics.integrity.good'), color: 'bg-success-100 text-success-700' };
     if (violations <= 3) return { label: t('analytics.integrity.warning'), color: 'bg-warning-100 text-warning-700' };
     return { label: t('analytics.integrity.suspicious'), color: 'bg-danger-100 text-danger-700' };
+  };
+  
+  // Load proctoring logs for a specific session
+  const loadProctoringLogs = async (sessionId) => {
+    if (proctoringLogs[sessionId]) {
+      // Already loaded, just toggle
+      setExpandedSessionId(expandedSessionId === sessionId ? null : sessionId);
+      return;
+    }
+    
+    try {
+      const { data, error } = await supabase
+        .from('proctoring_logs')
+        .select('*')
+        .eq('session_id', sessionId)
+        .order('timestamp', { ascending: true });
+      
+      if (error) throw error;
+      
+      setProctoringLogs(prev => ({
+        ...prev,
+        [sessionId]: data || []
+      }));
+      setExpandedSessionId(sessionId);
+    } catch (err) {
+      console.error('Failed to load proctoring logs:', err);
+      toast.error('Failed to load evidence');
+    }
+  };
+  
+  const getEventTypeLabel = (eventType) => {
+    const labels = {
+      'tab_switch': 'Tab Switch',
+      'fullscreen_exit': 'Fullscreen Exit',
+      'multi_screen': 'Multiple Screens',
+      'object_detected': 'Object Detected',
+      'face_not_detected': 'Face Not Detected',
+      'gaze_away': 'Looking Away',
+      'copy_paste_attempt': 'Copy/Paste',
+      'right_click': 'Right Click',
+      'keyboard_shortcut': 'Keyboard Shortcut',
+      'remote_desktop_detected': 'Remote Desktop',
+      'screen_share_detected': 'Screen Sharing',
+      'ai_alert': 'AI Detection',
+      'manual_flag': 'Manual Flag'
+    };
+    return labels[eventType] || eventType;
+  };
+  
+  const getSeverityColor = (severity) => {
+    switch (severity) {
+      case 'critical': return 'bg-danger-100 text-danger-700';
+      case 'warning': return 'bg-warning-100 text-warning-700';
+      case 'info': return 'bg-gray-100 text-gray-700';
+      default: return 'bg-gray-100 text-gray-600';
+    }
   };
 
   return (
@@ -1651,55 +1709,127 @@ function StudentAnalyticsTab({ classId, exams }) {
               <tbody className="divide-y divide-gray-100">
                 {sessions.map((session, idx) => {
                   const integrity = getIntegrityStatus(session);
+                  const isExpanded = expandedSessionId === session.id;
+                  const logs = proctoringLogs[session.id] || [];
+                  
                   return (
-                    <tr key={session.id} className="hover:bg-gray-50">
-                      <td className="px-4 py-3 text-sm text-gray-500">{idx + 1}</td>
-                      <td className="px-4 py-3">
-                        <div>
-                          <p className="font-medium text-text-main">{session.student?.full_name || 'N/A'}</p>
-                          <p className="text-xs text-gray-500">{session.student?.email}</p>
-                        </div>
-                      </td>
-                      <td className="px-4 py-3">
-                        <span className={`font-bold ${session.passed ? 'text-success' : 'text-danger'}`}>
-                          {session.percentage?.toFixed(1) || 0}%
-                        </span>
-                        <span className="text-xs text-gray-500 ml-1">
-                          ({session.total_score}/{session.max_score})
-                        </span>
-                      </td>
-                      <td className="px-4 py-3 text-sm text-gray-600">
-                        {formatDateTime(session.submitted_at)}
-                      </td>
-                      <td className="px-4 py-3">
-                        <div className="flex items-center space-x-2 text-xs">
-                          <span className="px-2 py-0.5 bg-warning-50 text-warning-700 rounded">
-                            AI: {session.cheat_count || 0}
+                    <React.Fragment key={session.id}>
+                      <tr className="hover:bg-gray-50 cursor-pointer" onClick={() => loadProctoringLogs(session.id)}>
+                        <td className="px-4 py-3 text-sm text-gray-500">{idx + 1}</td>
+                        <td className="px-4 py-3">
+                          <div>
+                            <p className="font-medium text-text-main">{session.student?.full_name || 'N/A'}</p>
+                            <p className="text-xs text-gray-500">{session.student?.email}</p>
+                          </div>
+                        </td>
+                        <td className="px-4 py-3">
+                          <span className={`font-bold ${session.passed ? 'text-success' : 'text-danger'}`}>
+                            {session.percentage?.toFixed(1) || 0}%
                           </span>
-                          <span className="px-2 py-0.5 bg-gray-100 text-gray-600 rounded">
-                            Tab: {session.tab_violations || 0}
+                          <span className="text-xs text-gray-500 ml-1">
+                            ({session.total_score}/{session.max_score})
                           </span>
-                        </div>
-                      </td>
-                      <td className="px-4 py-3">
-                        <span className={`px-2 py-1 rounded-full text-xs font-medium ${integrity.color}`}>
-                          {integrity.label}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3">
-                        <span className={`badge ${
-                          session.status === 'submitted' ? 'badge-success' :
-                          session.status === 'auto_submitted' ? 'bg-warning-100 text-warning-700' :
-                          session.status === 'in_progress' ? 'bg-primary-100 text-primary-700' :
-                          'bg-gray-100 text-gray-600'
-                        }`}>
-                          {session.status === 'submitted' ? t('analytics.status.submitted') :
-                           session.status === 'auto_submitted' ? t('analytics.status.autoSubmitted') :
-                           session.status === 'in_progress' ? t('analytics.status.inProgress') :
-                           session.status}
-                        </span>
-                      </td>
-                    </tr>
+                        </td>
+                        <td className="px-4 py-3 text-sm text-gray-600">
+                          {formatDateTime(session.submitted_at)}
+                        </td>
+                        <td className="px-4 py-3">
+                          <div className="flex items-center space-x-2 text-xs">
+                            <span className="px-2 py-0.5 bg-warning-50 text-warning-700 rounded">
+                              AI: {session.cheat_count || 0}
+                            </span>
+                            <span className="px-2 py-0.5 bg-gray-100 text-gray-600 rounded">
+                              Tab: {session.tab_violations || 0}
+                            </span>
+                          </div>
+                        </td>
+                        <td className="px-4 py-3">
+                          <span className={`px-2 py-1 rounded-full text-xs font-medium ${integrity.color}`}>
+                            {integrity.label}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3">
+                          <span className={`badge ${
+                            session.status === 'submitted' ? 'badge-success' :
+                            session.status === 'auto_submitted' ? 'bg-warning-100 text-warning-700' :
+                            session.status === 'in_progress' ? 'bg-primary-100 text-primary-700' :
+                            'bg-gray-100 text-gray-600'
+                          }`}>
+                            {session.status === 'submitted' ? t('analytics.status.submitted') :
+                             session.status === 'auto_submitted' ? t('analytics.status.autoSubmitted') :
+                             session.status === 'in_progress' ? t('analytics.status.inProgress') :
+                             session.status}
+                          </span>
+                        </td>
+                      </tr>
+                      {/* Expanded Row: Proctoring Evidence */}
+                      {isExpanded && (
+                        <tr>
+                          <td colSpan="7" className="px-4 py-4 bg-gray-50">
+                            <div className="space-y-4">
+                              <h4 className="font-semibold text-gray-900 flex items-center space-x-2">
+                                <Shield className="w-4 h-4 text-primary" />
+                                <span>Proctoring Evidence Timeline</span>
+                                <span className="text-xs font-normal text-gray-500">({logs.length} events)</span>
+                              </h4>
+                              
+                              {logs.length === 0 ? (
+                                <p className="text-sm text-gray-500 text-center py-4">No violations recorded</p>
+                              ) : (
+                                <div className="space-y-3 max-h-96 overflow-y-auto">
+                                  {logs.map((log) => (
+                                    <div key={log.id} className="bg-white rounded-lg p-3 shadow-sm border border-gray-200">
+                                      <div className="flex items-start justify-between mb-2">
+                                        <div className="flex items-center space-x-2">
+                                          <span className={`px-2 py-0.5 rounded text-xs font-medium ${getSeverityColor(log.severity)}`}>
+                                            {log.severity}
+                                          </span>
+                                          <span className="text-sm font-medium text-gray-900">
+                                            {getEventTypeLabel(log.event_type)}
+                                          </span>
+                                        </div>
+                                        <span className="text-xs text-gray-500">
+                                          {formatDateTime(log.timestamp)}
+                                        </span>
+                                      </div>
+                                      
+                                      {/* Details */}
+                                      {log.details && Object.keys(log.details).length > 0 && (
+                                        <div className="mb-2 p-2 bg-gray-50 rounded">
+                                          <div className="text-xs font-medium text-gray-700 mb-1">Details:</div>
+                                          <div className="text-xs text-gray-600 space-y-0.5">
+                                            {Object.entries(log.details).map(([key, value]) => (
+                                              <div key={key}>
+                                                <span className="font-medium">{key}:</span> {String(value)}
+                                              </div>
+                                            ))}
+                                          </div>
+                                        </div>
+                                      )}
+                                      
+                                      {/* Screenshot Evidence */}
+                                      {log.screenshot_url && (
+                                        <div className="mt-2">
+                                          <img 
+                                            src={log.screenshot_url} 
+                                            alt="Evidence" 
+                                            className="rounded border border-gray-300 max-w-md cursor-pointer hover:opacity-90 transition-opacity"
+                                            onClick={() => window.open(log.screenshot_url, '_blank')}
+                                          />
+                                          <p className="text-xs text-gray-500 mt-1">
+                                            Click to view full size
+                                          </p>
+                                        </div>
+                                      )}
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                    </React.Fragment>
                   );
                 })}
               </tbody>
