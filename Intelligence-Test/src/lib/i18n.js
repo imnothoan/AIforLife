@@ -428,6 +428,17 @@ const translations = {
     'face.timeLimit': 'Bạn có 30 giây để hoàn thành xác minh.',
     'face.countdown': 'Còn lại: {seconds} giây',
     
+    // Profile & Face Registration
+    'profile.faceVerification': 'Xác minh khuôn mặt',
+    'profile.faceRegistered': 'Khuôn mặt đã được đăng ký',
+    'profile.faceNotRegistered': 'Chưa đăng ký khuôn mặt - cần đăng ký để làm bài thi',
+    'profile.updateFace': 'Cập nhật ảnh',
+    'profile.registerFace': 'Đăng ký ngay',
+    'profile.faceRequiredWarning': 'Bạn cần đăng ký khuôn mặt trước khi tham gia bài thi để hệ thống có thể xác minh danh tính.',
+    'profile.faceRegistrationTitle': 'Đăng ký khuôn mặt',
+    'profile.faceRegistrationDesc': 'Chụp ảnh khuôn mặt để sử dụng cho xác minh danh tính khi thi',
+    'profile.faceRegisteredSuccess': 'Đăng ký khuôn mặt thành công!',
+    
     // Language
     'language.select': 'Ngôn ngữ',
     'language.vi': 'Tiếng Việt',
@@ -855,6 +866,17 @@ const translations = {
     'face.moveCloser': 'Move closer to the camera',
     'face.moveFarther': 'Move away from the camera',
     'face.centerFace': 'Center your face in the frame',
+    
+    // Profile & Face Registration
+    'profile.faceVerification': 'Face Verification',
+    'profile.faceRegistered': 'Face has been registered',
+    'profile.faceNotRegistered': 'Face not registered - required for exams',
+    'profile.updateFace': 'Update photo',
+    'profile.registerFace': 'Register now',
+    'profile.faceRequiredWarning': 'You need to register your face before taking exams so the system can verify your identity.',
+    'profile.faceRegistrationTitle': 'Face Registration',
+    'profile.faceRegistrationDesc': 'Take a photo of your face for identity verification during exams',
+    'profile.faceRegisteredSuccess': 'Face registration successful!',
     
     // Language
     'language.select': 'Language',
