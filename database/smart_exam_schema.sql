@@ -792,6 +792,7 @@ $$ LANGUAGE plpgsql SECURITY DEFINER;
 GRANT EXECUTE ON FUNCTION public.submit_answer(UUID, UUID, JSONB, INTEGER) TO authenticated;
 
 -- Function to submit exam
+-- Calculates scores by comparing student answers with correct answers
 CREATE OR REPLACE FUNCTION public.submit_exam(
   p_session_id UUID,
   p_auto_submit BOOLEAN DEFAULT FALSE
@@ -820,9 +821,27 @@ BEGIN
     RAISE EXCEPTION 'Exam already submitted';
   END IF;
   
-  -- Calculate scores
+  -- First, update the is_correct and points_earned fields for all answers
+  -- This handles cases where answers were inserted directly without using submit_answer RPC
+  UPDATE public.answers a SET
+    is_correct = CASE 
+      WHEN q.question_type IN ('multiple_choice', 'true_false') THEN 
+        a.student_answer = q.correct_answer
+      ELSE NULL -- Essay/short answer needs manual grading
+    END,
+    points_earned = CASE 
+      WHEN q.question_type IN ('multiple_choice', 'true_false') AND a.student_answer = q.correct_answer THEN 
+        q.points
+      ELSE 0
+    END
+  FROM public.questions q
+  WHERE a.session_id = p_session_id
+  AND a.question_id = q.id
+  AND a.student_answer IS NOT NULL;
+  
+  -- Calculate scores from updated points_earned
   SELECT 
-    COALESCE(SUM(points_earned), 0),
+    COALESCE(SUM(a.points_earned), 0),
     COALESCE(SUM(q.points), 0)
   INTO v_total_score, v_max_score
   FROM public.answers a
