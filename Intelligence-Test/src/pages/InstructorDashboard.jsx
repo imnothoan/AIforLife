@@ -1713,24 +1713,50 @@ export default function InstructorDashboard() {
           .order('created_at', { ascending: false });
         setExams(examsData || []);
 
-        // Load enrollments with student profiles
+        // Load enrollments with student profiles using RPC (more reliable than direct query with RLS)
         if (import.meta.env.DEV) {
           console.log('[InstructorDashboard] Loading enrollments for class:', selectedClass.id);
         }
-        const { data: enrollmentsData, error: enrollError } = await supabase
-          .from('enrollments')
-          .select(`
-            *,
-            student:profiles(*)
-          `)
-          .eq('class_id', selectedClass.id);
         
-        if (enrollError) {
-          console.error('[InstructorDashboard] Error loading enrollments:', enrollError);
-        } else if (import.meta.env.DEV) {
-          console.log('[InstructorDashboard] Loaded enrollments:', enrollmentsData?.length || 0, enrollmentsData);
+        // Try RPC first for better reliability, fallback to direct query
+        let enrollmentsData = [];
+        let enrollError = null;
+        
+        try {
+          const { data: rpcResult, error: rpcError } = await supabase.rpc('get_class_enrollments', {
+            p_class_id: selectedClass.id
+          });
+          
+          if (!rpcError && rpcResult?.success) {
+            enrollmentsData = rpcResult.enrollments || [];
+            if (import.meta.env.DEV) {
+              console.log('[InstructorDashboard] Loaded enrollments via RPC:', enrollmentsData.length, enrollmentsData);
+            }
+          } else {
+            throw new Error(rpcError?.message || rpcResult?.error || 'RPC failed');
+          }
+        } catch (rpcErr) {
+          console.warn('[InstructorDashboard] RPC get_class_enrollments failed, trying direct query:', rpcErr);
+          // Fallback to direct query
+          const result = await supabase
+            .from('enrollments')
+            .select(`
+              *,
+              student:profiles(*)
+            `)
+            .eq('class_id', selectedClass.id);
+          
+          enrollmentsData = result.data || [];
+          enrollError = result.error;
+          
+          if (enrollError) {
+            console.error('[InstructorDashboard] Error loading enrollments:', enrollError);
+          } else if (import.meta.env.DEV) {
+            console.log('[InstructorDashboard] Loaded enrollments via direct query:', enrollmentsData.length, enrollmentsData);
+          }
         }
-        setStudents(enrollmentsData || []);
+        
+        setStudents(enrollmentsData);
 
         // Calculate stats
         const activeExams = (examsData || []).filter(e => e.status === 'published').length;

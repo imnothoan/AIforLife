@@ -1549,3 +1549,58 @@ END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
 GRANT EXECUTE ON FUNCTION public.ensure_profile_exists(UUID, TEXT, TEXT, TEXT) TO authenticated, service_role;
+
+-- ================================================
+-- SECTION 13: GET CLASS ENROLLMENTS FUNCTION
+-- ================================================
+-- This function bypasses RLS to reliably fetch enrollments with student details
+-- Only accessible by the class instructor
+
+CREATE OR REPLACE FUNCTION public.get_class_enrollments(p_class_id UUID)
+RETURNS JSONB AS $$
+DECLARE
+  v_instructor_id UUID;
+  v_caller_id UUID;
+  v_enrollments JSONB;
+BEGIN
+  v_caller_id := auth.uid();
+  
+  -- Verify caller is the instructor of this class
+  SELECT instructor_id INTO v_instructor_id
+  FROM public.classes
+  WHERE id = p_class_id;
+  
+  IF v_instructor_id IS NULL THEN
+    RETURN jsonb_build_object('success', false, 'error', 'class_not_found', 'enrollments', '[]'::jsonb);
+  END IF;
+  
+  IF v_instructor_id != v_caller_id THEN
+    RETURN jsonb_build_object('success', false, 'error', 'not_authorized', 'enrollments', '[]'::jsonb);
+  END IF;
+  
+  -- Get enrollments with student details
+  SELECT COALESCE(jsonb_agg(
+    jsonb_build_object(
+      'id', e.id,
+      'class_id', e.class_id,
+      'student_id', e.student_id,
+      'status', e.status,
+      'enrolled_at', e.enrolled_at,
+      'student', jsonb_build_object(
+        'id', p.id,
+        'email', p.email,
+        'full_name', p.full_name,
+        'student_id', p.student_id
+      )
+    )
+    ORDER BY e.enrolled_at DESC
+  ), '[]'::jsonb) INTO v_enrollments
+  FROM public.enrollments e
+  JOIN public.profiles p ON p.id = e.student_id
+  WHERE e.class_id = p_class_id;
+  
+  RETURN jsonb_build_object('success', true, 'enrollments', v_enrollments);
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+GRANT EXECUTE ON FUNCTION public.get_class_enrollments(UUID) TO authenticated;

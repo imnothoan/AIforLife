@@ -388,7 +388,27 @@ export const AuthProvider = ({ children }) => {
   }, [fetchProfile]);
 
   const login = async (email, password) => {
-    return supabase.auth.signInWithPassword({ email, password });
+    const result = await supabase.auth.signInWithPassword({ email, password });
+    
+    // If login is successful, immediately try to fetch/create profile
+    // This prevents the race condition where UI renders before profile is ready
+    if (result.data?.user && !result.error) {
+      try {
+        const userProfile = await fetchProfile(result.data.user.id);
+        if (userProfile) {
+          setProfile(userProfile);
+        } else {
+          // Use fallback profile if fetch failed
+          setProfile(createFallbackProfile(result.data.user));
+        }
+      } catch (profileError) {
+        console.warn('Login: Failed to fetch profile immediately, will retry in auth listener');
+        // Set fallback profile so UI doesn't block
+        setProfile(createFallbackProfile(result.data.user));
+      }
+    }
+    
+    return result;
   };
 
   const register = async (email, password, fullName, role = 'student', studentId = null) => {
