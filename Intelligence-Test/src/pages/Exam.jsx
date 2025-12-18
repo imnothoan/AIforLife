@@ -554,7 +554,9 @@ export default function Exam() {
       else if (type === 'ALERT') {
         setCheatCount(prev => prev + 1);
         toast.warning(`${translate('anticheat.aiWarning')}: ${translatedMessage}`);
-        logProctoring('ai_alert', { message: payload, code });
+        // Capture screenshot for AI detections (phone, headphones, material, multi-person)
+        const shouldCaptureScreenshot = ['phoneDetected', 'headphonesDetected', 'materialDetected', 'multiPerson'].includes(code);
+        logProctoring('ai_alert', { message: payload, code }, shouldCaptureScreenshot);
       } else if (type === 'GAZE_AWAY') {
         setGazeAwayCount(prev => prev + 1);
       }
@@ -997,18 +999,109 @@ export default function Exam() {
   // ============================================
   // PROCTORING LOG HELPER
   // ============================================
-  const logProctoring = async (eventType, details) => {
+  // ============================================
+  // EVIDENCE CAPTURE FOR PROCTORING
+  // ============================================
+  
+  /**
+   * Capture screenshot from video canvas and upload to Supabase Storage
+   * Returns the public URL of the uploaded image or null if failed
+   */
+  const captureEvidenceScreenshot = async () => {
+    // Only capture in production mode with valid session
+    if (!sessionId || DEMO_SESSION_IDS.includes(sessionId) || DEMO_EXAM_IDS.includes(examId)) {
+      return null;
+    }
+    
+    if (!videoRef.current || !canvasRef.current || !ctxRef.current) {
+      console.warn('[Evidence] Cannot capture: missing video/canvas');
+      return null;
+    }
+    
+    try {
+      // Draw current video frame to canvas
+      const video = videoRef.current;
+      const canvas = canvasRef.current;
+      const ctx = ctxRef.current;
+      
+      // Ensure video is ready
+      if (video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA || !video.videoWidth) {
+        console.warn('[Evidence] Video not ready for capture');
+        return null;
+      }
+      
+      // Draw frame
+      ctx.drawImage(video, 0, 0, 640, 480);
+      
+      // Convert canvas to blob (JPEG for smaller file size)
+      const blob = await new Promise((resolve) => {
+        canvas.toBlob(resolve, 'image/jpeg', 0.85);
+      });
+      
+      if (!blob) {
+        console.warn('[Evidence] Failed to create blob from canvas');
+        return null;
+      }
+      
+      // Generate unique filename with timestamp
+      const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+      const filename = `${sessionId}_${timestamp}.jpg`;
+      
+      // Upload to Supabase Storage
+      const { data, error } = await supabase.storage
+        .from('proctoring-evidence')
+        .upload(filename, blob, {
+          contentType: 'image/jpeg',
+          cacheControl: '3600',
+          upsert: false
+        });
+      
+      if (error) {
+        console.error('[Evidence] Upload failed:', error);
+        return null;
+      }
+      
+      // Get public URL
+      const { data: urlData } = supabase.storage
+        .from('proctoring-evidence')
+        .getPublicUrl(filename);
+      
+      console.log('[Evidence] Screenshot captured:', urlData.publicUrl);
+      return urlData.publicUrl;
+    } catch (err) {
+      console.error('[Evidence] Capture error:', err);
+      return null;
+    }
+  };
+  
+  // ============================================
+  // PROCTORING LOG WITH EVIDENCE
+  // ============================================
+  
+  const logProctoring = async (eventType, details, captureScreenshot = false) => {
     // Skip logging if no session or if in demo mode
     if (!sessionId) return;
     if (DEMO_SESSION_IDS.includes(sessionId) || DEMO_EXAM_IDS.includes(examId)) return;
 
     try {
+      let screenshot_url = null;
+      
+      // Capture screenshot for critical events
+      if (captureScreenshot) {
+        screenshot_url = await captureEvidenceScreenshot();
+      }
+      
       await supabase.from('proctoring_logs').insert({
         session_id: sessionId,
         event_type: eventType,
         details: details,
-        severity: eventType.includes('detected') ? 'critical' : 'warning'
+        severity: eventType.includes('detected') ? 'critical' : 'warning',
+        screenshot_url: screenshot_url
       });
+      
+      if (screenshot_url) {
+        console.log('[Evidence] Logged with screenshot:', eventType);
+      }
     } catch (e) {
       // Silently fail for proctoring logs - don't interrupt the exam
       console.warn('Failed to log proctoring event:', e?.message || e);
