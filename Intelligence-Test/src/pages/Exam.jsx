@@ -409,15 +409,31 @@ export default function Exam() {
   }, []); // Run once on mount
 
   // Re-attach video stream when examStarted changes (video element changes between views)
+  // Use a small delay to ensure the new video element has mounted before attaching stream
   useEffect(() => {
-    // Only if we have a stream and a video element, and the video doesn't have the stream attached
-    if (cameraStreamRef.current && videoRef.current && videoRef.current.srcObject !== cameraStreamRef.current) {
-      videoRef.current.srcObject = cameraStreamRef.current;
-      // Ensure video plays
-      videoRef.current.play().catch(err => {
-        console.warn('Video play failed:', err);
-      });
-    }
+    const attachStreamToVideo = () => {
+      // Only if we have a stream and a video element, and the video doesn't have the stream attached
+      if (cameraStreamRef.current && videoRef.current && videoRef.current.srcObject !== cameraStreamRef.current) {
+        console.log('[Exam] Re-attaching camera stream to video element');
+        videoRef.current.srcObject = cameraStreamRef.current;
+        // Ensure video plays
+        videoRef.current.play().catch(err => {
+          console.warn('Video play failed:', err);
+        });
+      }
+    };
+    
+    // Immediate attempt
+    attachStreamToVideo();
+    
+    // Also try after a short delay to handle DOM mounting timing
+    const timeoutId = setTimeout(attachStreamToVideo, 100);
+    const timeoutId2 = setTimeout(attachStreamToVideo, 500);
+    
+    return () => {
+      clearTimeout(timeoutId);
+      clearTimeout(timeoutId2);
+    };
   }, [examStarted]);
 
   // ============================================

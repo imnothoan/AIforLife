@@ -933,7 +933,7 @@ BEGIN
   FROM auth.users
   WHERE id = v_caller_id;
   
-  -- Ensure caller's profile exists (handles race condition with trigger)
+  -- Ensure caller's profile exists and is up to date (handles race condition with trigger)
   IF v_user_email IS NOT NULL THEN
     INSERT INTO public.profiles (id, email, full_name, role)
     VALUES (
@@ -942,7 +942,14 @@ BEGIN
       COALESCE(v_user_name, split_part(v_user_email, '@', 1)),
       COALESCE(v_user_role, 'student')
     )
-    ON CONFLICT (id) DO NOTHING;
+    ON CONFLICT (id) DO UPDATE SET
+      email = EXCLUDED.email,
+      full_name = COALESCE(NULLIF(EXCLUDED.full_name, ''), profiles.full_name),
+      role = CASE 
+        WHEN EXCLUDED.role IN ('instructor', 'admin') THEN EXCLUDED.role 
+        ELSE profiles.role 
+      END,
+      updated_at = NOW();
   END IF;
   
   -- Verify caller is the instructor of this class
@@ -1017,7 +1024,8 @@ BEGIN
     RETURN jsonb_build_object('success', false, 'error', 'not_authenticated', 'message', 'User not authenticated');
   END IF;
   
-  -- Ensure profile exists (handles race condition with trigger)
+  -- Ensure profile exists and is up to date (handles race condition with trigger)
+  -- Use DO UPDATE to ensure role is synchronized with auth.users metadata
   INSERT INTO public.profiles (id, email, full_name, role)
   VALUES (
     auth.uid(), 
@@ -1025,7 +1033,14 @@ BEGIN
     COALESCE(v_user_name, split_part(v_user_email, '@', 1)),
     COALESCE(v_user_role, 'student')
   )
-  ON CONFLICT (id) DO NOTHING;
+  ON CONFLICT (id) DO UPDATE SET
+    email = EXCLUDED.email,
+    full_name = COALESCE(NULLIF(EXCLUDED.full_name, ''), profiles.full_name),
+    role = CASE 
+      WHEN EXCLUDED.role IN ('instructor', 'admin') THEN EXCLUDED.role 
+      ELSE profiles.role 
+    END,
+    updated_at = NOW();
   
   -- Now check the role from profiles (should exist now)
   SELECT role INTO v_user_role
