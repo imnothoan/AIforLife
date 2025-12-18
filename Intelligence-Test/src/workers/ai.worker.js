@@ -191,7 +191,11 @@ async function initializeAI() {
 
     // Load YOLO ONNX model with timeout
     try {
+      // Configure ONNX Runtime WASM paths - use CDN for better reliability
       ort.env.wasm.wasmPaths = 'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.20.1/dist/';
+      
+      // Disable SIMD and multi-threading for better compatibility
+      ort.env.wasm.numThreads = 1;
       
       // Construct absolute URL for model (workers may have issues with relative paths)
       const modelPath = CONFIG.YOLO.MODEL_PATH;
@@ -213,7 +217,7 @@ async function initializeAI() {
         return withTimeout(
           ort.InferenceSession.create(path, {
             executionProviders: ['wasm'],
-            graphOptimizationLevel: 'all'
+            graphOptimizationLevel: 'basic'  // Use basic optimization for better compatibility
           }),
           30000,
           `YOLO model from ${path}`
