@@ -431,10 +431,13 @@ function AddStudentForm({ classId, onClose, onSuccess }) {
   // Add student using RPC function (preferred method - bypasses RLS issues)
   const addStudentViaRPC = async (studentEmail) => {
     try {
+      console.log('[AddStudent] Calling RPC add_student_to_class with:', { classId, studentEmail: studentEmail.toLowerCase().trim() });
       const { data, error } = await supabase.rpc('add_student_to_class', {
         p_class_id: classId,
         p_student_email: studentEmail.toLowerCase().trim()
       });
+
+      console.log('[AddStudent] RPC response:', { data, error });
 
       if (error) {
         console.error('RPC add_student_to_class error:', error);
@@ -443,10 +446,12 @@ function AddStudentForm({ classId, onClose, onSuccess }) {
 
       // RPC returns JSONB with success and optional error
       if (data && data.success) {
+        console.log('[AddStudent] Successfully added student with ID:', data.student_id);
         return { success: true, student_id: data.student_id };
       }
       
       // Return the error code from RPC response
+      console.log('[AddStudent] RPC returned error:', data?.error);
       return { success: false, error: data?.error || 'unknown_error' };
     } catch (err) {
       console.error('RPC call exception:', err);
@@ -1701,13 +1706,20 @@ export default function InstructorDashboard() {
         setExams(examsData || []);
 
         // Load enrollments with student profiles
-        const { data: enrollmentsData } = await supabase
+        console.log('[InstructorDashboard] Loading enrollments for class:', selectedClass.id);
+        const { data: enrollmentsData, error: enrollError } = await supabase
           .from('enrollments')
           .select(`
             *,
             student:profiles(*)
           `)
           .eq('class_id', selectedClass.id);
+        
+        if (enrollError) {
+          console.error('[InstructorDashboard] Error loading enrollments:', enrollError);
+        } else {
+          console.log('[InstructorDashboard] Loaded enrollments:', enrollmentsData?.length || 0, enrollmentsData);
+        }
         setStudents(enrollmentsData || []);
 
         // Calculate stats

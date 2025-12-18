@@ -279,6 +279,19 @@ CREATE POLICY "Instructors can view enrolled students"
     )
   );
 
+-- Students can view instructor profiles for their enrolled classes
+DROP POLICY IF EXISTS "Students can view instructors of enrolled classes" ON public.profiles;
+CREATE POLICY "Students can view instructors of enrolled classes"
+  ON public.profiles FOR SELECT
+  USING (
+    EXISTS (
+      SELECT 1 FROM public.enrollments e
+      JOIN public.classes c ON c.id = e.class_id
+      WHERE e.student_id = auth.uid()
+      AND c.instructor_id = profiles.id
+    )
+  );
+
 -- Instructors can lookup any student profile to add to their class
 -- This is needed because instructors need to find students before they are enrolled
 DROP POLICY IF EXISTS "Instructors can lookup student profiles" ON public.profiles;
