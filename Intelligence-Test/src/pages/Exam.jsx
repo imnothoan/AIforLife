@@ -409,7 +409,13 @@ export default function Exam() {
   }, []); // Run once on mount
 
   // Re-attach video stream when examStarted changes (video element changes between views)
-  // Use a small delay to ensure the new video element has mounted before attaching stream
+  // Use tiered delays to ensure the new video element has mounted before attaching stream.
+  // The DOM takes variable time to update, especially with animations, so we use multiple attempts.
+  // VIDEO_MOUNT_DELAY_SHORT: First retry after React batch updates (typically 50-100ms)
+  // VIDEO_MOUNT_DELAY_LONG: Second retry for slow devices or complex DOM updates (up to 500ms)
+  const VIDEO_MOUNT_DELAY_SHORT = 100;
+  const VIDEO_MOUNT_DELAY_LONG = 500;
+  
   useEffect(() => {
     const attachStreamToVideo = () => {
       // Only if we have a stream and a video element, and the video doesn't have the stream attached
@@ -426,9 +432,9 @@ export default function Exam() {
     // Immediate attempt
     attachStreamToVideo();
     
-    // Also try after a short delay to handle DOM mounting timing
-    const timeoutId = setTimeout(attachStreamToVideo, 100);
-    const timeoutId2 = setTimeout(attachStreamToVideo, 500);
+    // Tiered retries to handle DOM mounting timing
+    const timeoutId = setTimeout(attachStreamToVideo, VIDEO_MOUNT_DELAY_SHORT);
+    const timeoutId2 = setTimeout(attachStreamToVideo, VIDEO_MOUNT_DELAY_LONG);
     
     return () => {
       clearTimeout(timeoutId);

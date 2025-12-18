@@ -10,6 +10,17 @@ import {
 } from 'lucide-react';
 import FaceVerification from './FaceVerification';
 
+// Validation constants
+const NAME_MIN_LENGTH = 2;
+const NAME_MAX_LENGTH = 100;
+
+/**
+ * ProfileSettings Modal Component
+ * Allows users to update their profile information including name, department, and face registration.
+ * 
+ * @param {boolean} isOpen - Controls modal visibility
+ * @param {function} onClose - Callback when modal is closed
+ */
 export default function ProfileSettings({ isOpen, onClose }) {
   const { user, profile, updateProfile } = useAuth();
   const { t } = useLanguage();
@@ -52,8 +63,8 @@ export default function ProfileSettings({ isOpen, onClose }) {
       return;
     }
     
-    if (trimmedName.length < 2 || trimmedName.length > 100) {
-      toast.error(t('validation.nameLengthInvalid') || 'Tên phải từ 2-100 ký tự');
+    if (trimmedName.length < NAME_MIN_LENGTH || trimmedName.length > NAME_MAX_LENGTH) {
+      toast.error(t('validation.nameLengthInvalid') || `Tên phải từ ${NAME_MIN_LENGTH}-${NAME_MAX_LENGTH} ký tự`);
       return;
     }
     
@@ -114,6 +125,10 @@ export default function ProfileSettings({ isOpen, onClose }) {
         exit={{ opacity: 0 }}
         className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4"
         onClick={onClose}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="profile-settings-title"
+        aria-describedby="profile-settings-desc"
       >
         <motion.div
           initial={{ scale: 0.95, opacity: 0 }}
@@ -129,10 +144,10 @@ export default function ProfileSettings({ isOpen, onClose }) {
                 <User className="w-6 h-6 text-primary" />
               </div>
               <div>
-                <h2 className="text-xl font-bold text-text-main">
+                <h2 id="profile-settings-title" className="text-xl font-bold text-text-main">
                   {t('profile.settingsTitle') || 'Cài đặt tài khoản'}
                 </h2>
-                <p className="text-sm text-gray-500">
+                <p id="profile-settings-desc" className="text-sm text-gray-500">
                   {t('profile.settingsDesc') || 'Cập nhật thông tin cá nhân'}
                 </p>
               </div>
@@ -312,6 +327,9 @@ export default function ProfileSettings({ isOpen, onClose }) {
               exit={{ opacity: 0 }}
               className="absolute inset-0 bg-black/50 flex items-center justify-center p-4"
               onClick={() => setShowFaceRegistration(false)}
+              role="dialog"
+              aria-modal="true"
+              aria-label={t('profile.faceRegistrationTitle') || 'Face Registration'}
             >
               <motion.div
                 initial={{ scale: 0.95, opacity: 0 }}
