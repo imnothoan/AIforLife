@@ -220,6 +220,33 @@ export const AuthProvider = ({ children }) => {
     }
   }, []);
 
+  // Refetch profile from database - useful after updates that don't return full profile
+  const refetchProfile = useCallback(async () => {
+    if (!user) return { error: { message: 'Not authenticated' } };
+    
+    try {
+      setProfileLoading(true);
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', user.id)
+        .single();
+      
+      if (error) {
+        console.error('Error refetching profile:', error);
+        return { error };
+      }
+      
+      setProfile(data);
+      return { data, error: null };
+    } catch (err) {
+      console.error('Refetch profile error:', err);
+      return { error: err };
+    } finally {
+      setProfileLoading(false);
+    }
+  }, [user]);
+
   useEffect(() => {
     let isMounted = true;
     let sessionCheckComplete = false;
@@ -563,6 +590,7 @@ export const AuthProvider = ({ children }) => {
       logout, 
       loading,
       updateProfile,
+      refetchProfile,
       hasRole,
       isInstructor,
       isAdmin,

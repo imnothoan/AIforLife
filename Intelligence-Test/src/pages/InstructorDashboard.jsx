@@ -1813,8 +1813,36 @@ function CreateClassForm({ onClose, onSuccess }) {
           return;
         }
 
+        // RPC returns { success: true, class_id: UUID }
+        // We need to fetch the full class data to pass to onSuccess
+        let newClassData = null;
+        if (data?.class_id) {
+          const { data: classData, error: fetchError } = await supabase
+            .from('classes')
+            .select('*')
+            .eq('id', data.class_id)
+            .single();
+          
+          if (!fetchError && classData) {
+            newClassData = classData;
+          } else {
+            // Fallback: construct class data from form
+            newClassData = {
+              id: data.class_id,
+              name: trimmedName,
+              code: trimmedCode,
+              description: formData.description?.trim() || null,
+              semester: formData.semester || null,
+              academic_year: formData.academic_year || null,
+              instructor_id: user?.id,
+              is_active: true,
+              created_at: new Date().toISOString()
+            };
+          }
+        }
+
         toast.success(t('class.createSuccess'));
-        onSuccess?.(data);
+        onSuccess?.(newClassData);
         onClose();
       } catch (error) {
         console.error('Create class error:', error);
