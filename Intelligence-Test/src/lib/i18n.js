@@ -8,7 +8,7 @@ const translations = {
     // App branding
     'app.name': 'SmartExamPro',
     'app.subtitle': 'Nền tảng khảo thí thông minh',
-    
+    'app.by': 'bởi',
     // Common
     'common.loading': 'Đang tải...',
     'common.save': 'Lưu',
@@ -35,7 +35,7 @@ const translations = {
     'common.true': 'Đúng',
     'common.false': 'Sai',
     'common.more': 'lỗi khác',
-    
+
     // Auth
     'auth.login': 'Đăng nhập',
     'auth.logout': 'Đăng xuất',
@@ -65,7 +65,7 @@ const translations = {
     'auth.optional': 'tuỳ chọn',
     'auth.processing': 'Đang xử lý...',
     'auth.redirecting': 'Đang chuyển hướng...',
-    
+
     // Dashboard - Student
     'dashboard.hello': 'Xin chào',
     'dashboard.selectExam': 'Chọn bài thi bên dưới để bắt đầu. Hãy đảm bảo đường truyền mạng ổn định.',
@@ -78,7 +78,7 @@ const translations = {
     'dashboard.expired': 'Đã hết hạn',
     'dashboard.notAvailable': 'Không khả dụng',
     'dashboard.myClasses': 'Lớp học của tôi',
-    
+
     // Exam Status
     'exam.status.completed': 'Đã hoàn thành',
     'exam.status.upcoming': 'Sắp diễn ra',
@@ -86,7 +86,7 @@ const translations = {
     'exam.status.active': 'Đang diễn ra',
     'exam.status.draft': 'Nháp',
     'exam.status.published': 'Đã công bố',
-    
+
     // Exam
     'exam.course': 'Môn',
     'exam.code': 'Mã môn',
@@ -118,7 +118,7 @@ const translations = {
     'exam.answered': 'Đã trả lời',
     'exam.unanswered': 'Chưa trả lời',
     'exam.questionList': 'Danh sách câu hỏi',
-    
+
     // Exam Rules
     'exam.rules.title': 'Quy định phòng thi',
     'exam.rules.camera': 'Bật Camera & Micro trong suốt thời gian thi',
@@ -128,7 +128,7 @@ const translations = {
     'exam.rules.noRemoteDesktop': 'Nghiêm cấm sử dụng TeamViewer, AnyDesk, UltraViewer...',
     'exam.rules.agree': 'Đồng ý & Bắt đầu làm bài',
     'exam.rules.cameraCheck': 'Kiểm tra Camera:',
-    
+
     // Anti-cheat alerts
     'anticheat.multiScreen': 'PHÁT HIỆN 2 MÀN HÌNH! Vui lòng ngắt kết nối màn hình phụ để thi.',
     'anticheat.remoteDesktop': 'PHÁT HIỆN PHẦN MỀM ĐIỀU KHIỂN TỪ XA',
@@ -163,7 +163,7 @@ const translations = {
     'anticheat.basicMode': 'Giám sát cơ bản (mạng chậm)',
     'anticheat.faceOnly': 'Giám sát khuôn mặt hoạt động',
     'anticheat.yoloOnly': 'Phát hiện vật thể hoạt động',
-    
+
     // AI Proctoring
     'ai.loading': 'Đang tải model AI...',
     'ai.loadingYolo': 'Đang tải YOLO...',
@@ -180,7 +180,7 @@ const translations = {
     'ai.phoneDetected': 'Phát hiện điện thoại!',
     'ai.materialDetected': 'Phát hiện tài liệu!',
     'ai.headphonesDetected': 'Phát hiện tai nghe!',
-    
+
     // Proctoring stats
     'proctoring.camera': 'Camera Giám Sát',
     'proctoring.recording': 'REC',
@@ -195,7 +195,7 @@ const translations = {
     'proctoring.answered': 'Đã trả lời',
     'proctoring.unanswered': 'Chưa trả lời',
     'proctoring.flagged': 'Đã gắn cờ',
-    
+
     // Instructor Dashboard
     'instructor.title': 'Instructor',
     'instructor.classes': 'Lớp học',
@@ -209,7 +209,7 @@ const translations = {
     'instructor.addStudentTitle': 'Thêm sinh viên vào lớp',
     'instructor.createExamTitle': 'Tạo bài thi mới',
     'instructor.editExamTitle': 'Sửa bài thi',
-    
+
     // Class management
     'class.name': 'Tên lớp học',
     'class.namePlaceholder': 'VD: Trí tuệ nhân tạo K66',
@@ -227,18 +227,18 @@ const translations = {
     'class.createError': 'Không thể tạo lớp học. Vui lòng thử lại sau.',
     'class.duplicateCode': 'Mã lớp này đã tồn tại. Vui lòng chọn mã khác.',
     'class.noPermission': 'Bạn không có quyền tạo lớp học. Vui lòng liên hệ quản trị viên.',
-    
+
     // Stats
     'stats.students': 'Sinh viên',
     'stats.exams': 'Bài thi',
     'stats.active': 'Đang diễn ra',
     'stats.suspicious': 'Nghi vấn',
-    
+
     // Tabs
     'tabs.exams': 'Bài thi',
     'tabs.students': 'Sinh viên',
     'tabs.analytics': 'Phân tích',
-    
+
     // Analytics
     'analytics.selectExam': 'Chọn bài thi',
     'analytics.selectExamPrompt': 'Vui lòng chọn một bài thi để xem phân tích',
@@ -260,7 +260,7 @@ const translations = {
     'analytics.status.submitted': 'Đã nộp',
     'analytics.status.autoSubmitted': 'Tự động nộp',
     'analytics.status.inProgress': 'Đang làm',
-    
+
     // Exam management
     'exam.create': 'Tạo bài thi mới',
     'exam.createFirst': 'Tạo bài thi đầu tiên',
@@ -292,7 +292,7 @@ const translations = {
     'exam.editExam': 'Chỉnh sửa bài thi',
     'exam.viewExam': 'Xem bài thi',
     'exam.questionsCount': '{count} câu hỏi',
-    
+
     // Question management
     'question.add': 'Thêm câu hỏi',
     'question.edit': 'Sửa câu hỏi',
@@ -320,7 +320,7 @@ const translations = {
     'question.saveError': 'Không thể lưu câu hỏi. Vui lòng thử lại.',
     'question.noQuestions': 'Chưa có câu hỏi nào',
     'question.noQuestionsDesc': 'Thêm câu hỏi để hoàn thiện bài thi',
-    
+
     // Student management
     'student.add': 'Thêm sinh viên',
     'student.addSingle': 'Thêm 1 sinh viên',
@@ -341,11 +341,11 @@ const translations = {
     'student.statusActive': 'Đang học',
     'student.searchPlaceholder': 'Tìm kiếm theo tên hoặc email...',
     'student.enrolledAt': 'Tham gia',
-    
+
     // Class status
     'class.status.completed': 'Hoàn thành',
     'class.status.dropped': 'Đã rời',
-    
+
     // Table headers
     'table.number': '#',
     'table.name': 'Họ tên',
@@ -353,7 +353,7 @@ const translations = {
     'table.studentId': 'MSSV',
     'table.status': 'Trạng thái',
     'table.actions': 'Thao tác',
-    
+
     // Validation
     'validation.required': 'Trường này là bắt buộc',
     'validation.emailRequired': 'Vui lòng nhập địa chỉ email',
@@ -373,7 +373,7 @@ const translations = {
     'validation.enterStudentEmail': 'Vui lòng nhập email sinh viên',
     'validation.maxEmails': 'Chỉ có thể thêm tối đa 100 email một lần',
     'validation.invalidEmails': 'Email không hợp lệ: {emails}',
-    
+
     // Network/Error
     'error.network': 'Lỗi kết nối mạng. Vui lòng kiểm tra và thử lại.',
     'error.timeout': 'Kết nối chậm. Vui lòng kiểm tra mạng và thử lại.',
@@ -386,7 +386,7 @@ const translations = {
     'error.sessionExpired': 'Phiên đăng nhập hết hạn. Vui lòng đăng nhập lại.',
     'error.systemBusy': 'Hệ thống đang bận. Vui lòng thử lại sau vài giây.',
     'error.classNotFound': 'Lớp học không tồn tại',
-    
+
     // Exam specific errors
     'exam.notPublished': 'Bài thi này chưa được công bố',
     'exam.notStarted': 'Bài thi chưa bắt đầu',
@@ -394,7 +394,7 @@ const translations = {
     'exam.timeExpired': 'Thời gian thi đã hết!',
     'exam.sessionRestored': 'Đã khôi phục phiên thi trước đó',
     'exam.loadError': 'Có lỗi xảy ra khi tải bài thi',
-    
+
     // Error Boundary
     'errorBoundary.title': 'Oops! Đã xảy ra lỗi',
     'errorBoundary.description': 'Ứng dụng gặp sự cố không mong muốn. Đừng lo lắng, dữ liệu của bạn vẫn an toàn.',
@@ -402,7 +402,7 @@ const translations = {
     'errorBoundary.home': 'Về trang chủ',
     'errorBoundary.technicalDetails': 'Chi tiết kỹ thuật (chỉ hiển thị khi phát triển)',
     'errorBoundary.contactSupport': 'Nếu lỗi tiếp tục xảy ra, vui lòng liên hệ hỗ trợ kỹ thuật.',
-    
+
     // Face Verification
     'face.title': 'Xác minh danh tính',
     'face.subtitle': 'Chụp ảnh khuôn mặt để xác minh bạn là thí sinh đã đăng ký',
@@ -432,7 +432,7 @@ const translations = {
     'face.randomCheckDesc': 'Hệ thống yêu cầu xác minh lại danh tính của bạn.',
     'face.timeLimit': 'Bạn có 30 giây để hoàn thành xác minh.',
     'face.countdown': 'Còn lại: {seconds} giây',
-    
+
     // Profile & Face Registration
     'profile.faceVerification': 'Xác minh khuôn mặt',
     'profile.faceRegistered': 'Khuôn mặt đã được đăng ký',
@@ -443,18 +443,18 @@ const translations = {
     'profile.faceRegistrationTitle': 'Đăng ký khuôn mặt',
     'profile.faceRegistrationDesc': 'Chụp ảnh khuôn mặt để sử dụng cho xác minh danh tính khi thi',
     'profile.faceRegisteredSuccess': 'Đăng ký khuôn mặt thành công!',
-    
+
     // Language
     'language.select': 'Ngôn ngữ',
     'language.vi': 'Tiếng Việt',
     'language.en': 'English',
   },
-  
+
   en: {
     // App branding
     'app.name': 'SmartExamPro',
     'app.subtitle': 'Smart Examination Platform',
-    
+    'app.by': 'by',
     // Common
     'common.loading': 'Loading...',
     'common.save': 'Save',
@@ -479,7 +479,7 @@ const translations = {
     'common.download': 'Download',
     'common.upload': 'Upload',
     'common.more': 'more errors',
-    
+
     // Auth
     'auth.login': 'Login',
     'auth.logout': 'Logout',
@@ -509,7 +509,7 @@ const translations = {
     'auth.optional': 'optional',
     'auth.processing': 'Processing...',
     'auth.redirecting': 'Redirecting...',
-    
+
     // Dashboard - Student
     'dashboard.hello': 'Hello',
     'dashboard.selectExam': 'Select an exam below to start. Ensure stable internet connection.',
@@ -522,7 +522,7 @@ const translations = {
     'dashboard.expired': 'Expired',
     'dashboard.notAvailable': 'Not available',
     'dashboard.myClasses': 'My Classes',
-    
+
     // Exam Status
     'exam.status.completed': 'Completed',
     'exam.status.upcoming': 'Upcoming',
@@ -530,7 +530,7 @@ const translations = {
     'exam.status.active': 'In Progress',
     'exam.status.draft': 'Draft',
     'exam.status.published': 'Published',
-    
+
     // Exam
     'exam.course': 'Course',
     'exam.code': 'Code',
@@ -562,7 +562,7 @@ const translations = {
     'exam.answered': 'Answered',
     'exam.unanswered': 'Unanswered',
     'exam.questionList': 'Question List',
-    
+
     // Exam Rules
     'exam.rules.title': 'Exam Rules',
     'exam.rules.camera': 'Keep Camera & Microphone on during the exam',
@@ -572,7 +572,7 @@ const translations = {
     'exam.rules.noRemoteDesktop': 'No remote desktop software (TeamViewer, AnyDesk, UltraViewer...)',
     'exam.rules.agree': 'Agree & Start Exam',
     'exam.rules.cameraCheck': 'Camera Check:',
-    
+
     // Anti-cheat alerts
     'anticheat.multiScreen': 'MULTIPLE MONITORS DETECTED! Please disconnect secondary monitor.',
     'anticheat.remoteDesktop': 'REMOTE DESKTOP SOFTWARE DETECTED',
@@ -607,7 +607,7 @@ const translations = {
     'anticheat.basicMode': 'Basic monitoring (slow network)',
     'anticheat.faceOnly': 'Face monitoring active',
     'anticheat.yoloOnly': 'Object detection active',
-    
+
     // AI Proctoring
     'ai.loading': 'Loading AI model...',
     'ai.loadingYolo': 'Loading YOLO...',
@@ -624,7 +624,7 @@ const translations = {
     'ai.phoneDetected': 'Phone detected!',
     'ai.materialDetected': 'Materials detected!',
     'ai.headphonesDetected': 'Headphones detected!',
-    
+
     // Proctoring stats
     'proctoring.camera': 'Proctoring Camera',
     'proctoring.recording': 'REC',
@@ -639,7 +639,7 @@ const translations = {
     'proctoring.answered': 'Answered',
     'proctoring.unanswered': 'Unanswered',
     'proctoring.flagged': 'Flagged',
-    
+
     // Instructor Dashboard
     'instructor.title': 'Instructor',
     'instructor.classes': 'Classes',
@@ -653,7 +653,7 @@ const translations = {
     'instructor.addStudentTitle': 'Add Students to Class',
     'instructor.createExamTitle': 'Create New Exam',
     'instructor.editExamTitle': 'Edit Exam',
-    
+
     // Class management
     'class.name': 'Class Name',
     'class.namePlaceholder': 'E.g.: Artificial Intelligence K66',
@@ -671,18 +671,18 @@ const translations = {
     'class.createError': 'Cannot create class. Please try again later.',
     'class.duplicateCode': 'This class code already exists. Please choose another.',
     'class.noPermission': 'You don\'t have permission to create classes. Please contact administrator.',
-    
+
     // Stats
     'stats.students': 'Students',
     'stats.exams': 'Exams',
     'stats.active': 'Active',
     'stats.suspicious': 'Suspicious',
-    
+
     // Tabs
     'tabs.exams': 'Exams',
     'tabs.students': 'Students',
     'tabs.analytics': 'Analytics',
-    
+
     // Analytics
     'analytics.selectExam': 'Select Exam',
     'analytics.selectExamPrompt': 'Please select an exam to view analytics',
@@ -704,7 +704,7 @@ const translations = {
     'analytics.status.submitted': 'Submitted',
     'analytics.status.autoSubmitted': 'Auto Submitted',
     'analytics.status.inProgress': 'In Progress',
-    
+
     // Exam management
     'exam.create': 'Create Exam',
     'exam.createFirst': 'Create your first exam',
@@ -736,7 +736,7 @@ const translations = {
     'exam.editExam': 'Edit Exam',
     'exam.viewExam': 'View Exam',
     'exam.questionsCount': '{count} questions',
-    
+
     // Question management
     'question.add': 'Add Question',
     'question.edit': 'Edit Question',
@@ -764,7 +764,7 @@ const translations = {
     'question.saveError': 'Cannot save question. Please try again.',
     'question.noQuestions': 'No questions yet',
     'question.noQuestionsDesc': 'Add questions to complete the exam',
-    
+
     // Student management
     'student.add': 'Add Student',
     'student.addSingle': 'Add Single',
@@ -785,11 +785,11 @@ const translations = {
     'student.statusActive': 'Active',
     'student.searchPlaceholder': 'Search by name or email...',
     'student.enrolledAt': 'Joined',
-    
+
     // Class status
     'class.status.completed': 'Completed',
     'class.status.dropped': 'Dropped',
-    
+
     // Table headers
     'table.number': '#',
     'table.name': 'Name',
@@ -797,7 +797,7 @@ const translations = {
     'table.studentId': 'Student ID',
     'table.status': 'Status',
     'table.actions': 'Actions',
-    
+
     // Validation
     'validation.required': 'This field is required',
     'validation.emailRequired': 'Please enter your email address',
@@ -817,7 +817,7 @@ const translations = {
     'validation.enterStudentEmail': 'Please enter student email',
     'validation.maxEmails': 'Can only add maximum 100 emails at once',
     'validation.invalidEmails': 'Invalid emails: {emails}',
-    
+
     // Network/Error
     'error.network': 'Network error. Please check connection and try again.',
     'error.timeout': 'Connection slow. Please check network and try again.',
@@ -830,7 +830,7 @@ const translations = {
     'error.sessionExpired': 'Session expired. Please login again.',
     'error.systemBusy': 'System busy. Please try again in a few seconds.',
     'error.classNotFound': 'Class not found',
-    
+
     // Exam specific errors
     'exam.notPublished': 'This exam has not been published',
     'exam.notStarted': 'Exam has not started yet',
@@ -838,7 +838,7 @@ const translations = {
     'exam.timeExpired': 'Exam time has expired!',
     'exam.sessionRestored': 'Previous session restored',
     'exam.loadError': 'Error loading exam',
-    
+
     // Error Boundary
     'errorBoundary.title': 'Oops! Something went wrong',
     'errorBoundary.description': 'The application encountered an unexpected error. Don\'t worry, your data is safe.',
@@ -846,7 +846,7 @@ const translations = {
     'errorBoundary.home': 'Go Home',
     'errorBoundary.technicalDetails': 'Technical Details (development only)',
     'errorBoundary.contactSupport': 'If the error persists, please contact technical support.',
-    
+
     // Face Verification
     'face.title': 'Identity Verification',
     'face.subtitle': 'Take a photo to verify you are the registered student',
@@ -876,7 +876,7 @@ const translations = {
     'face.moveCloser': 'Move closer to the camera',
     'face.moveFarther': 'Move away from the camera',
     'face.centerFace': 'Center your face in the frame',
-    
+
     // Profile & Face Registration
     'profile.faceVerification': 'Face Verification',
     'profile.faceRegistered': 'Face has been registered',
@@ -887,7 +887,7 @@ const translations = {
     'profile.faceRegistrationTitle': 'Face Registration',
     'profile.faceRegistrationDesc': 'Take a photo of your face for identity verification during exams',
     'profile.faceRegisteredSuccess': 'Face registration successful!',
-    
+
     // Language
     'language.select': 'Language',
     'language.vi': 'Tiếng Việt',
@@ -916,7 +916,7 @@ let currentLanguage = getStoredLanguage();
 // Get translation
 export const t = (key, params = {}) => {
   const translation = translations[currentLanguage]?.[key] || translations['vi'][key] || key;
-  
+
   // Replace placeholders like {count}, {min}, {max}
   return translation.replace(/\{(\w+)\}/g, (_, param) => {
     return params[param] !== undefined ? params[param] : `{${param}}`;

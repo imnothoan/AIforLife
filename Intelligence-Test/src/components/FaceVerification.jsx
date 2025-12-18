@@ -42,27 +42,27 @@ function calculateEAR(landmarks, eyeIndices) {
   // Eye landmark indices (MediaPipe face mesh)
   // Left eye: 33, 160, 158, 133, 153, 144
   // Right eye: 362, 385, 387, 263, 373, 380
-  
+
   const getPoint = (idx) => landmarks[idx];
-  
+
   // Vertical distances
   const p2 = getPoint(eyeIndices[1]);
   const p6 = getPoint(eyeIndices[5]);
   const p3 = getPoint(eyeIndices[2]);
   const p5 = getPoint(eyeIndices[4]);
-  
+
   // Horizontal distance
   const p1 = getPoint(eyeIndices[0]);
   const p4 = getPoint(eyeIndices[3]);
-  
+
   if (!p1 || !p2 || !p3 || !p4 || !p5 || !p6) return 0.3; // Default open eye
-  
+
   const vertical1 = Math.sqrt(Math.pow(p2.x - p6.x, 2) + Math.pow(p2.y - p6.y, 2));
   const vertical2 = Math.sqrt(Math.pow(p3.x - p5.x, 2) + Math.pow(p3.y - p5.y, 2));
   const horizontal = Math.sqrt(Math.pow(p1.x - p4.x, 2) + Math.pow(p1.y - p4.y, 2));
-  
+
   if (horizontal === 0) return 0.3;
-  
+
   return (vertical1 + vertical2) / (2.0 * horizontal);
 }
 
@@ -71,30 +71,30 @@ function detectBlink(landmarks) {
   // MediaPipe face mesh eye indices
   const leftEyeIndices = [33, 160, 158, 133, 153, 144];
   const rightEyeIndices = [362, 385, 387, 263, 373, 380];
-  
+
   const leftEAR = calculateEAR(landmarks, leftEyeIndices);
   const rightEAR = calculateEAR(landmarks, rightEyeIndices);
-  
+
   const avgEAR = (leftEAR + rightEAR) / 2.0;
-  
+
   return avgEAR < FACE_CONFIG.BLINK_THRESHOLD;
 }
 
 // Check for head movement (anti-static image spoofing)
 function checkHeadMovement(prevLandmarks, currentLandmarks) {
   if (!prevLandmarks || !currentLandmarks) return 0;
-  
+
   // Use nose tip (landmark 1) for movement detection
   const prev = prevLandmarks[1];
   const current = currentLandmarks[1];
-  
+
   if (!prev || !current) return 0;
-  
+
   const movement = Math.sqrt(
-    Math.pow(current.x - prev.x, 2) + 
+    Math.pow(current.x - prev.x, 2) +
     Math.pow(current.y - prev.y, 2)
   );
-  
+
   return movement;
 }
 
@@ -102,7 +102,7 @@ function checkHeadMovement(prevLandmarks, currentLandmarks) {
 // This is a lightweight approach that works well for identity verification
 function extractFaceEmbedding(landmarks) {
   if (!landmarks || landmarks.length < 468) return null;
-  
+
   // Use key facial landmarks to create a compact embedding
   // These points capture unique facial geometry
   const keyPoints = [
@@ -119,9 +119,9 @@ function extractFaceEmbedding(landmarks) {
     // Chin
     152, 148, 176, 149, 150, 136, 172, 58, 132, 93, 234,
   ];
-  
+
   const embedding = [];
-  
+
   // Extract normalized coordinates and distances
   for (const idx of keyPoints) {
     if (landmarks[idx]) {
@@ -130,7 +130,7 @@ function extractFaceEmbedding(landmarks) {
       embedding.push(landmarks[idx].z || 0);
     }
   }
-  
+
   // Add inter-landmark distances for more robust matching
   const noseTip = landmarks[1];
   const leftEye = landmarks[33];
@@ -138,58 +138,58 @@ function extractFaceEmbedding(landmarks) {
   const leftMouth = landmarks[61];
   const rightMouth = landmarks[291];
   const chin = landmarks[152];
-  
+
   if (noseTip && leftEye && rightEye && leftMouth && rightMouth && chin) {
     // Eye distance
     embedding.push(Math.sqrt(
-      Math.pow(rightEye.x - leftEye.x, 2) + 
+      Math.pow(rightEye.x - leftEye.x, 2) +
       Math.pow(rightEye.y - leftEye.y, 2)
     ));
     // Nose to chin
     embedding.push(Math.sqrt(
-      Math.pow(chin.x - noseTip.x, 2) + 
+      Math.pow(chin.x - noseTip.x, 2) +
       Math.pow(chin.y - noseTip.y, 2)
     ));
     // Mouth width
     embedding.push(Math.sqrt(
-      Math.pow(rightMouth.x - leftMouth.x, 2) + 
+      Math.pow(rightMouth.x - leftMouth.x, 2) +
       Math.pow(rightMouth.y - leftMouth.y, 2)
     ));
     // Eye to mouth ratio
     const eyeCenter = { x: (leftEye.x + rightEye.x) / 2, y: (leftEye.y + rightEye.y) / 2 };
     const mouthCenter = { x: (leftMouth.x + rightMouth.x) / 2, y: (leftMouth.y + rightMouth.y) / 2 };
     embedding.push(Math.sqrt(
-      Math.pow(mouthCenter.x - eyeCenter.x, 2) + 
+      Math.pow(mouthCenter.x - eyeCenter.x, 2) +
       Math.pow(mouthCenter.y - eyeCenter.y, 2)
     ));
   }
-  
+
   return embedding;
 }
 
 // Calculate cosine similarity between two embeddings
 function cosineSimilarity(a, b) {
   if (!a || !b || a.length !== b.length) return 0;
-  
+
   let dotProduct = 0;
   let normA = 0;
   let normB = 0;
-  
+
   for (let i = 0; i < a.length; i++) {
     dotProduct += a[i] * b[i];
     normA += a[i] * a[i];
     normB += b[i] * b[i];
   }
-  
+
   normA = Math.sqrt(normA);
   normB = Math.sqrt(normB);
-  
+
   if (normA === 0 || normB === 0) return 0;
-  
+
   return dotProduct / (normA * normB);
 }
 
-export default function FaceVerification({ 
+export default function FaceVerification({
   mode = 'verify', // 'enroll' | 'verify' | 'random'
   storedEmbedding = null,
   onSuccess,
@@ -201,7 +201,8 @@ export default function FaceVerification({
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
   const faceLandmarkerRef = useRef(null);
-  
+  const statusRef = useRef('initializing'); // Ref to avoid stale closure in detection loop
+
   const [status, setStatus] = useState('initializing'); // 'initializing' | 'ready' | 'captured' | 'verifying' | 'success' | 'failed'
   const [capturedImage, setCapturedImage] = useState(null);
   const [capturedEmbedding, setCapturedEmbedding] = useState(null);
@@ -210,38 +211,47 @@ export default function FaceVerification({
   const [faceDetected, setFaceDetected] = useState(false);
   const [faceQuality, setFaceQuality] = useState(null); // 'good' | 'too_small' | 'too_large' | 'off_center'
 
+  // Helper to update both status state and ref
+  const updateStatus = useCallback((newStatus) => {
+    statusRef.current = newStatus;
+    setStatus(newStatus);
+  }, []);
+
   // Initialize MediaPipe Face Landmarker
   useEffect(() => {
     let isMounted = true;
     let timeoutId = null;
-    
+
     // Helper to add timeout to promises
     const withTimeout = (promise, ms, name) => {
       return Promise.race([
         promise,
-        new Promise((_, reject) => 
+        new Promise((_, reject) =>
           setTimeout(() => reject(new Error(`${name} timeout after ${ms}ms`)), ms)
         )
       ]);
     };
-    
+
     const initFaceLandmarker = async () => {
       try {
-        // Add timeout for WASM loading (15 seconds - increased for slow connections)
+        console.log('[FaceVerification] Starting MediaPipe initialization...');
+        // Add timeout for WASM loading (25 seconds - increased for slow connections)
         const vision = await withTimeout(
           FilesetResolver.forVisionTasks(MEDIAPIPE_CONFIG.WASM_PATH),
-          15000,
+          25000,
           'MediaPipe WASM'
         );
-        
+        console.log('[FaceVerification] WASM loaded successfully');
+
         // Try GPU first, fallback to CPU if it fails
         const delegates = ["GPU", "CPU"];
         let landmarker = null;
         let lastError = null;
-        
+
         for (const delegate of delegates) {
           try {
-            // Add timeout for model loading (20 seconds per delegate)
+            console.log(`[FaceVerification] Trying ${delegate} delegate...`);
+            // Add timeout for model loading (30 seconds per delegate - increased for slow networks)
             landmarker = await withTimeout(
               FaceLandmarker.createFromOptions(vision, {
                 baseOptions: {
@@ -253,7 +263,7 @@ export default function FaceVerification({
                 minFaceDetectionConfidence: FACE_CONFIG.MIN_DETECTION_CONFIDENCE,
                 minTrackingConfidence: 0.4, // Lowered from 0.5 for better tracking
               }),
-              20000,
+              30000,
               `FaceLandmarker model (${delegate})`
             );
             console.log(`FaceVerification: Loaded with ${delegate} delegate`);
@@ -263,11 +273,11 @@ export default function FaceVerification({
             lastError = delegateError;
           }
         }
-        
+
         if (!landmarker && lastError) {
           throw lastError;
         }
-        
+
         if (isMounted && landmarker) {
           faceLandmarkerRef.current = landmarker;
           await startCamera();
@@ -275,7 +285,7 @@ export default function FaceVerification({
       } catch (error) {
         console.error('Face landmarker initialization error:', error);
         if (isMounted) {
-          setStatus('failed');
+          updateStatus('failed');
           // Provide more specific error message for timeout
           if (error.message?.includes('timeout')) {
             setErrorMessage(t('error.timeout'));
@@ -285,18 +295,18 @@ export default function FaceVerification({
         }
       }
     };
-    
+
     // Set a global timeout to prevent infinite initialization
     timeoutId = setTimeout(() => {
       if (isMounted && status === 'initializing') {
-        console.warn('FaceVerification: Global initialization timeout');
-        setStatus('failed');
+        console.warn('[FaceVerification] Global initialization timeout after 60s');
+        updateStatus('failed');
         setErrorMessage(t('error.timeout'));
       }
-    }, 45000); // 45 second global timeout (increased for slow connections)
-    
+    }, 60000); // 60 second global timeout (increased for slow connections)
+
     initFaceLandmarker();
-    
+
     return () => {
       isMounted = false;
       if (timeoutId) clearTimeout(timeoutId);
@@ -312,11 +322,12 @@ export default function FaceVerification({
       const stream = await navigator.mediaDevices.getUserMedia({
         video: { width: 640, height: 480, facingMode: 'user' }
       });
-      
+
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
         videoRef.current.onloadeddata = () => {
-          setStatus('ready');
+          console.log('[FaceVerification] Video loaded, setting status to ready');
+          updateStatus('ready');
           startFaceDetectionLoop();
         };
       }
@@ -329,13 +340,33 @@ export default function FaceVerification({
 
   // Real-time face detection for guidance
   const startFaceDetectionLoop = useCallback(() => {
+    let frameCount = 0;
     const detectFace = async () => {
-      if (!videoRef.current || !faceLandmarkerRef.current || status !== 'ready') return;
-      
+      // Use statusRef.current to avoid stale closure
+      if (!videoRef.current || !faceLandmarkerRef.current || statusRef.current !== 'ready') {
+        if (frameCount === 0) {
+          console.log('[FaceVerification] Detection loop skipped:', {
+            hasVideo: !!videoRef.current,
+            hasLandmarker: !!faceLandmarkerRef.current,
+            status: statusRef.current
+          });
+        }
+        return;
+      }
+
       try {
         const result = faceLandmarkerRef.current.detect(videoRef.current);
-        
-        if (result.faceLandmarks.length === 0) {
+        frameCount++;
+
+        // Log every 30 frames (about once per second)
+        if (frameCount % 30 === 1) {
+          console.log('[FaceVerification] Detection result:', {
+            facesFound: result.faceLandmarks?.length || 0,
+            frameCount
+          });
+        }
+
+        if (!result.faceLandmarks || result.faceLandmarks.length === 0) {
           setFaceDetected(false);
           setFaceQuality(null);
         } else if (result.faceLandmarks.length > 1) {
@@ -343,14 +374,19 @@ export default function FaceVerification({
           setFaceQuality('multiple');
         } else {
           setFaceDetected(true);
-          
+
           // Check face quality
           const landmarks = result.faceLandmarks[0];
           const faceWidth = Math.abs(landmarks[234].x - landmarks[454].x);
           const faceHeight = Math.abs(landmarks[10].y - landmarks[152].y);
           const faceCenterX = (landmarks[234].x + landmarks[454].x) / 2;
           const faceCenterY = (landmarks[10].y + landmarks[152].y) / 2;
-          
+
+          // Log face metrics once when first detected
+          if (frameCount % 30 === 1) {
+            console.log('[FaceVerification] Face metrics:', { faceWidth, faceHeight, faceCenterX, faceCenterY });
+          }
+
           if (faceWidth < FACE_CONFIG.MIN_FACE_SIZE || faceHeight < FACE_CONFIG.MIN_FACE_SIZE) {
             setFaceQuality('too_small');
           } else if (faceWidth > FACE_CONFIG.MAX_FACE_SIZE || faceHeight > FACE_CONFIG.MAX_FACE_SIZE) {
@@ -362,22 +398,23 @@ export default function FaceVerification({
           }
         }
       } catch (error) {
-        console.warn('Face detection loop error:', error);
+        console.warn('[FaceVerification] Detection loop error:', error);
       }
-      
-      // Continue detection loop
-      if (status === 'ready') {
+
+      // Continue detection loop - use statusRef to avoid stale closure
+      if (statusRef.current === 'ready') {
         requestAnimationFrame(detectFace);
       }
     };
-    
+
+    console.log('[FaceVerification] Starting face detection loop...');
     detectFace();
-  }, [status]);
+  }, []); // No dependencies - we use refs
 
   // Countdown timer for random verification
   useEffect(() => {
     if (mode !== 'random' || countdown === null) return;
-    
+
     if (countdown <= 0) {
       // Time's up - verification failed
       setStatus('failed');
@@ -385,57 +422,57 @@ export default function FaceVerification({
       onFailure?.('timeout');
       return;
     }
-    
+
     const timer = setTimeout(() => {
       setCountdown(prev => prev - 1);
     }, 1000);
-    
+
     return () => clearTimeout(timer);
   }, [countdown, mode, onFailure, t]);
 
   // Capture photo
   const handleCapture = async () => {
     if (!videoRef.current || !canvasRef.current || !faceLandmarkerRef.current) return;
-    
+
     const video = videoRef.current;
     const canvas = canvasRef.current;
     const ctx = canvas.getContext('2d');
-    
+
     canvas.width = video.videoWidth;
     canvas.height = video.videoHeight;
     ctx.drawImage(video, 0, 0);
-    
+
     // Detect face in captured image
     try {
       const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
       const imageBitmap = await createImageBitmap(imageData);
       const result = faceLandmarkerRef.current.detect(imageBitmap);
       imageBitmap.close();
-      
+
       if (result.faceLandmarks.length === 0) {
         setErrorMessage(t('face.noFaceDetected'));
         return;
       }
-      
+
       if (result.faceLandmarks.length > 1) {
         setErrorMessage(t('face.multipleFaces'));
         return;
       }
-      
+
       // Extract face embedding
       const embedding = extractFaceEmbedding(result.faceLandmarks[0]);
-      
+
       if (!embedding) {
         setErrorMessage(t('face.poorQuality'));
         return;
       }
-      
+
       // Store captured data
       setCapturedImage(canvas.toDataURL('image/jpeg', 0.8));
       setCapturedEmbedding(embedding);
       setStatus('captured');
       setErrorMessage('');
-      
+
     } catch (error) {
       console.error('Capture error:', error);
       setErrorMessage(t('error.general'));
@@ -454,19 +491,19 @@ export default function FaceVerification({
   // Verify or enroll
   const handleVerify = async () => {
     if (!capturedEmbedding) return;
-    
+
     setStatus('verifying');
-    
+
     // Simulate processing delay for UX
     await new Promise(resolve => setTimeout(resolve, 1000));
-    
+
     if (mode === 'enroll') {
       // Enrollment mode - save embedding and complete
       setStatus('success');
       onEnrollComplete?.(capturedEmbedding, capturedImage);
       return;
     }
-    
+
     // Verification mode - compare with stored embedding
     if (!storedEmbedding) {
       // No stored embedding - treat as first-time enrollment
@@ -474,10 +511,10 @@ export default function FaceVerification({
       onEnrollComplete?.(capturedEmbedding, capturedImage);
       return;
     }
-    
+
     const similarity = cosineSimilarity(capturedEmbedding, storedEmbedding);
     // Removed console.log for production security - similarity score is sensitive biometric data
-    
+
     if (similarity >= FACE_CONFIG.SIMILARITY_THRESHOLD) {
       setStatus('success');
       onSuccess?.(similarity);
@@ -506,7 +543,7 @@ export default function FaceVerification({
       initial={{ opacity: 0, scale: 0.95 }}
       animate={{ opacity: 1, scale: 1 }}
       exit={{ opacity: 0, scale: 0.95 }}
-      className={`bg-paper rounded-2xl shadow-soft p-6 max-w-md w-full ${className}`}
+      className={`bg-paper rounded-2xl shadow-soft p-6 max-w-md w-full mx-auto max-h-[85vh] overflow-y-auto ${className}`}
     >
       {/* Header */}
       <div className="text-center mb-6">
@@ -514,12 +551,12 @@ export default function FaceVerification({
           <User className="w-7 h-7 text-primary" />
         </div>
         <h2 className="text-xl font-bold text-text-main">
-          {mode === 'enroll' ? t('face.enrollTitle') : 
-           mode === 'random' ? t('face.randomCheck') : t('face.title')}
+          {mode === 'enroll' ? t('face.enrollTitle') :
+            mode === 'random' ? t('face.randomCheck') : t('face.title')}
         </h2>
         <p className="text-sm text-gray-500 mt-1">
-          {mode === 'enroll' ? t('face.enrollSubtitle') : 
-           mode === 'random' ? t('face.randomCheckDesc') : t('face.subtitle')}
+          {mode === 'enroll' ? t('face.enrollSubtitle') :
+            mode === 'random' ? t('face.randomCheckDesc') : t('face.subtitle')}
         </p>
       </div>
 
@@ -534,9 +571,9 @@ export default function FaceVerification({
       <div className="relative bg-gray-900 rounded-xl overflow-hidden aspect-video mb-4">
         {status === 'captured' || status === 'verifying' || status === 'success' || status === 'failed' ? (
           // Show captured image
-          <img 
-            src={capturedImage} 
-            alt="Captured" 
+          <img
+            src={capturedImage}
+            alt="Captured"
             className="w-full h-full object-cover"
           />
         ) : (
@@ -549,17 +586,16 @@ export default function FaceVerification({
             className="w-full h-full object-cover"
           />
         )}
-        
+
         {/* Face detection overlay */}
         {status === 'ready' && (
           <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-            <div className={`w-48 h-64 border-4 rounded-3xl ${
-              faceQuality === 'good' ? 'border-success' : 
+            <div className={`w-48 h-64 border-4 rounded-3xl ${faceQuality === 'good' ? 'border-success' :
               faceDetected ? 'border-warning' : 'border-gray-400'
-            } transition-colors`} />
+              } transition-colors`} />
           </div>
         )}
-        
+
         {/* Status overlays */}
         {status === 'initializing' && (
           <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
@@ -569,7 +605,7 @@ export default function FaceVerification({
             </div>
           </div>
         )}
-        
+
         {status === 'verifying' && (
           <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
             <div className="text-center text-white">
@@ -578,7 +614,7 @@ export default function FaceVerification({
             </div>
           </div>
         )}
-        
+
         {status === 'success' && (
           <div className="absolute inset-0 bg-success/20 flex items-center justify-center">
             <div className="bg-white rounded-full p-3">
@@ -586,7 +622,7 @@ export default function FaceVerification({
             </div>
           </div>
         )}
-        
+
         {status === 'failed' && (
           <div className="absolute inset-0 bg-danger/20 flex items-center justify-center">
             <div className="bg-white rounded-full p-3">
@@ -594,7 +630,7 @@ export default function FaceVerification({
             </div>
           </div>
         )}
-        
+
         {/* Camera indicator */}
         {(status === 'ready' || status === 'captured') && (
           <div className="absolute bottom-2 left-2 flex items-center space-x-1 bg-black/50 text-white text-xs px-2 py-1 rounded">
@@ -603,20 +639,19 @@ export default function FaceVerification({
           </div>
         )}
       </div>
-      
+
       {/* Hidden canvas for image capture */}
       <canvas ref={canvasRef} className="hidden" />
-      
+
       {/* Face quality feedback */}
       {status === 'ready' && (
-        <div className={`text-center text-sm mb-4 ${
-          faceQuality === 'good' ? 'text-success' : 
+        <div className={`text-center text-sm mb-4 ${faceQuality === 'good' ? 'text-success' :
           faceDetected ? 'text-warning' : 'text-gray-500'
-        }`}>
+          }`}>
           {getFaceQualityMessage()}
         </div>
       )}
-      
+
       {/* Error message */}
       {errorMessage && (
         <div className="flex items-center space-x-2 p-3 bg-danger-50 text-danger rounded-lg mb-4">
@@ -624,7 +659,7 @@ export default function FaceVerification({
           <span className="text-sm">{errorMessage}</span>
         </div>
       )}
-      
+
       {/* Success message */}
       {status === 'success' && (
         <div className="flex items-center space-x-2 p-3 bg-success-50 text-success rounded-lg mb-4">
@@ -648,11 +683,11 @@ export default function FaceVerification({
         </div>
       )}
 
-      {/* Action buttons */}
+      {/* Action buttons - sticky at bottom */}
       {/* NOTE: Capture is now allowed when face is detected, regardless of quality (good/too_small/etc)
           This improves usability by allowing captures in suboptimal conditions while still providing
           quality feedback to the user. The face detection algorithm will verify quality on capture. */}
-      <div className="flex space-x-3">
+      <div className="sticky bottom-0 bg-paper pt-3 -mx-4 px-4 pb-1 flex space-x-3">
         {status === 'ready' && (
           <button
             onClick={handleCapture}
@@ -663,7 +698,7 @@ export default function FaceVerification({
             {t('face.capture')}
           </button>
         )}
-        
+
         {status === 'captured' && (
           <>
             <button
@@ -682,7 +717,7 @@ export default function FaceVerification({
             </button>
           </>
         )}
-        
+
         {status === 'failed' && (
           <button
             onClick={handleRetake}

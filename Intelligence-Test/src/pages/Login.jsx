@@ -53,18 +53,18 @@ export default function Login() {
       hasRedirectedRef.current = false;
       return;
     }
-    
+
     // Skip if already redirected
     if (hasRedirectedRef.current) {
       return;
     }
-    
+
     // Only redirect when auth is fully loaded and user exists
     if (!authLoading && user) {
       if (import.meta.env.DEV) {
         console.log('[Login] User authenticated, redirecting to home');
       }
-      
+
       hasRedirectedRef.current = true;
       navigate('/', { replace: true });
     }
@@ -85,7 +85,7 @@ export default function Login() {
     // Check if error has valid issues/errors
     // Zod v3 uses 'issues' but some versions use 'errors'
     const errorList = error?.issues || error?.errors || [];
-    
+
     if (errorList.length === 0) {
       // Try to parse from message if no issues array
       if (error?.message) {
@@ -102,17 +102,17 @@ export default function Login() {
       }
       return t('validation.required');
     }
-    
+
     return getErrorMessage(errorList[0]);
   };
-  
+
   // Get user-friendly error message based on Zod error
   const getErrorMessage = (errorItem) => {
     const code = errorItem?.code;
     const path = errorItem?.path?.[0];
     const message = errorItem?.message || '';
     const format = errorItem?.format;
-    
+
     // Handle email field errors
     if (path === 'email') {
       // Check for invalid format (email validation failed)
@@ -125,7 +125,7 @@ export default function Login() {
       }
       return t('validation.emailRequired');
     }
-    
+
     // Handle password field errors
     if (path === 'password') {
       if (code === 'too_small' || code === 'invalid_type') {
@@ -133,19 +133,19 @@ export default function Login() {
       }
       return t('validation.minLength', { min: 6 });
     }
-    
+
     // Handle fullName field errors
     if (path === 'fullName') {
       if (code === 'too_small' || code === 'invalid_type') {
         return t('validation.minLength', { min: 2 });
       }
     }
-    
+
     // Handle password confirmation mismatch
     if (path === 'confirmPassword') {
       return t('validation.passwordMismatch');
     }
-    
+
     return t('validation.required');
   };
 
@@ -284,7 +284,7 @@ export default function Login() {
       <div className="absolute top-4 right-4 z-20">
         <LanguageSwitcher compact />
       </div>
-      
+
       {/* Background decoration */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
         <div className="absolute -top-40 -right-40 w-80 h-80 bg-primary-200 rounded-full mix-blend-multiply filter blur-xl opacity-70 animate-pulse" />
@@ -452,8 +452,8 @@ export default function Login() {
                         type="button"
                         onClick={() => setRole('student')}
                         className={`px-4 py-2.5 rounded-lg border-2 font-medium transition-all ${role === 'student'
-                            ? 'border-primary bg-primary-50 text-primary'
-                            : 'border-gray-200 text-gray-600 hover:border-gray-300'
+                          ? 'border-primary bg-primary-50 text-primary'
+                          : 'border-gray-200 text-gray-600 hover:border-gray-300'
                           }`}
                       >
                         {t('auth.student')}
@@ -462,8 +462,8 @@ export default function Login() {
                         type="button"
                         onClick={() => setRole('instructor')}
                         className={`px-4 py-2.5 rounded-lg border-2 font-medium transition-all ${role === 'instructor'
-                            ? 'border-primary bg-primary-50 text-primary'
-                            : 'border-gray-200 text-gray-600 hover:border-gray-300'
+                          ? 'border-primary bg-primary-50 text-primary'
+                          : 'border-gray-200 text-gray-600 hover:border-gray-300'
                           }`}
                       >
                         {t('auth.instructor')}
@@ -523,7 +523,7 @@ export default function Login() {
 
         {/* Footer */}
         <p className="text-center text-gray-500 text-xs mt-4">
-          © 2025 {t('app.name')}. {t('app.subtitle')}.
+          © 2025 {t('app.name')} {t('app.by')} Arcane. {t('app.subtitle')}.
         </p>
       </motion.div>
     </div>
