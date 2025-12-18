@@ -35,7 +35,7 @@ if (isSupabaseConfigured()) {
         'x-application-name': 'SmartExamPro',
       },
     },
-    // Realtime disabled for better performance (not needed for exam platform)
+    // Realtime configuration for enrollment and class updates
     realtime: {
       params: {
         eventsPerSecond: 2,
