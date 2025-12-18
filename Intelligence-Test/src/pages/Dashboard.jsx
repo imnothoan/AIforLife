@@ -40,7 +40,9 @@ export default function Dashboard() {
     
     const loadClasses = async () => {
       try {
-        console.log('[Dashboard] Loading enrolled classes for user:', user.id);
+        if (import.meta.env.DEV) {
+          console.log('[Dashboard] Loading enrolled classes for user:', user.id);
+        }
         const { data: enrollmentData, error: enrollError } = await supabase
           .from('enrollments')
           .select(`
@@ -65,7 +67,9 @@ export default function Dashboard() {
           throw enrollError;
         }
         
-        console.log('[Dashboard] Loaded enrollments:', enrollmentData?.length || 0, enrollmentData);
+        if (import.meta.env.DEV) {
+          console.log('[Dashboard] Loaded enrollments:', enrollmentData?.length || 0, enrollmentData);
+        }
         setClasses(enrollmentData || []);
       } catch (err) {
         console.error('Load classes error:', err);
