@@ -569,7 +569,9 @@ export default function Exam() {
     // Start frame processing when exam starts AND camera is ready
     // We need to check cameraStatus to ensure canvas context is available
     // Use multiple retry attempts with increasing delays to ensure video element is mounted
-    const FRAME_PROCESSING_DELAYS = [300, 600, 1000, 1500, 2000, 3000]; // Multiple retry delays - increased for reliability
+    // Delays increase exponentially: 300ms -> 600ms -> 1s -> 1.5s -> 2s -> 3s
+    // This handles DOM mounting variability during animation transitions
+    const FRAME_PROCESSING_DELAYS = [300, 600, 1000, 1500, 2000, 3000];
     const FRAME_INTERVAL_MS = 200; // Process frames every 200ms (5 FPS)
     
     const startFrameProcessing = () => {
