@@ -520,11 +520,18 @@ export default function Exam() {
 
     // Start frame processing when exam starts AND camera is ready
     // We need to check cameraStatus to ensure canvas context is available
-    if (examStarted && cameraStatus === 'ready' && videoRef.current && ctxRef.current) {
+    // Use a delayed start to ensure video element is mounted after examStarted changes
+    const FRAME_PROCESSING_DELAY = 600; // Wait for video element to mount and stream to attach
+    const FRAME_INTERVAL_MS = 200; // Process frames every 200ms (5 FPS)
+    
+    const startFrameProcessing = () => {
+      if (frameIntervalRef.current) return; // Already started
+      
       console.log('🎬 Starting AI frame processing...');
-      console.log('   Camera ready:', !!videoRef.current);
+      console.log('   Video ready:', !!videoRef.current);
       console.log('   Canvas context ready:', !!ctxRef.current);
       console.log('   Worker ready:', !!workerRef.current);
+      
       frameIntervalRef.current = setInterval(() => {
         if (videoRef.current && workerRef.current && ctxRef.current && !isSubmittingRef.current) {
           try {
@@ -545,16 +552,37 @@ export default function Exam() {
             console.warn('Error sending frame to worker:', err);
           }
         }
-      }, 200);
+      }, FRAME_INTERVAL_MS);
+    };
+    
+    let startTimeoutId = null;
+    
+    if (examStarted && cameraStatus === 'ready') {
+      // Wait for video element to mount and stream to attach
+      startTimeoutId = setTimeout(() => {
+        if (videoRef.current && ctxRef.current) {
+          startFrameProcessing();
+        } else {
+          console.warn('Video or canvas not ready after delay, retrying...');
+          // Retry after another delay
+          setTimeout(startFrameProcessing, 500);
+        }
+      }, FRAME_PROCESSING_DELAY);
     }
 
     return () => {
       window.removeEventListener('online', handleOnline);
       window.removeEventListener('offline', handleOffline);
 
+      // Clear timeout
+      if (startTimeoutId) {
+        clearTimeout(startTimeoutId);
+      }
+
       // Clear the frame interval
       if (frameIntervalRef.current) {
         clearInterval(frameIntervalRef.current);
+        frameIntervalRef.current = null;
       }
 
       // Terminate worker
