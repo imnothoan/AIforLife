@@ -28,6 +28,38 @@ function isValidClassCode(code) {
   return /^[A-Za-z0-9-_]+$/.test(code);
 }
 
+/**
+ * Convert datetime-local value to ISO string with proper timezone handling
+ * This fixes the issue where datetime-local (which has no timezone) is interpreted as UTC
+ * when it should be interpreted as local time
+ * @param {string} datetimeLocalValue - Value from datetime-local input (e.g., "2024-12-18T12:00")
+ * @returns {string} ISO string with timezone (e.g., "2024-12-18T12:00:00.000+07:00")
+ */
+function toISOWithTimezone(datetimeLocalValue) {
+  if (!datetimeLocalValue) return null;
+  // Create date from local datetime string
+  const date = new Date(datetimeLocalValue);
+  // Return ISO string - this preserves the local time meaning
+  return date.toISOString();
+}
+
+/**
+ * Convert ISO/database timestamp to datetime-local format for input
+ * @param {string} isoString - ISO string or database timestamp
+ * @returns {string} datetime-local format (YYYY-MM-DDTHH:mm)
+ */
+function toDatetimeLocal(isoString) {
+  if (!isoString) return '';
+  const date = new Date(isoString);
+  // Format as local datetime for input
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  const hours = String(date.getHours()).padStart(2, '0');
+  const minutes = String(date.getMinutes()).padStart(2, '0');
+  return `${year}-${month}-${day}T${hours}:${minutes}`;
+}
+
 // ============================================
 // MODAL COMPONENTS
 // ============================================
@@ -155,8 +187,8 @@ function CreateExamForm({ classId, onClose, onSuccess }) {
             title: trimmedTitle,
             description: formData.description?.trim() || null,
             duration_minutes: durationMinutes,
-            start_time: formData.start_time,
-            end_time: formData.end_time,
+            start_time: toISOWithTimezone(formData.start_time),
+            end_time: toISOWithTimezone(formData.end_time),
             is_shuffled: formData.is_shuffled,
             show_result_immediately: formData.show_result_immediately,
             allow_review: formData.allow_review,
@@ -411,6 +443,274 @@ function CreateExamForm({ classId, onClose, onSuccess }) {
             <Save className="w-5 h-5 mr-2" />
           )}
           {t('exam.create')}
+        </button>
+      </div>
+    </form>
+  );
+}
+
+// ============================================
+// EDIT EXAM FORM
+// ============================================
+
+function EditExamForm({ exam, onClose, onSuccess }) {
+  const { t } = useLanguage();
+  const [loading, setLoading] = useState(false);
+  const [formData, setFormData] = useState({
+    title: exam?.title || '',
+    description: exam?.description || '',
+    duration_minutes: exam?.duration_minutes || 60,
+    start_time: toDatetimeLocal(exam?.start_time) || '',
+    end_time: toDatetimeLocal(exam?.end_time) || '',
+    is_shuffled: exam?.is_shuffled ?? true,
+    show_result_immediately: exam?.show_result_immediately ?? false,
+    allow_review: exam?.allow_review ?? false,
+    passing_score: exam?.passing_score || 50,
+    max_attempts: exam?.max_attempts || 1,
+    require_camera: exam?.require_camera ?? true,
+    require_fullscreen: exam?.require_fullscreen ?? true,
+    max_tab_violations: exam?.max_tab_violations || 3,
+    max_fullscreen_violations: exam?.max_fullscreen_violations || 3,
+  });
+
+  const handleChange = (e) => {
+    const { name, value, type, checked } = e.target;
+    setFormData(prev => ({
+      ...prev,
+      [name]: type === 'checkbox' ? checked : value
+    }));
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    
+    // Validation
+    const trimmedTitle = formData.title?.trim();
+    if (!trimmedTitle) {
+      toast.error(t('validation.examTitleRequired'));
+      return;
+    }
+    
+    if (!formData.start_time || !formData.end_time) {
+      toast.error(t('validation.selectTime'));
+      return;
+    }
+    
+    const startTime = new Date(formData.start_time);
+    const endTime = new Date(formData.end_time);
+    
+    if (endTime <= startTime) {
+      toast.error(t('validation.endAfterStart'));
+      return;
+    }
+    
+    setLoading(true);
+    try {
+      const { data, error } = await supabase
+        .from('exams')
+        .update({
+          title: trimmedTitle,
+          description: formData.description?.trim() || null,
+          duration_minutes: parseInt(formData.duration_minutes) || 60,
+          start_time: toISOWithTimezone(formData.start_time),
+          end_time: toISOWithTimezone(formData.end_time),
+          is_shuffled: formData.is_shuffled,
+          show_result_immediately: formData.show_result_immediately,
+          allow_review: formData.allow_review,
+          passing_score: parseFloat(formData.passing_score) || 50,
+          max_attempts: parseInt(formData.max_attempts) || 1,
+          require_camera: formData.require_camera,
+          require_fullscreen: formData.require_fullscreen,
+          max_tab_violations: parseInt(formData.max_tab_violations) || 3,
+          max_fullscreen_violations: parseInt(formData.max_fullscreen_violations) || 3,
+        })
+        .eq('id', exam.id)
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      toast.success(t('exam.updateSuccess') || 'Cập nhật bài thi thành công!');
+      onSuccess?.(data);
+      onClose();
+    } catch (error) {
+      console.error('Update exam error:', error);
+      toast.error(t('exam.updateError') || 'Lỗi khi cập nhật bài thi');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <form onSubmit={handleSubmit} className="space-y-6">
+      {/* Basic Info */}
+      <div className="space-y-4">
+        <h3 className="font-semibold text-gray-900 flex items-center space-x-2">
+          <BookOpen className="w-5 h-5 text-primary" />
+          <span>{t('exam.basicInfo')}</span>
+        </h3>
+        
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">
+            {t('exam.title')} <span className="text-danger">*</span>
+          </label>
+          <input
+            type="text"
+            name="title"
+            value={formData.title}
+            onChange={handleChange}
+            placeholder={t('exam.titlePlaceholder')}
+            className="input"
+          />
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">
+            {t('exam.description')}
+          </label>
+          <textarea
+            name="description"
+            value={formData.description}
+            onChange={handleChange}
+            placeholder={t('exam.descriptionPlaceholder')}
+            rows={3}
+            className="input resize-none"
+          />
+        </div>
+
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              {t('exam.durationMinutes')}
+            </label>
+            <input
+              type="number"
+              name="duration_minutes"
+              value={formData.duration_minutes}
+              onChange={handleChange}
+              min={5}
+              max={300}
+              className="input"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              {t('exam.passingScore')}
+            </label>
+            <input
+              type="number"
+              name="passing_score"
+              value={formData.passing_score}
+              onChange={handleChange}
+              min={0}
+              max={100}
+              className="input"
+            />
+          </div>
+        </div>
+      </div>
+
+      {/* Time Settings */}
+      <div className="space-y-4">
+        <h3 className="font-semibold text-gray-900 flex items-center space-x-2">
+          <Clock className="w-5 h-5 text-primary" />
+          <span>{t('exam.timeSettings')}</span>
+        </h3>
+
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              {t('exam.startTime')} <span className="text-danger">*</span>
+            </label>
+            <input
+              type="datetime-local"
+              name="start_time"
+              value={formData.start_time}
+              onChange={handleChange}
+              className="input"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              {t('exam.endTime')} <span className="text-danger">*</span>
+            </label>
+            <input
+              type="datetime-local"
+              name="end_time"
+              value={formData.end_time}
+              onChange={handleChange}
+              className="input"
+            />
+          </div>
+        </div>
+      </div>
+
+      {/* Anti-Cheat Settings */}
+      <div className="space-y-4">
+        <h3 className="font-semibold text-gray-900 flex items-center space-x-2">
+          <Shield className="w-5 h-5 text-primary" />
+          <span>{t('exam.antiCheatSettings')}</span>
+        </h3>
+
+        <div className="grid grid-cols-2 gap-4">
+          <label className="flex items-center space-x-3 p-3 bg-gray-50 rounded-lg cursor-pointer hover:bg-gray-100 transition-colors">
+            <input
+              type="checkbox"
+              name="require_camera"
+              checked={formData.require_camera}
+              onChange={handleChange}
+              className="w-5 h-5 text-primary rounded"
+            />
+            <span className="text-sm text-gray-700">{t('exam.requireCamera')}</span>
+          </label>
+
+          <label className="flex items-center space-x-3 p-3 bg-gray-50 rounded-lg cursor-pointer hover:bg-gray-100 transition-colors">
+            <input
+              type="checkbox"
+              name="require_fullscreen"
+              checked={formData.require_fullscreen}
+              onChange={handleChange}
+              className="w-5 h-5 text-primary rounded"
+            />
+            <span className="text-sm text-gray-700">{t('exam.requireFullscreen')}</span>
+          </label>
+
+          <label className="flex items-center space-x-3 p-3 bg-gray-50 rounded-lg cursor-pointer hover:bg-gray-100 transition-colors">
+            <input
+              type="checkbox"
+              name="is_shuffled"
+              checked={formData.is_shuffled}
+              onChange={handleChange}
+              className="w-5 h-5 text-primary rounded"
+            />
+            <span className="text-sm text-gray-700">{t('exam.shuffleQuestions')}</span>
+          </label>
+
+          <label className="flex items-center space-x-3 p-3 bg-gray-50 rounded-lg cursor-pointer hover:bg-gray-100 transition-colors">
+            <input
+              type="checkbox"
+              name="show_result_immediately"
+              checked={formData.show_result_immediately}
+              onChange={handleChange}
+              className="w-5 h-5 text-primary rounded"
+            />
+            <span className="text-sm text-gray-700">{t('exam.showResultImmediately')}</span>
+          </label>
+        </div>
+      </div>
+
+      {/* Actions */}
+      <div className="flex items-center justify-end space-x-3 pt-4 border-t border-gray-200">
+        <button type="button" onClick={onClose} className="btn-secondary">
+          {t('common.cancel')}
+        </button>
+        <button type="submit" disabled={loading} className="btn-primary">
+          {loading ? (
+            <Loader2 className="w-5 h-5 mr-2 animate-spin" />
+          ) : (
+            <Save className="w-5 h-5 mr-2" />
+          )}
+          {t('exam.update') || 'Cập nhật'}
         </button>
       </div>
     </form>
@@ -1663,6 +1963,8 @@ export default function InstructorDashboard() {
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('exams'); // 'exams' | 'students' | 'analytics'
   const [showCreateExam, setShowCreateExam] = useState(false);
+  const [showEditExam, setShowEditExam] = useState(false);
+  const [examToEdit, setExamToEdit] = useState(null);
   const [showAddStudent, setShowAddStudent] = useState(false);
   const [showCreateClass, setShowCreateClass] = useState(false);
   const [showManageQuestions, setShowManageQuestions] = useState(false);
@@ -1670,6 +1972,12 @@ export default function InstructorDashboard() {
   const [searchQuery, setSearchQuery] = useState('');
   const [examSessions, setExamSessions] = useState([]);
   const [selectedExamForAnalytics, setSelectedExamForAnalytics] = useState(null);
+
+  // Handler to open edit exam modal
+  const handleEditExam = (exam) => {
+    setExamToEdit(exam);
+    setShowEditExam(true);
+  };
 
   // Load classes
   useEffect(() => {
@@ -2071,6 +2379,16 @@ export default function InstructorDashboard() {
                               </div>
                               
                               <div className="flex items-center space-x-2">
+                                {/* Edit button - always visible */}
+                                <button 
+                                  onClick={() => handleEditExam(exam)}
+                                  className="btn-secondary text-sm"
+                                  title={t('exam.edit') || 'Sửa bài thi'}
+                                >
+                                  <Edit2 className="w-4 h-4 mr-1" />
+                                  {t('exam.edit') || 'Sửa'}
+                                </button>
+                                
                                 {exam.status === 'draft' && (
                                   <button
                                     onClick={() => handlePublishExam(exam.id)}
@@ -2296,6 +2614,28 @@ export default function InstructorDashboard() {
             setExams(prev => [newExam, ...prev]);
           }}
         />
+      </Modal>
+
+      <Modal
+        isOpen={showEditExam}
+        onClose={() => {
+          setShowEditExam(false);
+          setExamToEdit(null);
+        }}
+        title={t('instructor.editExamTitle') || 'Sửa bài thi'}
+      >
+        {examToEdit && (
+          <EditExamForm
+            exam={examToEdit}
+            onClose={() => {
+              setShowEditExam(false);
+              setExamToEdit(null);
+            }}
+            onSuccess={(updatedExam) => {
+              setExams(prev => prev.map(e => e.id === updatedExam.id ? updatedExam : e));
+            }}
+          />
+        )}
       </Modal>
 
       <Modal

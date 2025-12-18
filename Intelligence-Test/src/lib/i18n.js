@@ -208,6 +208,7 @@ const translations = {
     'instructor.createClassTitle': 'Tạo lớp học mới',
     'instructor.addStudentTitle': 'Thêm sinh viên vào lớp',
     'instructor.createExamTitle': 'Tạo bài thi mới',
+    'instructor.editExamTitle': 'Sửa bài thi',
     
     // Class management
     'class.name': 'Tên lớp học',
@@ -266,6 +267,10 @@ const translations = {
     'exam.noExams': 'Chưa có bài thi nào',
     'exam.publish': 'Công bố',
     'exam.published': 'Đã công bố bài thi!',
+    'exam.edit': 'Sửa',
+    'exam.update': 'Cập nhật',
+    'exam.updateSuccess': 'Cập nhật bài thi thành công!',
+    'exam.updateError': 'Lỗi khi cập nhật bài thi',
     'exam.title': 'Tên bài thi',
     'exam.titlePlaceholder': 'VD: Kiểm tra giữa kỳ AI',
     'exam.description': 'Mô tả',
@@ -647,6 +652,7 @@ const translations = {
     'instructor.createClassTitle': 'Create New Class',
     'instructor.addStudentTitle': 'Add Students to Class',
     'instructor.createExamTitle': 'Create New Exam',
+    'instructor.editExamTitle': 'Edit Exam',
     
     // Class management
     'class.name': 'Class Name',
@@ -705,6 +711,10 @@ const translations = {
     'exam.noExams': 'No exams yet',
     'exam.publish': 'Publish',
     'exam.published': 'Exam published!',
+    'exam.edit': 'Edit',
+    'exam.update': 'Update',
+    'exam.updateSuccess': 'Exam updated successfully!',
+    'exam.updateError': 'Error updating exam',
     'exam.title': 'Exam Title',
     'exam.titlePlaceholder': 'E.g.: AI Midterm Exam',
     'exam.description': 'Description',
