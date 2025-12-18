@@ -8,9 +8,10 @@ import { toast } from 'react-toastify';
 import {
   FileText, Users, Plus, Clock, BarChart3, CheckCircle, Trash2,
   Calendar, X, Save, Loader2, BookOpen, Shield, ClipboardList,
-  Edit2, GraduationCap, Activity, AlertTriangle, Search, LogOut, User
+  Edit2, GraduationCap, Activity, AlertTriangle, Search, LogOut, User, Settings
 } from 'lucide-react';
 import LanguageSwitcher from '../components/LanguageSwitcher';
+import ProfileSettings from '../components/ProfileSettings';
 import { ACADEMIC_YEAR_PAST_YEARS, ACADEMIC_YEAR_FUTURE_YEARS } from '../lib/constants';
 
 // ============================================
@@ -1436,7 +1437,7 @@ function QuestionForm({ question, onSave, onCancel, saving }) {
 
 function StudentAnalyticsTab({ classId, exams }) {
   const { t } = useLanguage();
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false); // Start with false since no exam is selected
   const [selectedExamId, setSelectedExamId] = useState('');
   const [sessions, setSessions] = useState([]);
   const [analyticsData, setAnalyticsData] = useState(null);
@@ -1974,6 +1975,7 @@ export default function InstructorDashboard() {
   const [searchQuery, setSearchQuery] = useState('');
   const [examSessions, setExamSessions] = useState([]);
   const [selectedExamForAnalytics, setSelectedExamForAnalytics] = useState(null);
+  const [showProfileSettings, setShowProfileSettings] = useState(false);
 
   // Handler to open edit exam modal
   const handleEditExam = (exam) => {
@@ -2202,10 +2204,15 @@ export default function InstructorDashboard() {
         
         <div className="flex items-center space-x-4">
           <LanguageSwitcher compact />
-          <div className="flex items-center space-x-2 text-sm font-medium text-gray-600 bg-gray-100 px-3 py-1.5 rounded-full">
+          <button
+            onClick={() => setShowProfileSettings(true)}
+            className="flex items-center space-x-2 text-sm font-medium text-gray-600 bg-gray-100 px-3 py-1.5 rounded-full hover:bg-gray-200 transition-colors cursor-pointer"
+            title={t('profile.settings') || 'Cài đặt tài khoản'}
+          >
             <GraduationCap className="w-4 h-4" />
             <span>{profile?.full_name || user?.email}</span>
-          </div>
+            <Settings className="w-3.5 h-3.5 text-gray-400" />
+          </button>
           <button
             onClick={handleLogout}
             className="flex items-center space-x-2 text-danger hover:bg-danger-50 px-4 py-2 rounded-lg transition-colors text-sm font-semibold"
@@ -2215,6 +2222,12 @@ export default function InstructorDashboard() {
           </button>
         </div>
       </nav>
+
+      {/* Profile Settings Modal */}
+      <ProfileSettings 
+        isOpen={showProfileSettings} 
+        onClose={() => setShowProfileSettings(false)} 
+      />
 
       <div className="flex">
         {/* Sidebar - Class List */}

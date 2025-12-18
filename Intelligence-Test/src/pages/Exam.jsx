@@ -409,15 +409,37 @@ export default function Exam() {
   }, []); // Run once on mount
 
   // Re-attach video stream when examStarted changes (video element changes between views)
+  // Use tiered delays to ensure the new video element has mounted before attaching stream.
+  // The DOM takes variable time to update, especially with animations, so we use multiple attempts.
+  // VIDEO_MOUNT_DELAY_SHORT: First retry after React batch updates (typically 50-100ms)
+  // VIDEO_MOUNT_DELAY_LONG: Second retry for slow devices or complex DOM updates (up to 500ms)
+  const VIDEO_MOUNT_DELAY_SHORT = 100;
+  const VIDEO_MOUNT_DELAY_LONG = 500;
+  
   useEffect(() => {
-    // Only if we have a stream and a video element, and the video doesn't have the stream attached
-    if (cameraStreamRef.current && videoRef.current && videoRef.current.srcObject !== cameraStreamRef.current) {
-      videoRef.current.srcObject = cameraStreamRef.current;
-      // Ensure video plays
-      videoRef.current.play().catch(err => {
-        console.warn('Video play failed:', err);
-      });
-    }
+    const attachStreamToVideo = () => {
+      // Only if we have a stream and a video element, and the video doesn't have the stream attached
+      if (cameraStreamRef.current && videoRef.current && videoRef.current.srcObject !== cameraStreamRef.current) {
+        console.log('[Exam] Re-attaching camera stream to video element');
+        videoRef.current.srcObject = cameraStreamRef.current;
+        // Ensure video plays
+        videoRef.current.play().catch(err => {
+          console.warn('Video play failed:', err);
+        });
+      }
+    };
+    
+    // Immediate attempt
+    attachStreamToVideo();
+    
+    // Tiered retries to handle DOM mounting timing
+    const timeoutId = setTimeout(attachStreamToVideo, VIDEO_MOUNT_DELAY_SHORT);
+    const timeoutId2 = setTimeout(attachStreamToVideo, VIDEO_MOUNT_DELAY_LONG);
+    
+    return () => {
+      clearTimeout(timeoutId);
+      clearTimeout(timeoutId2);
+    };
   }, [examStarted]);
 
   // ============================================
@@ -498,11 +520,18 @@ export default function Exam() {
 
     // Start frame processing when exam starts AND camera is ready
     // We need to check cameraStatus to ensure canvas context is available
-    if (examStarted && cameraStatus === 'ready' && videoRef.current && ctxRef.current) {
+    // Use a delayed start to ensure video element is mounted after examStarted changes
+    const FRAME_PROCESSING_DELAY = 600; // Wait for video element to mount and stream to attach
+    const FRAME_INTERVAL_MS = 200; // Process frames every 200ms (5 FPS)
+    
+    const startFrameProcessing = () => {
+      if (frameIntervalRef.current) return; // Already started
+      
       console.log('🎬 Starting AI frame processing...');
-      console.log('   Camera ready:', !!videoRef.current);
+      console.log('   Video ready:', !!videoRef.current);
       console.log('   Canvas context ready:', !!ctxRef.current);
       console.log('   Worker ready:', !!workerRef.current);
+      
       frameIntervalRef.current = setInterval(() => {
         if (videoRef.current && workerRef.current && ctxRef.current && !isSubmittingRef.current) {
           try {
@@ -523,16 +552,37 @@ export default function Exam() {
             console.warn('Error sending frame to worker:', err);
           }
         }
-      }, 200);
+      }, FRAME_INTERVAL_MS);
+    };
+    
+    let startTimeoutId = null;
+    
+    if (examStarted && cameraStatus === 'ready') {
+      // Wait for video element to mount and stream to attach
+      startTimeoutId = setTimeout(() => {
+        if (videoRef.current && ctxRef.current) {
+          startFrameProcessing();
+        } else {
+          console.warn('Video or canvas not ready after delay, retrying...');
+          // Retry after another delay
+          setTimeout(startFrameProcessing, 500);
+        }
+      }, FRAME_PROCESSING_DELAY);
     }
 
     return () => {
       window.removeEventListener('online', handleOnline);
       window.removeEventListener('offline', handleOffline);
 
+      // Clear timeout
+      if (startTimeoutId) {
+        clearTimeout(startTimeoutId);
+      }
+
       // Clear the frame interval
       if (frameIntervalRef.current) {
         clearInterval(frameIntervalRef.current);
+        frameIntervalRef.current = null;
       }
 
       // Terminate worker

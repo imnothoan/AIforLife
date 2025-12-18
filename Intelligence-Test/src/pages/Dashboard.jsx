@@ -5,9 +5,10 @@ import { useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'react-toastify';
-import { LogOut, FileText, User, PlayCircle, Clock, CheckCircle, AlertCircle, Loader2, BookOpen, Users, GraduationCap, ChevronRight, Camera, Shield } from 'lucide-react';
+import { LogOut, FileText, User, PlayCircle, Clock, CheckCircle, AlertCircle, Loader2, BookOpen, Users, GraduationCap, ChevronRight, Camera, Shield, Settings } from 'lucide-react';
 import LanguageSwitcher from '../components/LanguageSwitcher';
 import FaceVerification from '../components/FaceVerification';
+import ProfileSettings from '../components/ProfileSettings';
 
 export default function Dashboard() {
   const { user, profile, profileLoading, logout } = useAuth();
@@ -21,6 +22,7 @@ export default function Dashboard() {
   const [showClasses, setShowClasses] = useState(true);
   const [showFaceRegistration, setShowFaceRegistration] = useState(false);
   const [faceRegistered, setFaceRegistered] = useState(false);
+  const [showProfileSettings, setShowProfileSettings] = useState(false);
 
   // Check if face is already registered
   useEffect(() => {
@@ -315,12 +317,17 @@ export default function Dashboard() {
             SmartExam<span className="text-primary">Pro</span>
           </span>
         </div>
-        <div className="flex items-center space-x-6">
+        <div className="flex items-center space-x-4">
           <LanguageSwitcher compact />
-          <div className="flex items-center space-x-2 text-sm font-medium text-gray-600 bg-gray-100 px-3 py-1.5 rounded-full">
+          <button
+            onClick={() => setShowProfileSettings(true)}
+            className="flex items-center space-x-2 text-sm font-medium text-gray-600 bg-gray-100 px-3 py-1.5 rounded-full hover:bg-gray-200 transition-colors cursor-pointer"
+            title={t('profile.settings') || 'Cài đặt tài khoản'}
+          >
             <User className="w-4 h-4" />
             <span>{profile?.full_name || user?.email}</span>
-          </div>
+            <Settings className="w-3.5 h-3.5 text-gray-400" />
+          </button>
           <button
             onClick={handleLogout}
             className="flex items-center space-x-2 text-danger hover:bg-danger-50 px-4 py-2 rounded-lg transition-colors text-sm font-semibold"
@@ -330,6 +337,12 @@ export default function Dashboard() {
           </button>
         </div>
       </nav>
+
+      {/* Profile Settings Modal */}
+      <ProfileSettings 
+        isOpen={showProfileSettings} 
+        onClose={() => setShowProfileSettings(false)} 
+      />
 
       {/* Content */}
       <motion.div
@@ -426,10 +439,27 @@ export default function Dashboard() {
                 <div className="p-6">
                   <FaceVerification
                     mode="enroll"
-                    onEnrollComplete={(embedding) => {
-                      setFaceRegistered(true);
-                      setShowFaceRegistration(false);
-                      toast.success(t('profile.faceRegisteredSuccess') || 'Đăng ký khuôn mặt thành công!');
+                    onEnrollComplete={async (embedding, imageUrl) => {
+                      // Save face embedding to database
+                      try {
+                        const { error } = await supabase.rpc('update_face_embedding', {
+                          p_embedding: embedding,
+                          p_image_url: imageUrl
+                        });
+                        
+                        if (error) {
+                          console.error('Error saving face embedding:', error);
+                          toast.error(t('error.general') || 'Có lỗi xảy ra khi lưu');
+                          return;
+                        }
+                        
+                        setFaceRegistered(true);
+                        setShowFaceRegistration(false);
+                        toast.success(t('profile.faceRegisteredSuccess') || 'Đăng ký khuôn mặt thành công!');
+                      } catch (err) {
+                        console.error('Face registration error:', err);
+                        toast.error(t('error.general') || 'Có lỗi xảy ra');
+                      }
                     }}
                     onFailure={() => {
                       toast.error(t('face.failed') || 'Đăng ký thất bại. Vui lòng thử lại.');
