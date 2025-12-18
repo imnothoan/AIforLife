@@ -29,17 +29,19 @@ function isValidClassCode(code) {
 }
 
 /**
- * Convert datetime-local value to ISO string with proper timezone handling
- * This fixes the issue where datetime-local (which has no timezone) is interpreted as UTC
- * when it should be interpreted as local time
+ * Convert datetime-local value to ISO string for database storage
+ * datetime-local input gives a string like "2024-12-18T12:00" which is local time
+ * new Date() interprets this as local time, then toISOString() converts to UTC
+ * Supabase TIMESTAMPTZ stores in UTC and converts back to local when reading
+ * This ensures consistent timezone handling across the application
  * @param {string} datetimeLocalValue - Value from datetime-local input (e.g., "2024-12-18T12:00")
- * @returns {string} ISO string with timezone (e.g., "2024-12-18T12:00:00.000+07:00")
+ * @returns {string} ISO string in UTC (e.g., "2024-12-18T05:00:00.000Z" for UTC+7)
  */
 function toISOWithTimezone(datetimeLocalValue) {
   if (!datetimeLocalValue) return null;
-  // Create date from local datetime string
+  // Create date from local datetime string - JavaScript interprets this as local time
   const date = new Date(datetimeLocalValue);
-  // Return ISO string - this preserves the local time meaning
+  // Convert to ISO/UTC format for database storage
   return date.toISOString();
 }
 
@@ -530,12 +532,12 @@ function EditExamForm({ exam, onClose, onSuccess }) {
 
       if (error) throw error;
 
-      toast.success(t('exam.updateSuccess') || 'Cập nhật bài thi thành công!');
+      toast.success(t('exam.updateSuccess'));
       onSuccess?.(data);
       onClose();
     } catch (error) {
       console.error('Update exam error:', error);
-      toast.error(t('exam.updateError') || 'Lỗi khi cập nhật bài thi');
+      toast.error(t('exam.updateError'));
     } finally {
       setLoading(false);
     }
@@ -710,7 +712,7 @@ function EditExamForm({ exam, onClose, onSuccess }) {
           ) : (
             <Save className="w-5 h-5 mr-2" />
           )}
-          {t('exam.update') || 'Cập nhật'}
+          {t('exam.update')}
         </button>
       </div>
     </form>
@@ -2383,10 +2385,10 @@ export default function InstructorDashboard() {
                                 <button 
                                   onClick={() => handleEditExam(exam)}
                                   className="btn-secondary text-sm"
-                                  title={t('exam.edit') || 'Sửa bài thi'}
+                                  title={t('exam.edit')}
                                 >
                                   <Edit2 className="w-4 h-4 mr-1" />
-                                  {t('exam.edit') || 'Sửa'}
+                                  {t('exam.edit')}
                                 </button>
                                 
                                 {exam.status === 'draft' && (
@@ -2622,7 +2624,7 @@ export default function InstructorDashboard() {
           setShowEditExam(false);
           setExamToEdit(null);
         }}
-        title={t('instructor.editExamTitle') || 'Sửa bài thi'}
+        title={t('instructor.editExamTitle')}
       >
         {examToEdit && (
           <EditExamForm

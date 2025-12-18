@@ -65,7 +65,7 @@ export default function Dashboard() {
               console.log('[Dashboard] Loaded enrollments via RPC:', enrollmentData.length, enrollmentData);
             }
           } else {
-            throw new Error(rpcError?.message || rpcResult?.error || 'RPC not available');
+            throw new Error(rpcError?.message || rpcResult?.error || 'Failed to load enrollments via RPC function');
           }
         } catch (rpcErr) {
           console.warn('[Dashboard] RPC get_my_enrollments failed, trying direct query:', rpcErr.message);
