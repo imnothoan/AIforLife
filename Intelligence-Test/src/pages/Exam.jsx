@@ -409,36 +409,79 @@ export default function Exam() {
   }, []); // Run once on mount
 
   // Re-attach video stream when examStarted changes (video element changes between views)
-  // Use tiered delays to ensure the new video element has mounted before attaching stream.
+  // Use tiered delays and mutation observer to ensure the new video element has mounted before attaching stream.
   // The DOM takes variable time to update, especially with animations, so we use multiple attempts.
-  // VIDEO_MOUNT_DELAY_SHORT: First retry after React batch updates (typically 50-100ms)
-  // VIDEO_MOUNT_DELAY_LONG: Second retry for slow devices or complex DOM updates (up to 500ms)
-  const VIDEO_MOUNT_DELAY_SHORT = 100;
-  const VIDEO_MOUNT_DELAY_LONG = 500;
+  const VIDEO_MOUNT_DELAYS = [50, 100, 200, 500, 1000]; // Multiple retry delays for reliability
+  const VIDEO_ATTACHMENT_TIMEOUT_MS = 3000; // Stop checking after this time
+  const VIDEO_CHECK_INTERVAL_MS = 250; // Interval for checking video readiness
+  
+  // Helper function to check if camera stream is still active
+  const isStreamActive = (stream) => {
+    if (!stream) return false;
+    const tracks = stream.getTracks();
+    return tracks.length > 0 && tracks.some(track => track.readyState === 'live');
+  };
   
   useEffect(() => {
     const attachStreamToVideo = () => {
-      // Only if we have a stream and a video element, and the video doesn't have the stream attached
-      if (cameraStreamRef.current && videoRef.current && videoRef.current.srcObject !== cameraStreamRef.current) {
-        console.log('[Exam] Re-attaching camera stream to video element');
-        videoRef.current.srcObject = cameraStreamRef.current;
-        // Ensure video plays
-        videoRef.current.play().catch(err => {
-          console.warn('Video play failed:', err);
-        });
+      // Only if we have a stream and a video element
+      if (cameraStreamRef.current && videoRef.current) {
+        const stream = cameraStreamRef.current;
+        const video = videoRef.current;
+        
+        // Check if stream is still active
+        if (!isStreamActive(stream)) {
+          console.warn('[Exam] Camera stream is not active, attempting to restart camera');
+          retryCamera();
+          return;
+        }
+        
+        // Check if video already has the correct stream
+        if (video.srcObject !== stream) {
+          console.log('[Exam] Attaching camera stream to video element');
+          video.srcObject = stream;
+        }
+        
+        // Ensure video plays (might need to restart if paused)
+        if (video.paused || video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) {
+          video.play().catch(err => {
+            console.warn('Video play failed:', err);
+            // Try muted autoplay as fallback (browser autoplay policy)
+            video.muted = true;
+            video.play().catch(() => {});
+          });
+        }
       }
     };
     
     // Immediate attempt
     attachStreamToVideo();
     
-    // Tiered retries to handle DOM mounting timing
-    const timeoutId = setTimeout(attachStreamToVideo, VIDEO_MOUNT_DELAY_SHORT);
-    const timeoutId2 = setTimeout(attachStreamToVideo, VIDEO_MOUNT_DELAY_LONG);
+    // Multiple tiered retries to handle DOM mounting timing
+    const timeoutIds = VIDEO_MOUNT_DELAYS.map(delay => 
+      setTimeout(attachStreamToVideo, delay)
+    );
+    
+    // Also observe for video element readiness
+    const checkInterval = setInterval(() => {
+      if (videoRef.current && cameraStreamRef.current) {
+        attachStreamToVideo();
+        // Stop checking once video is playing
+        if (videoRef.current.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) {
+          clearInterval(checkInterval);
+        }
+      }
+    }, VIDEO_CHECK_INTERVAL_MS);
+    
+    // Clear after timeout (should be attached by then)
+    const cleanupTimeout = setTimeout(() => {
+      clearInterval(checkInterval);
+    }, VIDEO_ATTACHMENT_TIMEOUT_MS);
     
     return () => {
-      clearTimeout(timeoutId);
-      clearTimeout(timeoutId2);
+      timeoutIds.forEach(id => clearTimeout(id));
+      clearInterval(checkInterval);
+      clearTimeout(cleanupTimeout);
     };
   }, [examStarted]);
 
@@ -520,15 +563,28 @@ export default function Exam() {
 
     // Start frame processing when exam starts AND camera is ready
     // We need to check cameraStatus to ensure canvas context is available
-    // Use a delayed start to ensure video element is mounted after examStarted changes
-    const FRAME_PROCESSING_DELAY = 600; // Wait for video element to mount and stream to attach
+    // Use multiple retry attempts with increasing delays to ensure video element is mounted
+    const FRAME_PROCESSING_DELAYS = [200, 500, 1000, 1500, 2000]; // Multiple retry delays
     const FRAME_INTERVAL_MS = 200; // Process frames every 200ms (5 FPS)
     
     const startFrameProcessing = () => {
       if (frameIntervalRef.current) return; // Already started
       
+      // Double-check video is ready
+      if (!videoRef.current || !ctxRef.current || !workerRef.current) {
+        console.log('🎬 Frame processing prerequisites not met yet');
+        return false;
+      }
+      
+      // Check if video has data
+      if (videoRef.current.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) {
+        console.log('🎬 Video not ready yet, readyState:', videoRef.current.readyState);
+        return false;
+      }
+      
       console.log('🎬 Starting AI frame processing...');
-      console.log('   Video ready:', !!videoRef.current);
+      console.log('   Video ready:', !!videoRef.current, 'readyState:', videoRef.current?.readyState);
+      console.log('   Video dimensions:', videoRef.current?.videoWidth, 'x', videoRef.current?.videoHeight);
       console.log('   Canvas context ready:', !!ctxRef.current);
       console.log('   Worker ready:', !!workerRef.current);
       
@@ -553,30 +609,52 @@ export default function Exam() {
           }
         }
       }, FRAME_INTERVAL_MS);
+      
+      return true;
     };
     
-    let startTimeoutId = null;
+    const timeoutIds = [];
+    let checkIntervalId = null;
     
     if (examStarted && cameraStatus === 'ready') {
-      // Wait for video element to mount and stream to attach
-      startTimeoutId = setTimeout(() => {
-        if (videoRef.current && ctxRef.current) {
-          startFrameProcessing();
+      // Try multiple times with increasing delays
+      FRAME_PROCESSING_DELAYS.forEach(delay => {
+        const id = setTimeout(() => {
+          if (!frameIntervalRef.current) {
+            startFrameProcessing();
+          }
+        }, delay);
+        timeoutIds.push(id);
+      });
+      
+      // Also use an interval check for reliability
+      checkIntervalId = setInterval(() => {
+        if (!frameIntervalRef.current) {
+          const started = startFrameProcessing();
+          if (started) {
+            clearInterval(checkIntervalId);
+          }
         } else {
-          console.warn('Video or canvas not ready after delay, retrying...');
-          // Retry after another delay
-          setTimeout(startFrameProcessing, 500);
+          clearInterval(checkIntervalId);
         }
-      }, FRAME_PROCESSING_DELAY);
+      }, 300);
+      
+      // Stop checking after 5 seconds
+      timeoutIds.push(setTimeout(() => {
+        if (checkIntervalId) clearInterval(checkIntervalId);
+      }, 5000));
     }
 
     return () => {
       window.removeEventListener('online', handleOnline);
       window.removeEventListener('offline', handleOffline);
 
-      // Clear timeout
-      if (startTimeoutId) {
-        clearTimeout(startTimeoutId);
+      // Clear all timeouts
+      timeoutIds.forEach(id => clearTimeout(id));
+      
+      // Clear check interval
+      if (checkIntervalId) {
+        clearInterval(checkIntervalId);
       }
 
       // Clear the frame interval

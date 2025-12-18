@@ -22,7 +22,7 @@ const NAME_MAX_LENGTH = 100;
  * @param {function} onClose - Callback when modal is closed
  */
 export default function ProfileSettings({ isOpen, onClose }) {
-  const { user, profile, updateProfile } = useAuth();
+  const { user, profile, updateProfile, refetchProfile } = useAuth();
   const { t } = useLanguage();
   
   const [loading, setLoading] = useState(false);
@@ -106,6 +106,10 @@ export default function ProfileSettings({ isOpen, onClose }) {
       }
       
       setShowFaceRegistration(false);
+      
+      // Refresh profile to sync face verification status
+      await refetchProfile();
+      
       toast.success(t('profile.faceRegisteredSuccess') || 'Cập nhật khuôn mặt thành công!');
     } catch (err) {
       console.error('Face registration error:', err);

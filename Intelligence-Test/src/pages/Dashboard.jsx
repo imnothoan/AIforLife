@@ -11,7 +11,7 @@ import FaceVerification from '../components/FaceVerification';
 import ProfileSettings from '../components/ProfileSettings';
 
 export default function Dashboard() {
-  const { user, profile, profileLoading, logout } = useAuth();
+  const { user, profile, profileLoading, logout, refetchProfile } = useAuth();
   const { t } = useLanguage();
   const navigate = useNavigate();
 
@@ -455,6 +455,10 @@ export default function Dashboard() {
                         
                         setFaceRegistered(true);
                         setShowFaceRegistration(false);
+                        
+                        // Refresh profile to sync face verification status
+                        await refetchProfile();
+                        
                         toast.success(t('profile.faceRegisteredSuccess') || 'Đăng ký khuôn mặt thành công!');
                       } catch (err) {
                         console.error('Face registration error:', err);
