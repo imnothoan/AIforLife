@@ -341,22 +341,24 @@ export default function FaceVerification({
   // Real-time face detection for guidance
   const startFaceDetectionLoop = useCallback(() => {
     let frameCount = 0;
-    let retryDelay = 100; // Initial retry delay
+    let retryAttempts = 0;
+    const MAX_RETRY_ATTEMPTS = 10;
+    const BASE_RETRY_DELAY = 100;
     
     const detectFace = async () => {
       // Use statusRef.current to avoid stale closure
       if (!videoRef.current || !faceLandmarkerRef.current || statusRef.current !== 'ready') {
-        if (frameCount === 0) {
-          console.log('[FaceVerification] Detection loop waiting for prerequisites:', {
+        // Only retry if we haven't exceeded max attempts and component is still initializing or ready
+        if (retryAttempts < MAX_RETRY_ATTEMPTS && (statusRef.current === 'ready' || statusRef.current === 'initializing')) {
+          console.log('[FaceVerification] Detection loop waiting for prerequisites (attempt ' + (retryAttempts + 1) + '):', {
             hasVideo: !!videoRef.current,
             hasLandmarker: !!faceLandmarkerRef.current,
             status: statusRef.current
           });
-          // Retry after a short delay if prerequisites aren't ready yet
-          if (statusRef.current === 'ready' || statusRef.current === 'initializing') {
-            setTimeout(detectFace, retryDelay);
-            retryDelay = Math.min(retryDelay * 1.5, 1000); // Exponential backoff up to 1s
-          }
+          // Calculate delay with exponential backoff
+          const currentDelay = Math.min(BASE_RETRY_DELAY * Math.pow(1.5, retryAttempts), 1000);
+          retryAttempts++;
+          setTimeout(detectFace, currentDelay);
         }
         return;
       }
