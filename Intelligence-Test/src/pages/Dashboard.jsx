@@ -5,8 +5,9 @@ import { useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'react-toastify';
-import { LogOut, FileText, User, PlayCircle, Clock, CheckCircle, AlertCircle, Loader2, BookOpen, Users, GraduationCap, ChevronRight } from 'lucide-react';
+import { LogOut, FileText, User, PlayCircle, Clock, CheckCircle, AlertCircle, Loader2, BookOpen, Users, GraduationCap, ChevronRight, Camera, Shield } from 'lucide-react';
 import LanguageSwitcher from '../components/LanguageSwitcher';
+import FaceVerification from '../components/FaceVerification';
 
 export default function Dashboard() {
   const { user, profile, profileLoading, logout } = useAuth();
@@ -18,6 +19,15 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true);
   const [profileTimeoutReached, setProfileTimeoutReached] = useState(false);
   const [showClasses, setShowClasses] = useState(true);
+  const [showFaceRegistration, setShowFaceRegistration] = useState(false);
+  const [faceRegistered, setFaceRegistered] = useState(false);
+
+  // Check if face is already registered
+  useEffect(() => {
+    if (profile?.face_embedding || profile?.face_enrolled_at) {
+      setFaceRegistered(true);
+    }
+  }, [profile]);
 
   // Profile loading timeout - prevent infinite waiting
   useEffect(() => {
@@ -43,34 +53,54 @@ export default function Dashboard() {
         if (import.meta.env.DEV) {
           console.log('[Dashboard] Loading enrolled classes for user:', user.id);
         }
-        const { data: enrollmentData, error: enrollError } = await supabase
-          .from('enrollments')
-          .select(`
-            id,
-            status,
-            enrolled_at,
-            class:classes(
+        
+        // Try RPC first for reliable data loading (bypasses RLS join issues)
+        let enrollmentData = [];
+        try {
+          const { data: rpcResult, error: rpcError } = await supabase.rpc('get_my_enrollments');
+          
+          if (!rpcError && rpcResult?.success) {
+            enrollmentData = rpcResult.enrollments || [];
+            if (import.meta.env.DEV) {
+              console.log('[Dashboard] Loaded enrollments via RPC:', enrollmentData.length, enrollmentData);
+            }
+          } else {
+            throw new Error(rpcError?.message || rpcResult?.error || 'Failed to load enrollments via RPC function');
+          }
+        } catch (rpcErr) {
+          console.warn('[Dashboard] RPC get_my_enrollments failed, trying direct query:', rpcErr.message);
+          // Fallback to direct query
+          const { data: directData, error: enrollError } = await supabase
+            .from('enrollments')
+            .select(`
               id,
-              name,
-              code,
-              description,
-              semester,
-              academic_year,
-              instructor:profiles!classes_instructor_id_fkey(full_name, email)
-            )
-          `)
-          .eq('student_id', user.id)
-          .order('enrolled_at', { ascending: false });
+              status,
+              enrolled_at,
+              class:classes(
+                id,
+                name,
+                code,
+                description,
+                semester,
+                academic_year,
+                instructor:profiles!classes_instructor_id_fkey(full_name, email)
+              )
+            `)
+            .eq('student_id', user.id)
+            .order('enrolled_at', { ascending: false });
 
-        if (enrollError) {
-          console.error('[Dashboard] Error loading enrollments:', enrollError);
-          throw enrollError;
+          if (enrollError) {
+            console.error('[Dashboard] Error loading enrollments:', enrollError);
+            throw enrollError;
+          }
+          
+          enrollmentData = directData || [];
+          if (import.meta.env.DEV) {
+            console.log('[Dashboard] Loaded enrollments via direct query:', enrollmentData.length, enrollmentData);
+          }
         }
         
-        if (import.meta.env.DEV) {
-          console.log('[Dashboard] Loaded enrollments:', enrollmentData?.length || 0, enrollmentData);
-        }
-        setClasses(enrollmentData || []);
+        setClasses(enrollmentData);
       } catch (err) {
         console.error('Load classes error:', err);
       }
@@ -316,6 +346,106 @@ export default function Dashboard() {
             {t('dashboard.selectExam')}
           </p>
         </div>
+
+        {/* Face Registration Section */}
+        <motion.div 
+          variants={itemVariants}
+          className="mb-8"
+        >
+          <div className="bg-paper rounded-xl border border-gray-100 p-6 shadow-sm">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center space-x-3">
+                <div className={`p-3 rounded-full ${faceRegistered ? 'bg-success-100' : 'bg-warning-100'}`}>
+                  {faceRegistered ? (
+                    <Shield className="w-6 h-6 text-success-600" />
+                  ) : (
+                    <Camera className="w-6 h-6 text-warning-600" />
+                  )}
+                </div>
+                <div>
+                  <h3 className="font-bold text-text-main">
+                    {t('profile.faceVerification') || 'Xác minh khuôn mặt'}
+                  </h3>
+                  <p className="text-sm text-gray-500">
+                    {faceRegistered 
+                      ? (t('profile.faceRegistered') || 'Khuôn mặt đã được đăng ký')
+                      : (t('profile.faceNotRegistered') || 'Chưa đăng ký khuôn mặt - cần đăng ký để làm bài thi')}
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowFaceRegistration(true)}
+                className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+                  faceRegistered 
+                    ? 'bg-gray-100 text-gray-700 hover:bg-gray-200' 
+                    : 'bg-primary text-white hover:bg-primary-600'
+                }`}
+              >
+                {faceRegistered 
+                  ? (t('profile.updateFace') || 'Cập nhật ảnh')
+                  : (t('profile.registerFace') || 'Đăng ký ngay')}
+              </button>
+            </div>
+            
+            {!faceRegistered && (
+              <div className="bg-warning-50 rounded-lg p-3 text-sm text-warning-700 flex items-start space-x-2">
+                <AlertCircle className="w-5 h-5 flex-shrink-0 mt-0.5" />
+                <p>
+                  {t('profile.faceRequiredWarning') || 'Bạn cần đăng ký khuôn mặt trước khi tham gia bài thi để hệ thống có thể xác minh danh tính.'}
+                </p>
+              </div>
+            )}
+          </div>
+        </motion.div>
+
+        {/* Face Registration Modal */}
+        <AnimatePresence>
+          {showFaceRegistration && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4"
+              onClick={() => setShowFaceRegistration(false)}
+            >
+              <motion.div
+                initial={{ scale: 0.95, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                exit={{ scale: 0.95, opacity: 0 }}
+                className="bg-paper rounded-2xl shadow-xl max-w-2xl w-full max-h-[90vh] overflow-hidden"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <div className="p-6 border-b border-gray-200">
+                  <h2 className="text-xl font-bold text-text-main">
+                    {t('profile.faceRegistrationTitle') || 'Đăng ký khuôn mặt'}
+                  </h2>
+                  <p className="text-sm text-gray-500 mt-1">
+                    {t('profile.faceRegistrationDesc') || 'Chụp ảnh khuôn mặt để sử dụng cho xác minh danh tính khi thi'}
+                  </p>
+                </div>
+                <div className="p-6">
+                  <FaceVerification
+                    mode="enroll"
+                    onEnrollComplete={(embedding) => {
+                      setFaceRegistered(true);
+                      setShowFaceRegistration(false);
+                      toast.success(t('profile.faceRegisteredSuccess') || 'Đăng ký khuôn mặt thành công!');
+                    }}
+                    onFailure={() => {
+                      toast.error(t('face.failed') || 'Đăng ký thất bại. Vui lòng thử lại.');
+                    }}
+                  />
+                  <button
+                    onClick={() => setShowFaceRegistration(false)}
+                    className="mt-4 w-full py-2 text-gray-600 hover:text-gray-800 text-sm font-medium"
+                  >
+                    {t('common.cancel') || 'Hủy'}
+                  </button>
+                </div>
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
 
         {/* My Classes Section */}
         {classes.length > 0 && (

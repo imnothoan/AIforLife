@@ -208,6 +208,7 @@ const translations = {
     'instructor.createClassTitle': 'Tạo lớp học mới',
     'instructor.addStudentTitle': 'Thêm sinh viên vào lớp',
     'instructor.createExamTitle': 'Tạo bài thi mới',
+    'instructor.editExamTitle': 'Sửa bài thi',
     
     // Class management
     'class.name': 'Tên lớp học',
@@ -266,6 +267,10 @@ const translations = {
     'exam.noExams': 'Chưa có bài thi nào',
     'exam.publish': 'Công bố',
     'exam.published': 'Đã công bố bài thi!',
+    'exam.edit': 'Sửa',
+    'exam.update': 'Cập nhật',
+    'exam.updateSuccess': 'Cập nhật bài thi thành công!',
+    'exam.updateError': 'Lỗi khi cập nhật bài thi',
     'exam.title': 'Tên bài thi',
     'exam.titlePlaceholder': 'VD: Kiểm tra giữa kỳ AI',
     'exam.description': 'Mô tả',
@@ -427,6 +432,17 @@ const translations = {
     'face.randomCheckDesc': 'Hệ thống yêu cầu xác minh lại danh tính của bạn.',
     'face.timeLimit': 'Bạn có 30 giây để hoàn thành xác minh.',
     'face.countdown': 'Còn lại: {seconds} giây',
+    
+    // Profile & Face Registration
+    'profile.faceVerification': 'Xác minh khuôn mặt',
+    'profile.faceRegistered': 'Khuôn mặt đã được đăng ký',
+    'profile.faceNotRegistered': 'Chưa đăng ký khuôn mặt - cần đăng ký để làm bài thi',
+    'profile.updateFace': 'Cập nhật ảnh',
+    'profile.registerFace': 'Đăng ký ngay',
+    'profile.faceRequiredWarning': 'Bạn cần đăng ký khuôn mặt trước khi tham gia bài thi để hệ thống có thể xác minh danh tính.',
+    'profile.faceRegistrationTitle': 'Đăng ký khuôn mặt',
+    'profile.faceRegistrationDesc': 'Chụp ảnh khuôn mặt để sử dụng cho xác minh danh tính khi thi',
+    'profile.faceRegisteredSuccess': 'Đăng ký khuôn mặt thành công!',
     
     // Language
     'language.select': 'Ngôn ngữ',
@@ -636,6 +652,7 @@ const translations = {
     'instructor.createClassTitle': 'Create New Class',
     'instructor.addStudentTitle': 'Add Students to Class',
     'instructor.createExamTitle': 'Create New Exam',
+    'instructor.editExamTitle': 'Edit Exam',
     
     // Class management
     'class.name': 'Class Name',
@@ -694,6 +711,10 @@ const translations = {
     'exam.noExams': 'No exams yet',
     'exam.publish': 'Publish',
     'exam.published': 'Exam published!',
+    'exam.edit': 'Edit',
+    'exam.update': 'Update',
+    'exam.updateSuccess': 'Exam updated successfully!',
+    'exam.updateError': 'Error updating exam',
     'exam.title': 'Exam Title',
     'exam.titlePlaceholder': 'E.g.: AI Midterm Exam',
     'exam.description': 'Description',
@@ -855,6 +876,17 @@ const translations = {
     'face.moveCloser': 'Move closer to the camera',
     'face.moveFarther': 'Move away from the camera',
     'face.centerFace': 'Center your face in the frame',
+    
+    // Profile & Face Registration
+    'profile.faceVerification': 'Face Verification',
+    'profile.faceRegistered': 'Face has been registered',
+    'profile.faceNotRegistered': 'Face not registered - required for exams',
+    'profile.updateFace': 'Update photo',
+    'profile.registerFace': 'Register now',
+    'profile.faceRequiredWarning': 'You need to register your face before taking exams so the system can verify your identity.',
+    'profile.faceRegistrationTitle': 'Face Registration',
+    'profile.faceRegistrationDesc': 'Take a photo of your face for identity verification during exams',
+    'profile.faceRegisteredSuccess': 'Face registration successful!',
     
     // Language
     'language.select': 'Language',

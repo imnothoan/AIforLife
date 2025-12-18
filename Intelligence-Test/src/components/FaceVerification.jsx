@@ -12,10 +12,10 @@ import { MEDIAPIPE_CONFIG } from '../lib/constants';
 // ============================================
 
 const FACE_CONFIG = {
-  MIN_DETECTION_CONFIDENCE: 0.7,
-  MIN_FACE_SIZE: 0.15, // Minimum face size as percentage of frame
-  MAX_FACE_SIZE: 0.85, // Maximum face size as percentage of frame
-  SIMILARITY_THRESHOLD: 0.6, // Cosine similarity threshold for match
+  MIN_DETECTION_CONFIDENCE: 0.5, // Lowered from 0.7 for better detection in various lighting
+  MIN_FACE_SIZE: 0.08, // Lowered from 0.15 to allow faces further from camera
+  MAX_FACE_SIZE: 0.90, // Increased from 0.85 for closer faces
+  SIMILARITY_THRESHOLD: 0.55, // Lowered from 0.6 for more forgiving matching
   VERIFICATION_TIMEOUT: 30, // Seconds
   // Anti-spoofing thresholds
   BLINK_THRESHOLD: 0.3, // Eye aspect ratio threshold for blink detection
@@ -251,7 +251,7 @@ export default function FaceVerification({
                 runningMode: "IMAGE",
                 numFaces: 2, // Detect up to 2 to check for multiple people
                 minFaceDetectionConfidence: FACE_CONFIG.MIN_DETECTION_CONFIDENCE,
-                minTrackingConfidence: 0.5,
+                minTrackingConfidence: 0.4, // Lowered from 0.5 for better tracking
               }),
               20000,
               `FaceLandmarker model (${delegate})`
@@ -649,11 +649,14 @@ export default function FaceVerification({
       )}
 
       {/* Action buttons */}
+      {/* NOTE: Capture is now allowed when face is detected, regardless of quality (good/too_small/etc)
+          This improves usability by allowing captures in suboptimal conditions while still providing
+          quality feedback to the user. The face detection algorithm will verify quality on capture. */}
       <div className="flex space-x-3">
         {status === 'ready' && (
           <button
             onClick={handleCapture}
-            disabled={faceQuality !== 'good'}
+            disabled={!faceDetected || faceQuality === 'multiple'}
             className="flex-1 btn-primary py-3 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <Camera className="w-5 h-5 mr-2" />
