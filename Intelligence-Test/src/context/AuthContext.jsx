@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useState, useCallback } from 'react';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
+import { AUTH_LOADING_TIMEOUT_MS, PROFILE_FETCH_TIMEOUT_MS, PROFILE_MAX_RETRIES } from '../lib/constants';
 
 const AuthContext = createContext();
 
@@ -65,9 +66,9 @@ export const AuthProvider = ({ children }) => {
 
   // Fetch user profile from database with retry logic
   const fetchProfile = useCallback(async (userId, retryCount = 0) => {
-    const MAX_RETRIES = 2; // Reduced retries for faster failure
-    const BASE_RETRY_DELAY = 300; // Reduced delay
-    const FETCH_TIMEOUT = 3000; // 3 second timeout per fetch attempt
+    const MAX_RETRIES = PROFILE_MAX_RETRIES;
+    const BASE_RETRY_DELAY = 200; // Reduced delay for faster fallback
+    const FETCH_TIMEOUT = PROFILE_FETCH_TIMEOUT_MS;
     
     // Calculate exponential backoff delay
     const getBackoffDelay = (attempt) => BASE_RETRY_DELAY * Math.pow(2, attempt);
@@ -224,8 +225,7 @@ export const AuthProvider = ({ children }) => {
     let sessionCheckComplete = false;
     
     // Add timeout to prevent infinite loading
-    // This timeout will fire if initAuth doesn't complete within 3 seconds
-    // Reduced from 5s to 3s for better UX on slow networks
+    // This timeout will fire if initAuth doesn't complete within AUTH_LOADING_TIMEOUT_MS
     const loadingTimeout = setTimeout(() => {
       if (isMounted && !sessionCheckComplete) {
         console.warn('Auth loading timeout - forcing completion');
@@ -235,7 +235,7 @@ export const AuthProvider = ({ children }) => {
           setProfileLoading(false);
         }
       }
-    }, 3000); // 3 second timeout for better UX
+    }, AUTH_LOADING_TIMEOUT_MS);
 
     // Check active session on mount
     const initAuth = async () => {
@@ -243,7 +243,7 @@ export const AuthProvider = ({ children }) => {
         // Add timeout to getSession call
         const sessionPromise = supabase.auth.getSession();
         const timeoutPromise = new Promise((_, reject) => 
-          setTimeout(() => reject(new Error('Session check timeout')), 3000)
+          setTimeout(() => reject(new Error('Session check timeout')), AUTH_LOADING_TIMEOUT_MS)
         );
         
         let session = null;
@@ -265,7 +265,7 @@ export const AuthProvider = ({ children }) => {
           // Track locally whether profile was successfully set
           let profileWasSet = false;
           
-          // Add overall timeout to prevent infinite loading
+          // Add overall timeout to prevent infinite loading - use faster timeout
           const profileFetchPromise = (async () => {
             try {
               const userProfile = await fetchProfile(currentUser.id);
@@ -287,7 +287,7 @@ export const AuthProvider = ({ children }) => {
             setTimeout(() => {
               console.warn('Profile fetch timeout in initAuth - using fallback');
               resolve();
-            }, 5000); // 5 second overall timeout
+            }, AUTH_LOADING_TIMEOUT_MS); // Use shorter timeout
           });
           
           await Promise.race([profileFetchPromise, timeoutPromise]);
@@ -334,7 +334,7 @@ export const AuthProvider = ({ children }) => {
         // Track locally whether profile was successfully set
         let profileWasSet = false;
         
-        // Add overall timeout to prevent infinite loading
+        // Add overall timeout to prevent infinite loading - use faster timeout
         const profileFetchPromise = (async () => {
           try {
             const userProfile = await fetchProfile(currentUser.id);
@@ -356,7 +356,7 @@ export const AuthProvider = ({ children }) => {
           setTimeout(() => {
             console.warn('Profile fetch timeout in onAuthStateChange - using fallback');
             resolve();
-          }, 5000); // 5 second overall timeout
+          }, AUTH_LOADING_TIMEOUT_MS); // Use shorter timeout
         });
         
         await Promise.race([profileFetchPromise, timeoutPromise]);

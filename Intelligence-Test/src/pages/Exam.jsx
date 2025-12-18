@@ -796,7 +796,9 @@ export default function Exam() {
   // PROCTORING LOG HELPER
   // ============================================
   const logProctoring = async (eventType, details) => {
+    // Skip logging if no session or if in demo mode
     if (!sessionId) return;
+    if (DEMO_SESSION_IDS.includes(sessionId) || DEMO_EXAM_IDS.includes(examId)) return;
     
     try {
       await supabase.from('proctoring_logs').insert({
@@ -806,7 +808,8 @@ export default function Exam() {
         severity: eventType.includes('detected') ? 'critical' : 'warning'
       });
     } catch (e) {
-      console.error('Failed to log proctoring event:', e);
+      // Silently fail for proctoring logs - don't interrupt the exam
+      console.warn('Failed to log proctoring event:', e?.message || e);
     }
   };
 

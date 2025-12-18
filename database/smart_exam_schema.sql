@@ -279,6 +279,19 @@ CREATE POLICY "Instructors can view enrolled students"
     )
   );
 
+-- Students can view instructor profiles for their enrolled classes
+DROP POLICY IF EXISTS "Students can view instructors of enrolled classes" ON public.profiles;
+CREATE POLICY "Students can view instructors of enrolled classes"
+  ON public.profiles FOR SELECT
+  USING (
+    EXISTS (
+      SELECT 1 FROM public.enrollments e
+      JOIN public.classes c ON c.id = e.class_id
+      WHERE e.student_id = auth.uid()
+      AND c.instructor_id = profiles.id
+    )
+  );
+
 -- Instructors can lookup any student profile to add to their class
 -- This is needed because instructors need to find students before they are enrolled
 DROP POLICY IF EXISTS "Instructors can lookup student profiles" ON public.profiles;
@@ -907,7 +920,31 @@ RETURNS JSONB AS $$
 DECLARE
   v_student_id UUID;
   v_instructor_id UUID;
+  v_caller_id UUID;
+  v_user_email TEXT;
+  v_user_name TEXT;
+  v_user_role TEXT;
 BEGIN
+  v_caller_id := auth.uid();
+  
+  -- Get user info from auth.users for fallback profile creation
+  SELECT email, raw_user_meta_data->>'full_name', raw_user_meta_data->>'role' 
+  INTO v_user_email, v_user_name, v_user_role
+  FROM auth.users
+  WHERE id = v_caller_id;
+  
+  -- Ensure caller's profile exists (handles race condition with trigger)
+  IF v_user_email IS NOT NULL THEN
+    INSERT INTO public.profiles (id, email, full_name, role)
+    VALUES (
+      v_caller_id, 
+      LOWER(TRIM(v_user_email)), 
+      COALESCE(v_user_name, split_part(v_user_email, '@', 1)),
+      COALESCE(v_user_role, 'student')
+    )
+    ON CONFLICT (id) DO NOTHING;
+  END IF;
+  
   -- Verify caller is the instructor of this class
   SELECT instructor_id INTO v_instructor_id
   FROM public.classes
@@ -917,7 +954,7 @@ BEGIN
     RETURN jsonb_build_object('success', false, 'error', 'class_not_found');
   END IF;
   
-  IF v_instructor_id != auth.uid() THEN
+  IF v_instructor_id != v_caller_id THEN
     RETURN jsonb_build_object('success', false, 'error', 'not_authorized');
   END IF;
   
@@ -966,8 +1003,31 @@ RETURNS JSONB AS $$
 DECLARE
   v_user_role TEXT;
   v_new_class_id UUID;
+  v_user_email TEXT;
+  v_user_name TEXT;
 BEGIN
-  -- Check if the user is an instructor or admin
+  -- Get user info from auth.users for fallback profile creation
+  SELECT email, raw_user_meta_data->>'full_name', raw_user_meta_data->>'role' 
+  INTO v_user_email, v_user_name, v_user_role
+  FROM auth.users
+  WHERE id = auth.uid();
+  
+  -- If user doesn't exist in auth.users, return error
+  IF v_user_email IS NULL THEN
+    RETURN jsonb_build_object('success', false, 'error', 'not_authenticated', 'message', 'User not authenticated');
+  END IF;
+  
+  -- Ensure profile exists (handles race condition with trigger)
+  INSERT INTO public.profiles (id, email, full_name, role)
+  VALUES (
+    auth.uid(), 
+    LOWER(TRIM(v_user_email)), 
+    COALESCE(v_user_name, split_part(v_user_email, '@', 1)),
+    COALESCE(v_user_role, 'student')
+  )
+  ON CONFLICT (id) DO NOTHING;
+  
+  -- Now check the role from profiles (should exist now)
   SELECT role INTO v_user_role
   FROM public.profiles
   WHERE id = auth.uid();

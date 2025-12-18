@@ -431,10 +431,17 @@ function AddStudentForm({ classId, onClose, onSuccess }) {
   // Add student using RPC function (preferred method - bypasses RLS issues)
   const addStudentViaRPC = async (studentEmail) => {
     try {
+      if (import.meta.env.DEV) {
+        console.log('[AddStudent] Calling RPC add_student_to_class with:', { classId, studentEmail: studentEmail.toLowerCase().trim() });
+      }
       const { data, error } = await supabase.rpc('add_student_to_class', {
         p_class_id: classId,
         p_student_email: studentEmail.toLowerCase().trim()
       });
+
+      if (import.meta.env.DEV) {
+        console.log('[AddStudent] RPC response:', { data, error });
+      }
 
       if (error) {
         console.error('RPC add_student_to_class error:', error);
@@ -443,10 +450,16 @@ function AddStudentForm({ classId, onClose, onSuccess }) {
 
       // RPC returns JSONB with success and optional error
       if (data && data.success) {
+        if (import.meta.env.DEV) {
+          console.log('[AddStudent] Successfully added student with ID:', data.student_id);
+        }
         return { success: true, student_id: data.student_id };
       }
       
       // Return the error code from RPC response
+      if (import.meta.env.DEV) {
+        console.log('[AddStudent] RPC returned error:', data?.error);
+      }
       return { success: false, error: data?.error || 'unknown_error' };
     } catch (err) {
       console.error('RPC call exception:', err);
@@ -1701,13 +1714,22 @@ export default function InstructorDashboard() {
         setExams(examsData || []);
 
         // Load enrollments with student profiles
-        const { data: enrollmentsData } = await supabase
+        if (import.meta.env.DEV) {
+          console.log('[InstructorDashboard] Loading enrollments for class:', selectedClass.id);
+        }
+        const { data: enrollmentsData, error: enrollError } = await supabase
           .from('enrollments')
           .select(`
             *,
             student:profiles(*)
           `)
           .eq('class_id', selectedClass.id);
+        
+        if (enrollError) {
+          console.error('[InstructorDashboard] Error loading enrollments:', enrollError);
+        } else if (import.meta.env.DEV) {
+          console.log('[InstructorDashboard] Loaded enrollments:', enrollmentsData?.length || 0, enrollmentsData);
+        }
         setStudents(enrollmentsData || []);
 
         // Calculate stats
@@ -2097,6 +2119,7 @@ export default function InstructorDashboard() {
                             <th className="text-left px-4 py-3 text-sm font-semibold text-gray-700">{t('table.name')}</th>
                             <th className="text-left px-4 py-3 text-sm font-semibold text-gray-700">{t('table.email')}</th>
                             <th className="text-left px-4 py-3 text-sm font-semibold text-gray-700">{t('table.studentId')}</th>
+                            <th className="text-left px-4 py-3 text-sm font-semibold text-gray-700">{t('student.enrolledAt')}</th>
                             <th className="text-left px-4 py-3 text-sm font-semibold text-gray-700">{t('table.status')}</th>
                             <th className="text-right px-4 py-3 text-sm font-semibold text-gray-700">{t('table.actions')}</th>
                           </tr>
@@ -2112,17 +2135,29 @@ export default function InstructorDashboard() {
                                 s.student?.student_id?.toLowerCase().includes(q)
                               );
                             })
-                            .map((enrollment, idx) => (
-                              <tr key={enrollment.id} className="hover:bg-gray-50">
+                            .map((enrollment, idx) => {
+                              // Check if student joined within last 5 minutes for "NEW" indicator
+                              const isNewlyJoined = enrollment.enrolled_at && 
+                                (Date.now() - new Date(enrollment.enrolled_at).getTime()) < 5 * 60 * 1000;
+                              
+                              return (
+                              <tr key={enrollment.id} className={`hover:bg-gray-50 transition-colors ${isNewlyJoined ? 'bg-success-50' : ''}`}>
                                 <td className="px-4 py-3 text-sm text-gray-500">{idx + 1}</td>
                                 <td className="px-4 py-3">
                                   <div className="flex items-center space-x-3">
-                                    <div className="w-8 h-8 bg-primary-100 rounded-full flex items-center justify-center">
-                                      <User className="w-4 h-4 text-primary" />
+                                    <div className={`w-8 h-8 rounded-full flex items-center justify-center ${isNewlyJoined ? 'bg-success-100 ring-2 ring-success-300 ring-offset-1' : 'bg-primary-100'}`}>
+                                      <User className={`w-4 h-4 ${isNewlyJoined ? 'text-success' : 'text-primary'}`} />
                                     </div>
-                                    <span className="font-medium text-text-main">
-                                      {enrollment.student?.full_name || 'N/A'}
-                                    </span>
+                                    <div className="flex items-center space-x-2">
+                                      <span className="font-medium text-text-main">
+                                        {enrollment.student?.full_name || 'N/A'}
+                                      </span>
+                                      {isNewlyJoined && (
+                                        <span className="px-1.5 py-0.5 text-[10px] font-bold uppercase bg-success text-white rounded animate-pulse">
+                                          NEW
+                                        </span>
+                                      )}
+                                    </div>
                                   </div>
                                 </td>
                                 <td className="px-4 py-3 text-sm text-gray-600">
@@ -2130,6 +2165,15 @@ export default function InstructorDashboard() {
                                 </td>
                                 <td className="px-4 py-3 text-sm text-gray-600">
                                   {enrollment.student?.student_id || '-'}
+                                </td>
+                                <td className="px-4 py-3 text-sm text-gray-500">
+                                  {enrollment.enrolled_at ? new Date(enrollment.enrolled_at).toLocaleString('vi-VN', {
+                                    day: '2-digit',
+                                    month: '2-digit',
+                                    year: 'numeric',
+                                    hour: '2-digit',
+                                    minute: '2-digit'
+                                  }) : '-'}
                                 </td>
                                 <td className="px-4 py-3">
                                   <span className={`badge ${
@@ -2150,7 +2194,8 @@ export default function InstructorDashboard() {
                                   </button>
                                 </td>
                               </tr>
-                            ))}
+                              );
+                            })}
                         </tbody>
                       </table>
                     </div>
