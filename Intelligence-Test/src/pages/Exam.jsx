@@ -575,17 +575,25 @@ export default function Exam() {
     const FRAME_INTERVAL_MS = 200; // Process frames every 200ms (5 FPS)
     
     const startFrameProcessing = () => {
-      if (frameIntervalRef.current) return; // Already started
+      if (frameIntervalRef.current) {
+        console.log('🎬 Frame processing already started');
+        return true; // Already started
+      }
       
       // Double-check video is ready
       if (!videoRef.current || !ctxRef.current || !workerRef.current) {
-        console.log('🎬 Frame processing prerequisites not met yet');
+        console.log('🎬 Frame processing prerequisites not met yet:', {
+          hasVideo: !!videoRef.current,
+          hasCanvas: !!ctxRef.current,
+          hasWorker: !!workerRef.current
+        });
         return false;
       }
       
       // Check if video has data AND stream is attached
       if (videoRef.current.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) {
-        console.log('🎬 Video not ready yet, readyState:', videoRef.current.readyState);
+        console.log('🎬 Video not ready yet, readyState:', videoRef.current.readyState, 
+                    '(need', HTMLMediaElement.HAVE_CURRENT_DATA, 'or higher)');
         return false;
       }
       
@@ -595,9 +603,16 @@ export default function Exam() {
         return false;
       }
       
-      console.log('🎬 Starting AI frame processing...');
+      // Additional check: ensure srcObject is set
+      if (!videoRef.current.srcObject) {
+        console.log('🎬 Video has no srcObject, stream not attached');
+        return false;
+      }
+      
+      console.log('🎬 ✅ Starting AI frame processing!');
       console.log('   Video ready:', !!videoRef.current, 'readyState:', videoRef.current?.readyState);
       console.log('   Video dimensions:', videoRef.current?.videoWidth, 'x', videoRef.current?.videoHeight);
+      console.log('   Video srcObject:', !!videoRef.current?.srcObject);
       console.log('   Canvas context ready:', !!ctxRef.current);
       console.log('   Worker ready:', !!workerRef.current);
       
@@ -615,7 +630,12 @@ export default function Exam() {
                   { type: 'PROCESS_FRAME', payload: imageData },
                   [imageData.data.buffer]
                 );
+              } else {
+                console.warn('🎬 Empty image data, skipping frame');
               }
+            } else {
+              console.warn('🎬 Video not ready in frame loop, readyState:', videoRef.current.readyState, 
+                          'dimensions:', videoRef.current.videoWidth, 'x', videoRef.current.videoHeight);
             }
           } catch (err) {
             console.warn('Error sending frame to worker:', err);
@@ -623,6 +643,7 @@ export default function Exam() {
         }
       }, FRAME_INTERVAL_MS);
       
+      console.log('🎬 Frame processing interval started (every', FRAME_INTERVAL_MS, 'ms)');
       return true;
     };
     
@@ -645,6 +666,7 @@ export default function Exam() {
         if (!frameIntervalRef.current) {
           const started = startFrameProcessing();
           if (started) {
+            console.log('🎬 Frame processing started via interval check');
             clearInterval(checkIntervalId);
           }
         } else {
@@ -652,10 +674,34 @@ export default function Exam() {
         }
       }, 400);
       
-      // Stop checking after 8 seconds (increased for reliability)
+      // Stop checking after 10 seconds (increased for reliability)
+      // If it still hasn't started by then, log a warning
       timeoutIds.push(setTimeout(() => {
         if (checkIntervalId) clearInterval(checkIntervalId);
-      }, 8000));
+        if (!frameIntervalRef.current) {
+          console.error('🎬 ❌ CRITICAL: Frame processing failed to start after 10 seconds!');
+          console.error('   This means anti-cheat AI is NOT running.');
+          console.error('   Debug info:', {
+            examStarted,
+            cameraStatus,
+            hasVideo: !!videoRef.current,
+            hasCanvas: !!ctxRef.current,
+            hasWorker: !!workerRef.current,
+            videoReadyState: videoRef.current?.readyState,
+            videoDimensions: {
+              width: videoRef.current?.videoWidth,
+              height: videoRef.current?.videoHeight
+            },
+            hasSrcObject: !!videoRef.current?.srcObject
+          });
+          // Show user-friendly warning
+          toast.error(t('anticheat.aiNotStarted') || 'AI monitoring failed to start. Please refresh the page.', {
+            autoClose: false
+          });
+        } else {
+          console.log('🎬 ✅ Frame processing confirmed running');
+        }
+      }, 10000));
     }
 
     return () => {
