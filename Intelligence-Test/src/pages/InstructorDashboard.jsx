@@ -1437,7 +1437,7 @@ function QuestionForm({ question, onSave, onCancel, saving }) {
 
 function StudentAnalyticsTab({ classId, exams }) {
   const { t } = useLanguage();
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false); // Start with false since no exam is selected
   const [selectedExamId, setSelectedExamId] = useState('');
   const [sessions, setSessions] = useState([]);
   const [analyticsData, setAnalyticsData] = useState(null);

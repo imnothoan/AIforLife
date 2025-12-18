@@ -19,6 +19,7 @@ CREATE TABLE IF NOT EXISTS public.profiles (
   role TEXT NOT NULL DEFAULT 'student' CHECK (role IN ('student', 'instructor', 'admin')),
   student_id TEXT, -- Mã sinh viên
   phone TEXT,
+  department TEXT, -- Khoa/Phòng ban
   avatar_url TEXT,
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
@@ -1083,7 +1084,8 @@ GRANT EXECUTE ON FUNCTION public.create_class(TEXT, TEXT, TEXT, TEXT, TEXT) TO a
 ALTER TABLE public.profiles 
 ADD COLUMN IF NOT EXISTS face_embedding JSONB,
 ADD COLUMN IF NOT EXISTS face_image_url TEXT,
-ADD COLUMN IF NOT EXISTS face_enrolled_at TIMESTAMPTZ;
+ADD COLUMN IF NOT EXISTS face_enrolled_at TIMESTAMPTZ,
+ADD COLUMN IF NOT EXISTS department TEXT;
 
 -- Add index for faster lookup
 CREATE INDEX IF NOT EXISTS idx_profiles_face_enrolled 
