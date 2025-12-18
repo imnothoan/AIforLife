@@ -1733,10 +1733,12 @@ export default function InstructorDashboard() {
               console.log('[InstructorDashboard] Loaded enrollments via RPC:', enrollmentsData.length, enrollmentsData);
             }
           } else {
-            throw new Error(rpcError?.message || rpcResult?.error || 'RPC failed');
+            // Provide detailed error for debugging
+            const errorDetail = rpcError?.message || rpcResult?.error || 'Unknown RPC error';
+            throw new Error(`get_class_enrollments RPC failed: ${errorDetail}. This may occur if the RPC function is not deployed in Supabase.`);
           }
         } catch (rpcErr) {
-          console.warn('[InstructorDashboard] RPC get_class_enrollments failed, trying direct query:', rpcErr);
+          console.warn('[InstructorDashboard] RPC get_class_enrollments failed, trying direct query:', rpcErr.message || rpcErr);
           // Fallback to direct query
           const result = await supabase
             .from('enrollments')

@@ -649,6 +649,9 @@ export default function FaceVerification({
       )}
 
       {/* Action buttons */}
+      {/* NOTE: Capture is now allowed when face is detected, regardless of quality (good/too_small/etc)
+          This improves usability by allowing captures in suboptimal conditions while still providing
+          quality feedback to the user. The face detection algorithm will verify quality on capture. */}
       <div className="flex space-x-3">
         {status === 'ready' && (
           <button
