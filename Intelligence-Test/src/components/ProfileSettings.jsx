@@ -86,7 +86,9 @@ export default function ProfileSettings({ isOpen, onClose }) {
       onClose?.();
     } catch (err) {
       console.error('Profile update error:', err);
-      toast.error(t('error.general') || 'Có lỗi xảy ra');
+      // Provide more specific error message
+      const errorMessage = err?.message || err?.details || t('error.general') || 'Có lỗi xảy ra';
+      toast.error(errorMessage);
     } finally {
       setLoading(false);
     }
@@ -118,6 +120,9 @@ export default function ProfileSettings({ isOpen, onClose }) {
   };
   
   const faceRegistered = !!(profile?.face_embedding || profile?.face_enrolled_at);
+  
+  // Only students need face verification - instructors and admins don't take exams
+  const isStudent = profile?.role === 'student';
   
   if (!isOpen) return null;
   
@@ -252,7 +257,8 @@ export default function ProfileSettings({ isOpen, onClose }) {
                 />
               </div>
               
-              {/* Face Verification Section */}
+              {/* Face Verification Section - Only for students, not instructors/admins */}
+              {isStudent && (
               <div className="bg-gray-50 rounded-xl p-4">
                 <div className="flex items-center justify-between mb-3">
                   <div className="flex items-center space-x-2">
@@ -295,6 +301,7 @@ export default function ProfileSettings({ isOpen, onClose }) {
                     : (t('profile.registerFace') || 'Đăng ký ngay')}
                 </button>
               </div>
+              )}
               
               {/* Submit Button */}
               <div className="flex items-center justify-end space-x-3 pt-4 border-t border-gray-200">

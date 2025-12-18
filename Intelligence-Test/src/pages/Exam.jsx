@@ -440,6 +440,11 @@ export default function Exam() {
         if (video.srcObject !== stream) {
           console.log('[Exam] Attaching camera stream to video element');
           video.srcObject = stream;
+          
+          // Add event listener for when video loads data
+          video.onloadeddata = () => {
+            console.log('[Exam] Video data loaded, readyState:', video.readyState);
+          };
         }
         
         // Ensure video plays (might need to restart if paused)
