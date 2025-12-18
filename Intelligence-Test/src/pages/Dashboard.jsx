@@ -420,18 +420,18 @@ export default function Dashboard() {
                 initial={{ scale: 0.95, opacity: 0 }}
                 animate={{ scale: 1, opacity: 1 }}
                 exit={{ scale: 0.95, opacity: 0 }}
-                className="bg-paper rounded-2xl shadow-xl max-w-2xl w-full max-h-[90vh] overflow-hidden"
+                className="bg-paper rounded-2xl shadow-xl max-w-2xl w-full max-h-[90vh] overflow-hidden flex flex-col"
                 onClick={(e) => e.stopPropagation()}
               >
-                <div className="p-6 border-b border-gray-200">
+                <div className="p-6 border-b border-gray-200 flex-shrink-0">
                   <h2 className="text-xl font-bold text-text-main">
                     {t('profile.faceRegistrationTitle') || 'Đăng ký khuôn mặt'}
                   </h2>
                   <p className="text-sm text-gray-500 mt-1">
-                    {t('profile.faceRegistrationDesc') || 'Chụp ảnh khuôn mặt để sử dụng cho xác minh danh tính khi thi'}
+                    {t('profile.faceRegistrationDesc') || 'Đây là lần đầu bạn thi. Vui lòng chụp ảnh khuôn mặt để đăng ký xác minh.'}
                   </p>
                 </div>
-                <div className="p-6">
+                <div className="p-6 overflow-y-auto flex-1">
                   <FaceVerification
                     mode="enroll"
                     onEnrollComplete={async (embedding, imageUrl) => {
@@ -464,9 +464,11 @@ export default function Dashboard() {
                       toast.error(t('face.failed') || 'Đăng ký thất bại. Vui lòng thử lại.');
                     }}
                   />
+                </div>
+                <div className="p-4 border-t border-gray-200 bg-gray-50 flex-shrink-0">
                   <button
                     onClick={() => setShowFaceRegistration(false)}
-                    className="mt-4 w-full py-2 text-gray-600 hover:text-gray-800 text-sm font-medium"
+                    className="w-full py-2 text-gray-600 hover:text-gray-800 text-sm font-medium"
                   >
                     {t('common.cancel') || 'Hủy'}
                   </button>
