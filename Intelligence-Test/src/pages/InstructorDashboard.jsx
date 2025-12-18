@@ -2097,6 +2097,7 @@ export default function InstructorDashboard() {
                             <th className="text-left px-4 py-3 text-sm font-semibold text-gray-700">{t('table.name')}</th>
                             <th className="text-left px-4 py-3 text-sm font-semibold text-gray-700">{t('table.email')}</th>
                             <th className="text-left px-4 py-3 text-sm font-semibold text-gray-700">{t('table.studentId')}</th>
+                            <th className="text-left px-4 py-3 text-sm font-semibold text-gray-700">{t('student.enrolledAt')}</th>
                             <th className="text-left px-4 py-3 text-sm font-semibold text-gray-700">{t('table.status')}</th>
                             <th className="text-right px-4 py-3 text-sm font-semibold text-gray-700">{t('table.actions')}</th>
                           </tr>
@@ -2112,17 +2113,29 @@ export default function InstructorDashboard() {
                                 s.student?.student_id?.toLowerCase().includes(q)
                               );
                             })
-                            .map((enrollment, idx) => (
-                              <tr key={enrollment.id} className="hover:bg-gray-50">
+                            .map((enrollment, idx) => {
+                              // Check if student joined within last 5 minutes for "NEW" indicator
+                              const isNewlyJoined = enrollment.enrolled_at && 
+                                (Date.now() - new Date(enrollment.enrolled_at).getTime()) < 5 * 60 * 1000;
+                              
+                              return (
+                              <tr key={enrollment.id} className={`hover:bg-gray-50 transition-colors ${isNewlyJoined ? 'bg-success-50' : ''}`}>
                                 <td className="px-4 py-3 text-sm text-gray-500">{idx + 1}</td>
                                 <td className="px-4 py-3">
                                   <div className="flex items-center space-x-3">
-                                    <div className="w-8 h-8 bg-primary-100 rounded-full flex items-center justify-center">
-                                      <User className="w-4 h-4 text-primary" />
+                                    <div className={`w-8 h-8 rounded-full flex items-center justify-center ${isNewlyJoined ? 'bg-success-100 ring-2 ring-success-300 ring-offset-1' : 'bg-primary-100'}`}>
+                                      <User className={`w-4 h-4 ${isNewlyJoined ? 'text-success' : 'text-primary'}`} />
                                     </div>
-                                    <span className="font-medium text-text-main">
-                                      {enrollment.student?.full_name || 'N/A'}
-                                    </span>
+                                    <div className="flex items-center space-x-2">
+                                      <span className="font-medium text-text-main">
+                                        {enrollment.student?.full_name || 'N/A'}
+                                      </span>
+                                      {isNewlyJoined && (
+                                        <span className="px-1.5 py-0.5 text-[10px] font-bold uppercase bg-success text-white rounded animate-pulse">
+                                          NEW
+                                        </span>
+                                      )}
+                                    </div>
                                   </div>
                                 </td>
                                 <td className="px-4 py-3 text-sm text-gray-600">
@@ -2130,6 +2143,15 @@ export default function InstructorDashboard() {
                                 </td>
                                 <td className="px-4 py-3 text-sm text-gray-600">
                                   {enrollment.student?.student_id || '-'}
+                                </td>
+                                <td className="px-4 py-3 text-sm text-gray-500">
+                                  {enrollment.enrolled_at ? new Date(enrollment.enrolled_at).toLocaleString('vi-VN', {
+                                    day: '2-digit',
+                                    month: '2-digit',
+                                    year: 'numeric',
+                                    hour: '2-digit',
+                                    minute: '2-digit'
+                                  }) : '-'}
                                 </td>
                                 <td className="px-4 py-3">
                                   <span className={`badge ${
@@ -2150,7 +2172,8 @@ export default function InstructorDashboard() {
                                   </button>
                                 </td>
                               </tr>
-                            ))}
+                              );
+                            })}
                         </tbody>
                       </table>
                     </div>
