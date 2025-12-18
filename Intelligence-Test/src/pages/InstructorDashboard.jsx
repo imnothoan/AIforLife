@@ -1,5 +1,4 @@
-import { useState, useEffect } from 'react';
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useLanguage } from '../context/LanguageContext';
 import { useNavigate } from 'react-router-dom';
@@ -1796,9 +1795,15 @@ function StudentAnalyticsTab({ classId, exams }) {
                                       
                                       {/* Details */}
                                       {log.details && Object.keys(log.details).length > 0 && (
-                                        <div className="mb-2 text-xs text-gray-600">
-                                          <span className="font-medium">Details: </span>
-                                          {JSON.stringify(log.details)}
+                                        <div className="mb-2 p-2 bg-gray-50 rounded">
+                                          <div className="text-xs font-medium text-gray-700 mb-1">Details:</div>
+                                          <div className="text-xs text-gray-600 space-y-0.5">
+                                            {Object.entries(log.details).map(([key, value]) => (
+                                              <div key={key}>
+                                                <span className="font-medium">{key}:</span> {String(value)}
+                                              </div>
+                                            ))}
+                                          </div>
                                         </div>
                                       )}
                                       

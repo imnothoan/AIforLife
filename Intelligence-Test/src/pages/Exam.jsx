@@ -13,6 +13,10 @@ import {
 } from 'lucide-react';
 import FaceVerification from '../components/FaceVerification';
 
+// ============================================
+// CONSTANTS
+// ============================================
+
 // Remote desktop detection signatures
 const REMOTE_DESKTOP_SIGNATURES = [
   'teamviewer', 'anydesk', 'ultraviewer', 'parsec', 'vnc',
@@ -30,6 +34,10 @@ const DEMO_SESSION_IDS = ['demo-session', 'demo-session-id'];
 // Timeout constants
 const SUBMIT_TIMEOUT_MS = 30000; // Increased to 30 seconds for better reliability
 const SUBMIT_TIMEOUT_ERROR = 'SUBMIT_TIMEOUT';
+
+// Evidence capture constants
+const SCREENSHOT_QUALITY = 0.85; // JPEG quality for evidence screenshots
+const CRITICAL_EVENTS_FOR_EVIDENCE = ['phoneDetected', 'headphonesDetected', 'materialDetected', 'multiPerson'];
 
 export default function Exam() {
   const { id: examId } = useParams();
@@ -554,8 +562,8 @@ export default function Exam() {
       else if (type === 'ALERT') {
         setCheatCount(prev => prev + 1);
         toast.warning(`${translate('anticheat.aiWarning')}: ${translatedMessage}`);
-        // Capture screenshot for AI detections (phone, headphones, material, multi-person)
-        const shouldCaptureScreenshot = ['phoneDetected', 'headphonesDetected', 'materialDetected', 'multiPerson'].includes(code);
+        // Capture screenshot for critical AI detections
+        const shouldCaptureScreenshot = CRITICAL_EVENTS_FOR_EVIDENCE.includes(code);
         logProctoring('ai_alert', { message: payload, code }, shouldCaptureScreenshot);
       } else if (type === 'GAZE_AWAY') {
         setGazeAwayCount(prev => prev + 1);
@@ -697,7 +705,7 @@ export default function Exam() {
             hasSrcObject: !!videoRef.current?.srcObject
           });
           // Show user-friendly warning
-          toast.error(t('anticheat.aiNotStarted') || 'AI monitoring failed to start. Please refresh the page.', {
+          toast.error(t('anticheat.aiNotStarted') || 'Hệ thống giám sát AI không khởi động được. Vui lòng tải lại trang.', {
             autoClose: false
           });
         } else {
@@ -1035,7 +1043,7 @@ export default function Exam() {
       
       // Convert canvas to blob (JPEG for smaller file size)
       const blob = await new Promise((resolve) => {
-        canvas.toBlob(resolve, 'image/jpeg', 0.85);
+        canvas.toBlob(resolve, 'image/jpeg', SCREENSHOT_QUALITY);
       });
       
       if (!blob) {
@@ -1043,7 +1051,7 @@ export default function Exam() {
         return null;
       }
       
-      // Generate unique filename with timestamp
+      // Generate unique filename with timestamp (sanitize for storage)
       const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
       const filename = `${sessionId}_${timestamp}.jpg`;
       
