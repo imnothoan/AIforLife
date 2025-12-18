@@ -170,7 +170,7 @@ export default function ProfileSettings({ isOpen, onClose }) {
           </div>
           
           {/* Content */}
-          <div className="p-6 overflow-y-auto max-h-[calc(90vh-180px)]">
+          <div className="p-6 overflow-y-auto" style={{ maxHeight: 'calc(90vh - 100px)' }}>
             <form onSubmit={handleSubmit} className="space-y-6">
               {/* Email (read-only) */}
               <div>

@@ -21,15 +21,10 @@ export default function Dashboard() {
   const [profileTimeoutReached, setProfileTimeoutReached] = useState(false);
   const [showClasses, setShowClasses] = useState(true);
   const [showFaceRegistration, setShowFaceRegistration] = useState(false);
-  const [faceRegistered, setFaceRegistered] = useState(false);
   const [showProfileSettings, setShowProfileSettings] = useState(false);
 
-  // Check if face is already registered
-  useEffect(() => {
-    if (profile?.face_embedding || profile?.face_enrolled_at) {
-      setFaceRegistered(true);
-    }
-  }, [profile]);
+  // Derive faceRegistered directly from profile to ensure synchronization
+  const faceRegistered = !!(profile?.face_embedding || profile?.face_enrolled_at);
 
   // Profile loading timeout - prevent infinite waiting
   useEffect(() => {
@@ -453,10 +448,10 @@ export default function Dashboard() {
                           return;
                         }
                         
-                        setFaceRegistered(true);
                         setShowFaceRegistration(false);
                         
                         // Refresh profile to sync face verification status
+                        // faceRegistered is now derived from profile, so this will update it
                         await refetchProfile();
                         
                         toast.success(t('profile.faceRegisteredSuccess') || 'Đăng ký khuôn mặt thành công!');

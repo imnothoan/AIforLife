@@ -260,7 +260,8 @@ CREATE POLICY "Users can view own profile"
 DROP POLICY IF EXISTS "Users can update own profile" ON public.profiles;
 CREATE POLICY "Users can update own profile"
   ON public.profiles FOR UPDATE
-  USING (auth.uid() = id);
+  USING (auth.uid() = id)
+  WITH CHECK (auth.uid() = id);
 
 -- Users can insert their own profile (needed when trigger doesn't work or for upsert)
 DROP POLICY IF EXISTS "Users can insert own profile" ON public.profiles;
@@ -295,16 +296,14 @@ CREATE POLICY "Students can view instructors of enrolled classes"
 
 -- Instructors can lookup any student profile to add to their class
 -- This is needed because instructors need to find students before they are enrolled
+-- NOTE: Uses auth.jwt() to avoid infinite recursion with profiles table
 DROP POLICY IF EXISTS "Instructors can lookup student profiles" ON public.profiles;
 CREATE POLICY "Instructors can lookup student profiles"
   ON public.profiles FOR SELECT
   USING (
-    -- Only instructors/admins can use this policy
-    EXISTS (
-      SELECT 1 FROM public.profiles p
-      WHERE p.id = auth.uid()
-      AND p.role IN ('instructor', 'admin')
-    )
+    -- Only instructors/admins can use this policy (using JWT claims to avoid recursion)
+    (auth.jwt() ->> 'role')::text IN ('instructor', 'admin')
+    OR (auth.jwt() -> 'user_metadata' ->> 'role')::text IN ('instructor', 'admin')
     -- Only lookup students (not other instructors)
     AND role = 'student'
   );
@@ -901,15 +900,13 @@ CREATE TRIGGER set_exams_updated_at
 -- ================================================
 
 -- Policy to allow instructors to search for students by email
+-- NOTE: Uses auth.jwt() to avoid infinite recursion with profiles table
 DROP POLICY IF EXISTS "Instructors can search students by email" ON public.profiles;
 CREATE POLICY "Instructors can search students by email"
   ON public.profiles FOR SELECT
   USING (
-    EXISTS (
-      SELECT 1 FROM public.profiles p
-      WHERE p.id = auth.uid()
-      AND p.role IN ('instructor', 'admin')
-    )
+    (auth.jwt() ->> 'role')::text IN ('instructor', 'admin')
+    OR (auth.jwt() -> 'user_metadata' ->> 'role')::text IN ('instructor', 'admin')
   );
 
 -- Function to find profile by email and add to class
