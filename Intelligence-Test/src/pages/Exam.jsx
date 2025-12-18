@@ -569,7 +569,9 @@ export default function Exam() {
     // Start frame processing when exam starts AND camera is ready
     // We need to check cameraStatus to ensure canvas context is available
     // Use multiple retry attempts with increasing delays to ensure video element is mounted
-    const FRAME_PROCESSING_DELAYS = [200, 500, 1000, 1500, 2000]; // Multiple retry delays
+    // Delays increase exponentially: 300ms -> 600ms -> 1s -> 1.5s -> 2s -> 3s
+    // This handles DOM mounting variability during animation transitions
+    const FRAME_PROCESSING_DELAYS = [300, 600, 1000, 1500, 2000, 3000];
     const FRAME_INTERVAL_MS = 200; // Process frames every 200ms (5 FPS)
     
     const startFrameProcessing = () => {
@@ -581,9 +583,15 @@ export default function Exam() {
         return false;
       }
       
-      // Check if video has data
+      // Check if video has data AND stream is attached
       if (videoRef.current.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) {
         console.log('🎬 Video not ready yet, readyState:', videoRef.current.readyState);
+        return false;
+      }
+      
+      // Check video dimensions to ensure stream is actually providing data
+      if (!videoRef.current.videoWidth || videoRef.current.videoWidth === 0) {
+        console.log('🎬 Video has no dimensions yet, waiting for stream...');
         return false;
       }
       
@@ -642,12 +650,12 @@ export default function Exam() {
         } else {
           clearInterval(checkIntervalId);
         }
-      }, 300);
+      }, 400);
       
-      // Stop checking after 5 seconds
+      // Stop checking after 8 seconds (increased for reliability)
       timeoutIds.push(setTimeout(() => {
         if (checkIntervalId) clearInterval(checkIntervalId);
-      }, 5000));
+      }, 8000));
     }
 
     return () => {

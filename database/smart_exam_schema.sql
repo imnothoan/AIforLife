@@ -260,7 +260,8 @@ CREATE POLICY "Users can view own profile"
 DROP POLICY IF EXISTS "Users can update own profile" ON public.profiles;
 CREATE POLICY "Users can update own profile"
   ON public.profiles FOR UPDATE
-  USING (auth.uid() = id);
+  USING (auth.uid() = id)
+  WITH CHECK (auth.uid() = id);
 
 -- Users can insert their own profile (needed when trigger doesn't work or for upsert)
 DROP POLICY IF EXISTS "Users can insert own profile" ON public.profiles;
@@ -295,16 +296,14 @@ CREATE POLICY "Students can view instructors of enrolled classes"
 
 -- Instructors can lookup any student profile to add to their class
 -- This is needed because instructors need to find students before they are enrolled
+-- NOTE: Uses auth.jwt() to avoid infinite recursion with profiles table
 DROP POLICY IF EXISTS "Instructors can lookup student profiles" ON public.profiles;
 CREATE POLICY "Instructors can lookup student profiles"
   ON public.profiles FOR SELECT
   USING (
-    -- Only instructors/admins can use this policy
-    EXISTS (
-      SELECT 1 FROM public.profiles p
-      WHERE p.id = auth.uid()
-      AND p.role IN ('instructor', 'admin')
-    )
+    -- Only instructors/admins can use this policy (using JWT claims to avoid recursion)
+    (auth.jwt() ->> 'role')::text IN ('instructor', 'admin')
+    OR (auth.jwt() -> 'user_metadata' ->> 'role')::text IN ('instructor', 'admin')
     -- Only lookup students (not other instructors)
     AND role = 'student'
   );
@@ -793,6 +792,7 @@ $$ LANGUAGE plpgsql SECURITY DEFINER;
 GRANT EXECUTE ON FUNCTION public.submit_answer(UUID, UUID, JSONB, INTEGER) TO authenticated;
 
 -- Function to submit exam
+-- Calculates scores by comparing student answers with correct answers
 CREATE OR REPLACE FUNCTION public.submit_exam(
   p_session_id UUID,
   p_auto_submit BOOLEAN DEFAULT FALSE
@@ -821,9 +821,27 @@ BEGIN
     RAISE EXCEPTION 'Exam already submitted';
   END IF;
   
-  -- Calculate scores
+  -- First, update the is_correct and points_earned fields for all answers
+  -- This handles cases where answers were inserted directly without using submit_answer RPC
+  UPDATE public.answers a SET
+    is_correct = CASE 
+      WHEN q.question_type IN ('multiple_choice', 'true_false') THEN 
+        a.student_answer = q.correct_answer
+      ELSE NULL -- Essay/short answer needs manual grading
+    END,
+    points_earned = CASE 
+      WHEN q.question_type IN ('multiple_choice', 'true_false') AND a.student_answer = q.correct_answer THEN 
+        q.points
+      ELSE 0
+    END
+  FROM public.questions q
+  WHERE a.session_id = p_session_id
+  AND a.question_id = q.id
+  AND a.student_answer IS NOT NULL;
+  
+  -- Calculate scores from updated points_earned
   SELECT 
-    COALESCE(SUM(points_earned), 0),
+    COALESCE(SUM(a.points_earned), 0),
     COALESCE(SUM(q.points), 0)
   INTO v_total_score, v_max_score
   FROM public.answers a
@@ -901,15 +919,13 @@ CREATE TRIGGER set_exams_updated_at
 -- ================================================
 
 -- Policy to allow instructors to search for students by email
+-- NOTE: Uses auth.jwt() to avoid infinite recursion with profiles table
 DROP POLICY IF EXISTS "Instructors can search students by email" ON public.profiles;
 CREATE POLICY "Instructors can search students by email"
   ON public.profiles FOR SELECT
   USING (
-    EXISTS (
-      SELECT 1 FROM public.profiles p
-      WHERE p.id = auth.uid()
-      AND p.role IN ('instructor', 'admin')
-    )
+    (auth.jwt() ->> 'role')::text IN ('instructor', 'admin')
+    OR (auth.jwt() -> 'user_metadata' ->> 'role')::text IN ('instructor', 'admin')
   );
 
 -- Function to find profile by email and add to class
