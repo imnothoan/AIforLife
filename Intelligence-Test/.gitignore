@@ -22,7 +22,7 @@ Thumbs.db
 .idea/
 
 # Large model files (download separately)
-
+public/models/anticheat_yolo11s_2.onnx
 public/models/*.pt
 .env
 

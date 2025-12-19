@@ -42,19 +42,26 @@ const CONFIG = {
   },
   // YOLO settings - Custom trained SEGMENTATION model for anti-cheat detection
   // Model outputs: [1, 40, 8400] = 4 bbox + 4 classes + 32 mask coefficients
+  // IMPORTANT: ONNX model outputs RAW LOGITS, not probabilities!
+  // We must apply sigmoid to convert to probabilities
+  // NOTE: Current model has quality issues - all raw logits ~0, so sigmoid gives ~50%
+  // Need to retrain model with better data for reliable detection
   YOLO: {
     MODEL_PATH: '/models/anticheat_yolo11s.onnx',
     INPUT_SIZE: 640, // Model was trained with 640x640 input
-    // Confidence threshold - set very low to catch more detections
-    // Model was fine-tuned on specific objects, real-world performance may vary
-    // Training notebook showed: phone ~2-5%, material ~90%+, headphones ~40%+
-    CONFIDENCE_THRESHOLD: 0.01,
+    // Confidence threshold - applied AFTER sigmoid activation
+    // Set to 0.6 to filter out ~50% noise from untrained model
+    // Lower this when model is properly trained
+    CONFIDENCE_THRESHOLD: 0.6,
     IOU_THRESHOLD: 0.45,
     CLASSES: ['person', 'phone', 'material', 'headphones'], // Must match training classes (4 classes)
-    ALERT_CLASSES: ['phone', 'material', 'headphones'], // Classes that trigger alerts
+    // Only alert on phone, material, headphones - NOT person (use MediaPipe for multi-person)
+    ALERT_CLASSES: ['phone', 'material', 'headphones'],
     MASK_COEFFICIENTS: 32, // Number of mask coefficients for segmentation models
-    // Multi-person detection
-    MULTI_PERSON_ALERT: true, // Alert if more than 1 person detected
+    // Multi-person detection - DISABLED in YOLO due to model quality issues
+    // Use MediaPipe FaceLandmarker for reliable multi-person detection instead
+    MULTI_PERSON_ALERT: false, // Disabled - model detects 140+ false positives
+    MULTI_PERSON_THRESHOLD: 0.7, // High threshold if re-enabled
   },
   // Cascade timing
   CASCADE: {
@@ -70,6 +77,12 @@ const CONFIG = {
   }
 };
 
+// Sigmoid function to convert raw logits to probabilities
+// ONNX models output raw logits, not probabilities
+function sigmoid(x) {
+  return 1 / (1 + Math.exp(-x));
+}
+
 // ============================================
 // STATE
 // ============================================
@@ -77,6 +90,8 @@ let faceLandmarker = null;
 let yoloSession = null;
 let suspiciousFrameCount = 0;
 let lastAlertTime = 0;
+// Per-class alert tracking to prevent one class blocking others
+let lastAlertTimePerClass = {};
 let lastYoloRunTime = 0;
 let isInitialized = false;
 
@@ -109,7 +124,7 @@ async function initializeAI() {
     const timeoutPromise = new Promise((resolve) => {
       timeoutId = setTimeout(() => resolve(fallbackValue), ms);
     });
-    
+
     return Promise.race([promise, timeoutPromise]).finally(() => {
       clearTimeout(timeoutId);
     });
@@ -121,7 +136,7 @@ async function initializeAI() {
     const timeoutPromise = new Promise((_, reject) => {
       timeoutId = setTimeout(() => reject(new Error(`${name} timeout after ${ms}ms`)), ms);
     });
-    
+
     return Promise.race([promise, timeoutPromise]).finally(() => {
       clearTimeout(timeoutId);
     });
@@ -135,25 +150,25 @@ async function initializeAI() {
     // Workers cannot import from main bundle, so values are duplicated here
     const MEDIAPIPE_WASM = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.18/wasm";
     const MEDIAPIPE_MODEL = "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task";
-    
+
     // Add 15 second timeout for vision tasks initialization (increased from 10)
     const vision = await withTimeoutFallback(
       FilesetResolver.forVisionTasks(MEDIAPIPE_WASM),
       15000,
       null
     );
-    
+
     if (!vision) {
       console.warn('MediaPipe WASM loading timed out - using basic mode');
       self.postMessage({ type: 'STATUS', payload: 'AI monitoring active (basic mode)', code: 'basicMode' });
       isInitialized = true;
       return;
     }
-    
+
     // Try GPU first, fallback to CPU if it fails
     let delegateOptions = ["GPU", "CPU"];
     let lastError = null;
-    
+
     for (const delegate of delegateOptions) {
       try {
         // Add 20 second timeout for model loading (increased from 15)
@@ -182,36 +197,38 @@ async function initializeAI() {
         lastError = err;
       }
     }
-    
+
     if (lastError && !mediaPipeLoaded) {
       console.warn('MediaPipe failed to load - continuing with basic mode');
     }
-    
+
     self.postMessage({ type: 'STATUS', payload: 'Đang tải YOLO...', code: 'yoloLoading' });
 
     // Load YOLO ONNX model with timeout
     try {
       // Configure ONNX Runtime WASM paths - use CDN for better reliability
-      ort.env.wasm.wasmPaths = 'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.20.1/dist/';
-      
+      // Version must match package.json (1.17.0 for stability)
+      ort.env.wasm.wasmPaths = 'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.17.0/dist/';
+
       // Disable SIMD and multi-threading for better compatibility
       ort.env.wasm.numThreads = 1;
-      
+      ort.env.wasm.simd = false; // Disable SIMD for broader browser support
+
       // Construct absolute URL for model (workers may have issues with relative paths)
       const modelPath = CONFIG.YOLO.MODEL_PATH;
       const baseUrl = self.location.origin || '';
       const absoluteModelPath = modelPath.startsWith('/') ? baseUrl + modelPath : modelPath;
-      
+
       // Extract filename for fallback path (to avoid hardcoding)
       const modelFilename = modelPath.split('/').pop();
-      
+
       console.log('Attempting to load YOLO model from:', absoluteModelPath);
       console.log('Worker origin:', self.location.origin);
-      
+
       // Try to load the model with multiple fallback paths
       let loadError = null;
       const pathsToTry = [absoluteModelPath, modelPath, `./models/${modelFilename}`];
-      
+
       // Add 30 second timeout for YOLO model loading (model is ~40MB)
       const loadWithTimeout = async (path) => {
         return withTimeout(
@@ -223,7 +240,7 @@ async function initializeAI() {
           `YOLO model from ${path}`
         );
       };
-      
+
       for (const tryPath of pathsToTry) {
         try {
           console.log('Trying to load from:', tryPath);
@@ -236,22 +253,22 @@ async function initializeAI() {
           loadError = err;
         }
       }
-      
+
       if (loadError) {
         throw loadError;
       }
-      
+
       // Log input/output details for debugging
       console.log('✅ YOLO model loaded successfully!');
       console.log('Input names:', yoloSession.inputNames);
       console.log('Output names:', yoloSession.outputNames);
-      
+
       // Log input/output shapes if available
       if (yoloSession.inputNames && yoloSession.inputNames.length > 0) {
         console.log('Model is ready for inference with custom trained classes:', CONFIG.YOLO.CLASSES);
         console.log('Confidence threshold:', CONFIG.YOLO.CONFIDENCE_THRESHOLD);
       }
-      
+
       // Status will be reported in the final status update block below
     } catch (yoloError) {
       console.warn('YOLO model not available');
@@ -261,7 +278,7 @@ async function initializeAI() {
     }
 
     isInitialized = true;
-    
+
     // Report final status based on what loaded
     if (mediaPipeLoaded && yoloSession) {
       self.postMessage({ type: 'STATUS', payload: 'AI proctoring active (Face + YOLO)', code: 'monitoring' });
@@ -276,7 +293,7 @@ async function initializeAI() {
     console.error('AI initialization error:', error);
     // Continue with whatever was loaded - don't fail completely
     self.postMessage({ type: 'STATUS', payload: 'AI monitoring active (basic mode)', code: 'basicMode' });
-    
+
     // Fallback: basic detection mode still works
     isInitialized = true;
   }
@@ -298,7 +315,7 @@ function extractHeadPose(faceLandmarks, transformMatrix) {
     const yaw = Math.atan2(m[8], m[10]); // Around Y-axis
     const pitch = Math.asin(-m[9]); // Around X-axis
     const roll = Math.atan2(m[1], m[5]); // Around Z-axis
-    
+
     return { yaw, pitch, roll, isValid: true };
   }
 
@@ -311,7 +328,7 @@ function extractHeadPose(faceLandmarks, transformMatrix) {
   // - Right ear: 356
   // - Chin: 152
   // - Forehead: 10
-  
+
   const noseTip = faceLandmarks[1];
   const leftEye = faceLandmarks[33];
   const rightEye = faceLandmarks[263];
@@ -344,29 +361,29 @@ function analyzeEyeGaze(faceLandmarks) {
   // Get iris centers
   const leftIrisCenter = faceLandmarks[468]; // Left iris center
   const rightIrisCenter = faceLandmarks[473]; // Right iris center
-  
+
   // Get eye corners for reference
   const leftEyeInner = faceLandmarks[133];
   const leftEyeOuter = faceLandmarks[33];
   const rightEyeInner = faceLandmarks[362];
   const rightEyeOuter = faceLandmarks[263];
-  
+
   // Calculate eye width
   const leftEyeWidth = Math.abs(leftEyeOuter.x - leftEyeInner.x);
   const rightEyeWidth = Math.abs(rightEyeOuter.x - rightEyeInner.x);
-  
+
   // Calculate iris position relative to eye center
   const leftEyeCenter = (leftEyeInner.x + leftEyeOuter.x) / 2;
   const rightEyeCenter = (rightEyeInner.x + rightEyeOuter.x) / 2;
-  
+
   const leftGazeOffset = (leftIrisCenter.x - leftEyeCenter) / leftEyeWidth;
   const rightGazeOffset = (rightIrisCenter.x - rightEyeCenter) / rightEyeWidth;
-  
+
   const avgGazeOffset = (leftGazeOffset + rightGazeOffset) / 2;
-  
+
   let direction = null;
   let isLookingAway = false;
-  
+
   if (avgGazeOffset > CONFIG.FACE.EYE_GAZE_THRESHOLD) {
     direction = 'right';
     isLookingAway = true;
@@ -374,7 +391,7 @@ function analyzeEyeGaze(faceLandmarks) {
     direction = 'left';
     isLookingAway = true;
   }
-  
+
   return { isLookingAway, direction, gazeOffset: avgGazeOffset };
 }
 
@@ -389,21 +406,21 @@ function analyzeLipMovement(faceLandmarks) {
   // Upper lip center (point 13) and lower lip center (point 14)
   const upperLip = faceLandmarks[13];
   const lowerLip = faceLandmarks[14];
-  
+
   // Calculate vertical distance between lips
   const lipDistance = Math.abs(upperLip.y - lowerLip.y);
-  
+
   // Track lip movement over time
   lipMovementHistory.push(lipDistance);
   if (lipMovementHistory.length > CONFIG.ADVANCED.LIP_MOVEMENT_FRAMES) {
     lipMovementHistory.shift();
   }
-  
+
   // Calculate movement variance
   if (lipMovementHistory.length >= 3) {
     const avgDistance = lipMovementHistory.reduce((a, b) => a + b, 0) / lipMovementHistory.length;
     const variance = lipMovementHistory.reduce((acc, val) => acc + Math.pow(val - avgDistance, 2), 0) / lipMovementHistory.length;
-    
+
     // High variance indicates speaking
     if (variance > CONFIG.FACE.LIP_MOVEMENT_THRESHOLD) {
       speakingFrameCount++;
@@ -411,9 +428,9 @@ function analyzeLipMovement(faceLandmarks) {
       speakingFrameCount = Math.max(0, speakingFrameCount - 1);
     }
   }
-  
+
   const isSpeaking = speakingFrameCount >= CONFIG.ADVANCED.LIP_ALERT_THRESHOLD;
-  
+
   return { isSpeaking, lipDistance, speakingFrameCount };
 }
 
@@ -427,7 +444,7 @@ function analyzeBlinking(faceLandmarks) {
 
   // Eye Aspect Ratio (EAR) calculation
   // Using 6 points around each eye
-  
+
   // Left eye points
   const leftP1 = faceLandmarks[33];  // outer corner
   const leftP2 = faceLandmarks[160]; // top outer
@@ -435,7 +452,7 @@ function analyzeBlinking(faceLandmarks) {
   const leftP4 = faceLandmarks[133]; // inner corner
   const leftP5 = faceLandmarks[153]; // bottom inner
   const leftP6 = faceLandmarks[144]; // bottom outer
-  
+
   // Right eye points
   const rightP1 = faceLandmarks[362]; // outer corner
   const rightP2 = faceLandmarks[385]; // top outer
@@ -443,14 +460,14 @@ function analyzeBlinking(faceLandmarks) {
   const rightP4 = faceLandmarks[263]; // inner corner
   const rightP5 = faceLandmarks[373]; // bottom inner
   const rightP6 = faceLandmarks[380]; // bottom outer
-  
+
   // Calculate EAR for each eye
   const leftEAR = calculateEAR(leftP1, leftP2, leftP3, leftP4, leftP5, leftP6);
   const rightEAR = calculateEAR(rightP1, rightP2, rightP3, rightP4, rightP5, rightP6);
-  
+
   const avgEAR = (leftEAR + rightEAR) / 2;
   const isBlink = avgEAR < CONFIG.FACE.BLINK_THRESHOLD && lastEyeAspectRatio >= CONFIG.FACE.BLINK_THRESHOLD;
-  
+
   // Track blink history
   const now = Date.now();
   if (isBlink) {
@@ -458,15 +475,15 @@ function analyzeBlinking(faceLandmarks) {
     // Remove old blinks
     blinkHistory = blinkHistory.filter(t => now - t < CONFIG.ADVANCED.BLINK_RATE_WINDOW);
   }
-  
+
   lastEyeAspectRatio = avgEAR;
-  
+
   // Calculate blink rate (blinks per minute)
   const blinkRate = (blinkHistory.length / CONFIG.ADVANCED.BLINK_RATE_WINDOW) * 60000;
-  
-  return { 
-    isBlink, 
-    eyeAspectRatio: avgEAR, 
+
+  return {
+    isBlink,
+    eyeAspectRatio: avgEAR,
     blinkRate,
     isAbnormalBlinkRate: blinkRate < CONFIG.ADVANCED.ABNORMAL_BLINK_RATE_LOW || blinkRate > CONFIG.ADVANCED.ABNORMAL_BLINK_RATE_HIGH
   };
@@ -477,7 +494,7 @@ function calculateEAR(p1, p2, p3, p4, p5, p6) {
   const verticalDist1 = Math.sqrt(Math.pow(p2.x - p6.x, 2) + Math.pow(p2.y - p6.y, 2));
   const verticalDist2 = Math.sqrt(Math.pow(p3.x - p5.x, 2) + Math.pow(p3.y - p5.y, 2));
   const horizontalDist = Math.sqrt(Math.pow(p1.x - p4.x, 2) + Math.pow(p1.y - p4.y, 2));
-  
+
   if (horizontalDist === 0) return 0;
   return (verticalDist1 + verticalDist2) / (2 * horizontalDist);
 }
@@ -505,7 +522,7 @@ async function processFrame(imageData) {
     try {
       // Create ImageBitmap from ImageData
       const imageBitmap = await createImageBitmap(imageData);
-      
+
       const result = faceLandmarker.detect(imageBitmap);
       imageBitmap.close();
 
@@ -539,33 +556,33 @@ async function processFrame(imageData) {
             suspiciousFrameCount = Math.max(0, suspiciousFrameCount - 1);
           }
         }
-        
+
         // ============================================
         // ADVANCED DETECTION: Eye Gaze Tracking
         // ============================================
         const eyeGaze = analyzeEyeGaze(landmarks);
         if (eyeGaze.isLookingAway && now - lastEyeGazeAlert > 8000) {
-          self.postMessage({ 
-            type: 'GAZE_AWAY', 
+          self.postMessage({
+            type: 'GAZE_AWAY',
             payload: eyeGaze.direction === 'left' ? 'GAZE_LEFT' : 'GAZE_RIGHT',
             direction: eyeGaze.direction
           });
           lastEyeGazeAlert = now;
         }
-        
+
         // ============================================
         // ADVANCED DETECTION: Lip Movement (Speaking)
         // ============================================
         const lipAnalysis = analyzeLipMovement(landmarks);
         if (lipAnalysis.isSpeaking && now - lastAlertTime > 10000) {
-          self.postMessage({ 
-            type: 'ALERT', 
+          self.postMessage({
+            type: 'ALERT',
             payload: 'SPEAKING_DETECTED',
             code: 'speakingDetected'
           });
           lastAlertTime = now;
         }
-        
+
         // ============================================
         // ADVANCED DETECTION: Blink Analysis
         // ============================================
@@ -586,18 +603,34 @@ async function processFrame(imageData) {
   // ============================================
   // Run YOLO detection continuously but throttled (every YOLO_THROTTLE_MS)
   // This ensures objects like phones/headphones are always detected
+
+  // Debug: Log YOLO status every 5 seconds
+  if (!self.lastYoloStatusLog || (now - self.lastYoloStatusLog > 5000)) {
+    self.lastYoloStatusLog = now;
+    console.log(`🔧 YOLO Debug: session=${!!yoloSession}, timeSinceLastRun=${now - lastYoloRunTime}ms, throttle=${YOLO_THROTTLE_MS}ms`);
+  }
+
   if (yoloSession && (now - lastYoloRunTime >= YOLO_THROTTLE_MS)) {
     lastYoloRunTime = now;
-    
+
     try {
       const detections = await runYoloInference(imageData);
-      
-      // Log detection count periodically (every 5 seconds)
-      if (!self.lastDetectionLog || (now - self.lastDetectionLog > 5000)) {
+
+      // Log detection count and max scores periodically (every 3 seconds for debugging)
+      if (!self.lastDetectionLog || (now - self.lastDetectionLog > 3000)) {
         self.lastDetectionLog = now;
-        console.log(`🔍 YOLO inference: ${detections.length} detections (threshold: ${CONFIG.YOLO.CONFIDENCE_THRESHOLD})`);
+        console.log(`🔍 YOLO running: ${detections.length} detections (threshold: ${CONFIG.YOLO.CONFIDENCE_THRESHOLD})`);
+
+        // Log max scores per class to help debug
+        if (maxScorePerClassPersistent) {
+          const maxScoreInfo = CONFIG.YOLO.CLASSES.map((cls, i) => {
+            const score = i < maxScorePerClassPersistent.length ? maxScorePerClassPersistent[i] : 0;
+            return `${cls}: ${(score * 100).toFixed(1)}%`;
+          }).join(', ');
+          console.log(`📊 Max scores seen: ${maxScoreInfo}`);
+        }
       }
-      
+
       // Log all detections for debugging (only non-person detections)
       if (detections.length > 0) {
         const alertableDetections = detections.filter(d => CONFIG.YOLO.ALERT_CLASSES.includes(d.class));
@@ -605,15 +638,16 @@ async function processFrame(imageData) {
           console.log('🚨 YOLO Alert Detections:', alertableDetections.map(d => `${d.class} (${(d.confidence * 100).toFixed(1)}%)`));
         }
       }
-      
+
       // ============================================
       // MULTI-PERSON DETECTION
       // ============================================
       if (CONFIG.YOLO.MULTI_PERSON_ALERT) {
-        const personDetections = detections.filter(d => d.class === 'person' && d.confidence > 0.3);
+        const multiPersonThreshold = CONFIG.YOLO.MULTI_PERSON_THRESHOLD || 0.5;
+        const personDetections = detections.filter(d => d.class === 'person' && d.confidence > multiPersonThreshold);
         if (personDetections.length > 1 && now - multiPersonAlertTime > 10000) {
-          self.postMessage({ 
-            type: 'ALERT', 
+          self.postMessage({
+            type: 'ALERT',
             payload: 'MULTI_PERSON',
             code: 'multiPerson',
             count: personDetections.length
@@ -622,31 +656,32 @@ async function processFrame(imageData) {
           console.log('🚨 Multi-person detected:', personDetections.length, 'people');
         }
       }
-      
+
       for (const detection of detections) {
         if (CONFIG.YOLO.ALERT_CLASSES.includes(detection.class)) {
-          // Throttle alerts (max once per 5 seconds per class)
-          if (now - lastAlertTime > 5000) {
+          // Throttle alerts per class (max once per 8 seconds per class)
+          const lastTimeForClass = lastAlertTimePerClass[detection.class] || 0;
+          if (now - lastTimeForClass > 8000) {
+            lastAlertTimePerClass[detection.class] = now;
             // Send detection class as code for i18n translation
-            self.postMessage({ 
-              type: 'ALERT', 
+            self.postMessage({
+              type: 'ALERT',
               payload: detection.class.toUpperCase() + '_DETECTED',
               code: detection.class + 'Detected',
               detectedClass: detection.class,
               confidence: detection.confidence
             });
             lastAlertTime = now;
-            
+
             // Also update status to show detection
-            self.postMessage({ 
-              type: 'STATUS', 
+            self.postMessage({
+              type: 'STATUS',
               payload: `DETECTION_${detection.class.toUpperCase()}`,
               code: 'detection',
               detectedClass: detection.class,
               confidence: detection.confidence
             });
           }
-          break;
         }
       }
     } catch (error) {
@@ -657,7 +692,7 @@ async function processFrame(imageData) {
   // Send gaze away event (not blocking alert)
   if (isSuspicious && suspiciousFrameCount === CONFIG.FACE.CONSECUTIVE_FRAMES) {
     self.postMessage({ type: 'GAZE_AWAY', payload: suspicionReason, code: suspicionReason });
-    
+
     // Only send alert for prolonged suspicious activity
     if (suspiciousFrameCount >= CONFIG.FACE.CONSECUTIVE_FRAMES * 2 && now - lastAlertTime > 5000) {
       self.postMessage({ type: 'ALERT', payload: suspicionReason, code: suspicionReason });
@@ -692,7 +727,7 @@ async function runYoloInference(imageData) {
         const srcX = Math.min(Math.floor(x * scaleX), width - 1);
         const srcY = Math.min(Math.floor(y * scaleY), height - 1);
         const srcIdx = (srcY * width + srcX) * 4;
-        
+
         const r = data[srcIdx] / 255.0;
         const g = data[srcIdx + 1] / 255.0;
         const b = data[srcIdx + 2] / 255.0;
@@ -708,7 +743,7 @@ async function runYoloInference(imageData) {
     const tensor = new ort.Tensor('float32', input, [1, 3, inputSize, inputSize]);
     const inputName = yoloSession.inputNames[0] || 'images';
     const feeds = { [inputName]: tensor };
-    
+
     const results = await yoloSession.run(feeds);
 
     // For segmentation models, there may be 2 outputs:
@@ -717,7 +752,7 @@ async function runYoloInference(imageData) {
     // We only need output0 for detection
     const outputName = yoloSession.outputNames[0] || 'output0';
     const outputTensor = results[outputName];
-    
+
     if (!outputTensor) {
       console.warn('No output tensor found');
       return [];
@@ -746,7 +781,7 @@ function parseYoloOutput(output, dims, originalWidth, originalHeight) {
   const numClasses = CONFIG.YOLO.CLASSES.length;
   const inputSize = CONFIG.YOLO.INPUT_SIZE;
   const maskCoefficients = CONFIG.YOLO.MASK_COEFFICIENTS;
-  
+
   // Log output dimensions for debugging (only first time)
   if (!self.loggedDims) {
     console.log('🔍 YOLO Output dimensions:', dims);
@@ -755,34 +790,34 @@ function parseYoloOutput(output, dims, originalWidth, originalHeight) {
     console.log('   Expected seg channels:', 4 + numClasses + maskCoefficients);
     self.loggedDims = true;
   }
-  
+
   // Initialize persistent max score tracking if not done
   if (!maxScorePerClassPersistent) {
     maxScorePerClassPersistent = new Array(numClasses).fill(0);
   }
-  
+
   // Handle different output formats
   // YOLO11 segmentation outputs: [1, 40, 8400] = 4 bbox + 4 classes + 32 mask coefficients
-  
+
   if (dims.length === 3) {
     // Format: [1, channels, numBoxes] or [1, numBoxes, channels]
     const dim1 = dims[1];
     const dim2 = dims[2];
-    
+
     const expectedDetect = 4 + numClasses; // 8 for 4 classes
     const expectedSeg = 4 + numClasses + maskCoefficients; // 40 for 4 classes + 32 mask
-    
+
     // Log format determination (only first time)
     if (!self.loggedFormat) {
       console.log('   Actual dims: [1,', dim1, ',', dim2, ']');
       console.log('   Determining format...');
       self.loggedFormat = true;
     }
-    
+
     // Determine format based on dimensions
     let isTransposed = false;
     let channels, numBoxes;
-    
+
     // For segmentation model output [1, 40, 8400], dim1=40 matches expectedSeg
     if (dim1 === expectedDetect || dim1 === expectedSeg) {
       // Format: [1, channels, numBoxes] - transposed format (common for YOLO)
@@ -828,14 +863,14 @@ function parseYoloOutput(output, dims, originalWidth, originalHeight) {
         return [];
       }
     }
-    
+
     // Sample first few detections for debugging
     let sampleLogged = false;
-    
+
     for (let i = 0; i < numBoxes; i++) {
       let cx, cy, w, h;
       let classScores = [];
-      
+
       if (isTransposed) {
         // Transposed format: data is arranged [cx0, cx1, ..., cxN, cy0, cy1, ..., cyN, ...]
         // For [1, 40, 8400], each channel has 8400 values
@@ -843,10 +878,12 @@ function parseYoloOutput(output, dims, originalWidth, originalHeight) {
         cy = output[1 * numBoxes + i];
         w = output[2 * numBoxes + i];
         h = output[3 * numBoxes + i];
-        
+
         // Extract class scores (indices 4, 5, 6, 7 for 4 classes)
+        // CRITICAL: Apply sigmoid to convert raw logits to probabilities
         for (let c = 0; c < numClasses; c++) {
-          classScores.push(output[(4 + c) * numBoxes + i]);
+          const rawLogit = output[(4 + c) * numBoxes + i];
+          classScores.push(sigmoid(rawLogit));
         }
       } else {
         // Standard format: data is arranged [box0_cx, box0_cy, box0_w, box0_h, box0_class0, ..., box1_cx, ...]
@@ -855,10 +892,11 @@ function parseYoloOutput(output, dims, originalWidth, originalHeight) {
         cy = output[offset + 1];
         w = output[offset + 2];
         h = output[offset + 3];
-        
-        // Extract class scores
+
+        // Extract class scores - apply sigmoid
         for (let c = 0; c < numClasses; c++) {
-          classScores.push(output[offset + 4 + c]);
+          const rawLogit = output[offset + 4 + c];
+          classScores.push(sigmoid(rawLogit));
         }
       }
 
@@ -866,7 +904,7 @@ function parseYoloOutput(output, dims, originalWidth, originalHeight) {
       if (!sampleLogged && i < 5) {
         const maxS = Math.max(...classScores);
         if (maxS > 0.001) {
-          console.log(`   Box[${i}]: cx=${cx.toFixed(1)}, cy=${cy.toFixed(1)}, w=${w.toFixed(1)}, h=${h.toFixed(1)}, scores=[${classScores.map(s => (s*100).toFixed(1)+'%').join(', ')}]`);
+          console.log(`   Box[${i}]: cx=${cx.toFixed(1)}, cy=${cy.toFixed(1)}, w=${w.toFixed(1)}, h=${h.toFixed(1)}, scores=[${classScores.map(s => (s * 100).toFixed(1) + '%').join(', ')}]`);
           sampleLogged = true;
         }
       }
@@ -880,8 +918,8 @@ function parseYoloOutput(output, dims, originalWidth, originalHeight) {
           maxClass = c;
         }
         // Track max per class for debugging (persistent) with bounds check
-        if (maxScorePerClassPersistent && c < maxScorePerClassPersistent.length && 
-            classScores[c] > maxScorePerClassPersistent[c]) {
+        if (maxScorePerClassPersistent && c < maxScorePerClassPersistent.length &&
+          classScores[c] > maxScorePerClassPersistent[c]) {
           maxScorePerClassPersistent[c] = classScores[c];
         }
       }
@@ -890,7 +928,7 @@ function parseYoloOutput(output, dims, originalWidth, originalHeight) {
         // Scale coordinates back to original image size
         const scaleX = originalWidth / inputSize;
         const scaleY = originalHeight / inputSize;
-        
+
         detections.push({
           class: CONFIG.YOLO.CLASSES[maxClass],
           confidence: maxScore,
@@ -903,7 +941,7 @@ function parseYoloOutput(output, dims, originalWidth, originalHeight) {
         });
       }
     }
-    
+
     // Log max scores per class periodically for debugging (every 10 seconds)
     if (maxScorePerClassPersistent && (!self.lastMaxScoreLog || (Date.now() - self.lastMaxScoreLog > 10000))) {
       self.lastMaxScoreLog = Date.now();
@@ -920,18 +958,19 @@ function parseYoloOutput(output, dims, originalWidth, originalHeight) {
     // Format: [numBoxes, channels]
     const numBoxes = dims[0];
     const channels = dims[1];
-    
+
     for (let i = 0; i < numBoxes; i++) {
       const offset = i * channels;
       const cx = output[offset + 0];
       const cy = output[offset + 1];
       const w = output[offset + 2];
       const h = output[offset + 3];
-      
-      // Extract class scores
+
+      // Extract class scores - apply sigmoid
       let classScores = [];
       for (let c = 0; c < numClasses; c++) {
-        classScores.push(output[offset + 4 + c]);
+        const rawLogit = output[offset + 4 + c];
+        classScores.push(sigmoid(rawLogit));
       }
 
       // Get max class score
@@ -947,7 +986,7 @@ function parseYoloOutput(output, dims, originalWidth, originalHeight) {
       if (maxScore >= CONFIG.YOLO.CONFIDENCE_THRESHOLD) {
         const scaleX = originalWidth / inputSize;
         const scaleY = originalHeight / inputSize;
-        
+
         detections.push({
           class: CONFIG.YOLO.CLASSES[maxClass],
           confidence: maxScore,

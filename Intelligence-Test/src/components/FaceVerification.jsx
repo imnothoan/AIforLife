@@ -217,8 +217,28 @@ export default function FaceVerification({
     setStatus(newStatus);
   }, []);
 
-  // Ref to store camera stream for cleanup
+  // Ref to store camera stream for cleanup - MUST be declared before stopCamera
   const cameraStreamRef = useRef(null);
+
+  // ============================================
+  // CAMERA CLEANUP FUNCTION
+  // Ensures camera resources are properly released
+  // ============================================
+  const stopCamera = useCallback(() => {
+    console.log('[FaceVerification] Stopping camera...');
+    if (cameraStreamRef.current) {
+      const tracks = cameraStreamRef.current.getTracks();
+      tracks.forEach(track => {
+        track.stop();
+        console.log(`[FaceVerification] Stopped track: ${track.kind} (${track.label})`);
+      });
+      cameraStreamRef.current = null;
+    }
+    if (videoRef.current) {
+      videoRef.current.srcObject = null;
+    }
+    console.log('[FaceVerification] Camera stopped successfully');
+  }, []);
 
   // Initialize MediaPipe Face Landmarker
   useEffect(() => {
@@ -364,7 +384,7 @@ export default function FaceVerification({
     let retryAttempts = 0;
     const MAX_RETRY_ATTEMPTS = 10;
     const BASE_RETRY_DELAY = 100;
-    
+
     const detectFace = async () => {
       // Use statusRef.current to avoid stale closure
       if (!videoRef.current || !faceLandmarkerRef.current || statusRef.current !== 'ready') {
@@ -521,14 +541,16 @@ export default function FaceVerification({
   const handleVerify = async () => {
     if (!capturedEmbedding) return;
 
-    setStatus('verifying');
+    updateStatus('verifying');
 
     // Simulate processing delay for UX
     await new Promise(resolve => setTimeout(resolve, 1000));
 
     if (mode === 'enroll') {
       // Enrollment mode - save embedding and complete
-      setStatus('success');
+      updateStatus('success');
+      // CRITICAL: Stop camera BEFORE calling callback to ensure cleanup
+      stopCamera();
       onEnrollComplete?.(capturedEmbedding, capturedImage);
       return;
     }
@@ -536,7 +558,9 @@ export default function FaceVerification({
     // Verification mode - compare with stored embedding
     if (!storedEmbedding) {
       // No stored embedding - treat as first-time enrollment
-      setStatus('success');
+      updateStatus('success');
+      // CRITICAL: Stop camera BEFORE calling callback
+      stopCamera();
       onEnrollComplete?.(capturedEmbedding, capturedImage);
       return;
     }
@@ -545,10 +569,12 @@ export default function FaceVerification({
     // Removed console.log for production security - similarity score is sensitive biometric data
 
     if (similarity >= FACE_CONFIG.SIMILARITY_THRESHOLD) {
-      setStatus('success');
+      updateStatus('success');
+      // CRITICAL: Stop camera on success
+      stopCamera();
       onSuccess?.(similarity);
     } else {
-      setStatus('failed');
+      updateStatus('failed');
       setErrorMessage(t('face.mismatch'));
       onFailure?.('mismatch', similarity);
     }

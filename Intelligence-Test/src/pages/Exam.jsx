@@ -89,6 +89,7 @@ export default function Exam() {
   // UI State
   const [showNotes, setShowNotes] = useState(false);
   const [showQuestionNav, setShowQuestionNav] = useState(true);
+  const [showSubmitConfirm, setShowSubmitConfirm] = useState(false); // Custom confirmation modal
 
   // Current question
   const currentQuestion = questions[currentQuestionIndex];
@@ -422,59 +423,59 @@ export default function Exam() {
   const VIDEO_MOUNT_DELAYS = [50, 100, 200, 500, 1000]; // Multiple retry delays for reliability
   const VIDEO_ATTACHMENT_TIMEOUT_MS = 3000; // Stop checking after this time
   const VIDEO_CHECK_INTERVAL_MS = 250; // Interval for checking video readiness
-  
+
   // Helper function to check if camera stream is still active
   const isStreamActive = (stream) => {
     if (!stream) return false;
     const tracks = stream.getTracks();
     return tracks.length > 0 && tracks.some(track => track.readyState === 'live');
   };
-  
+
   useEffect(() => {
     const attachStreamToVideo = () => {
       // Only if we have a stream and a video element
       if (cameraStreamRef.current && videoRef.current) {
         const stream = cameraStreamRef.current;
         const video = videoRef.current;
-        
+
         // Check if stream is still active
         if (!isStreamActive(stream)) {
           console.warn('[Exam] Camera stream is not active, attempting to restart camera');
           retryCamera();
           return;
         }
-        
+
         // Check if video already has the correct stream
         if (video.srcObject !== stream) {
           console.log('[Exam] Attaching camera stream to video element');
           video.srcObject = stream;
-          
+
           // Add event listener for when video loads data
           video.onloadeddata = () => {
             console.log('[Exam] Video data loaded, readyState:', video.readyState);
           };
         }
-        
+
         // Ensure video plays (might need to restart if paused)
         if (video.paused || video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) {
           video.play().catch(err => {
             console.warn('Video play failed:', err);
             // Try muted autoplay as fallback (browser autoplay policy)
             video.muted = true;
-            video.play().catch(() => {});
+            video.play().catch(() => { });
           });
         }
       }
     };
-    
+
     // Immediate attempt
     attachStreamToVideo();
-    
+
     // Multiple tiered retries to handle DOM mounting timing
-    const timeoutIds = VIDEO_MOUNT_DELAYS.map(delay => 
+    const timeoutIds = VIDEO_MOUNT_DELAYS.map(delay =>
       setTimeout(attachStreamToVideo, delay)
     );
-    
+
     // Also observe for video element readiness
     const checkInterval = setInterval(() => {
       if (videoRef.current && cameraStreamRef.current) {
@@ -485,12 +486,12 @@ export default function Exam() {
         }
       }
     }, VIDEO_CHECK_INTERVAL_MS);
-    
+
     // Clear after timeout (should be attached by then)
     const cleanupTimeout = setTimeout(() => {
       clearInterval(checkInterval);
     }, VIDEO_ATTACHMENT_TIMEOUT_MS);
-    
+
     return () => {
       timeoutIds.forEach(id => clearTimeout(id));
       clearInterval(checkInterval);
@@ -554,6 +555,10 @@ export default function Exam() {
 
     // Initialize AI Worker
     workerRef.current = new Worker(new URL('../workers/ai.worker.js', import.meta.url), { type: 'module' });
+
+    // Send explicit INIT message to ensure models are loaded (backup to auto-init)
+    workerRef.current.postMessage({ type: 'INIT' });
+
     workerRef.current.onmessage = (e) => {
       const { type, payload, code } = e.data;
       const translatedMessage = translateWorkerMessage(e.data);
@@ -583,13 +588,13 @@ export default function Exam() {
     // This handles DOM mounting variability during animation transitions
     const FRAME_PROCESSING_DELAYS = [300, 600, 1000, 1500, 2000, 3000];
     const FRAME_INTERVAL_MS = 200; // Process frames every 200ms (5 FPS)
-    
+
     const startFrameProcessing = () => {
       if (frameIntervalRef.current) {
         console.log('🎬 Frame processing already started');
         return true; // Already started
       }
-      
+
       // Double-check video is ready
       if (!videoRef.current || !ctxRef.current || !workerRef.current) {
         console.log('🎬 Frame processing prerequisites not met yet:', {
@@ -599,33 +604,33 @@ export default function Exam() {
         });
         return false;
       }
-      
+
       // Check if video has data AND stream is attached
       if (videoRef.current.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) {
-        console.log('🎬 Video not ready yet, readyState:', videoRef.current.readyState, 
-                    '(need', HTMLMediaElement.HAVE_CURRENT_DATA, 'or higher)');
+        console.log('🎬 Video not ready yet, readyState:', videoRef.current.readyState,
+          '(need', HTMLMediaElement.HAVE_CURRENT_DATA, 'or higher)');
         return false;
       }
-      
+
       // Check video dimensions to ensure stream is actually providing data
       if (!videoRef.current.videoWidth || videoRef.current.videoWidth === 0) {
         console.log('🎬 Video has no dimensions yet, waiting for stream...');
         return false;
       }
-      
+
       // Additional check: ensure srcObject is set
       if (!videoRef.current.srcObject) {
         console.log('🎬 Video has no srcObject, stream not attached');
         return false;
       }
-      
+
       console.log('🎬 ✅ Starting AI frame processing!');
       console.log('   Video ready:', !!videoRef.current, 'readyState:', videoRef.current?.readyState);
       console.log('   Video dimensions:', videoRef.current?.videoWidth, 'x', videoRef.current?.videoHeight);
       console.log('   Video srcObject:', !!videoRef.current?.srcObject);
       console.log('   Canvas context ready:', !!ctxRef.current);
       console.log('   Worker ready:', !!workerRef.current);
-      
+
       frameIntervalRef.current = setInterval(() => {
         if (videoRef.current && workerRef.current && ctxRef.current && !isSubmittingRef.current) {
           try {
@@ -644,22 +649,22 @@ export default function Exam() {
                 console.warn('🎬 Empty image data, skipping frame');
               }
             } else {
-              console.warn('🎬 Video not ready in frame loop, readyState:', videoRef.current.readyState, 
-                          'dimensions:', videoRef.current.videoWidth, 'x', videoRef.current.videoHeight);
+              console.warn('🎬 Video not ready in frame loop, readyState:', videoRef.current.readyState,
+                'dimensions:', videoRef.current.videoWidth, 'x', videoRef.current.videoHeight);
             }
           } catch (err) {
             console.warn('Error sending frame to worker:', err);
           }
         }
       }, FRAME_INTERVAL_MS);
-      
+
       console.log('🎬 Frame processing interval started (every', FRAME_INTERVAL_MS, 'ms)');
       return true;
     };
-    
+
     const timeoutIds = [];
     let checkIntervalId = null;
-    
+
     if (examStarted && cameraStatus === 'ready') {
       // Try multiple times with increasing delays
       FRAME_PROCESSING_DELAYS.forEach(delay => {
@@ -670,7 +675,7 @@ export default function Exam() {
         }, delay);
         timeoutIds.push(id);
       });
-      
+
       // Also use an interval check for reliability
       checkIntervalId = setInterval(() => {
         if (!frameIntervalRef.current) {
@@ -683,7 +688,7 @@ export default function Exam() {
           clearInterval(checkIntervalId);
         }
       }, 400);
-      
+
       // Stop checking after 10 seconds (increased for reliability)
       // If it still hasn't started by then, log a warning
       timeoutIds.push(setTimeout(() => {
@@ -720,7 +725,7 @@ export default function Exam() {
 
       // Clear all timeouts
       timeoutIds.forEach(id => clearTimeout(id));
-      
+
       // Clear check interval
       if (checkIntervalId) {
         clearInterval(checkIntervalId);
@@ -1010,7 +1015,7 @@ export default function Exam() {
   // ============================================
   // EVIDENCE CAPTURE FOR PROCTORING
   // ============================================
-  
+
   /**
    * Capture screenshot from video canvas and upload to Supabase Storage
    * Returns the public URL of the uploaded image or null if failed
@@ -1020,41 +1025,41 @@ export default function Exam() {
     if (!sessionId || DEMO_SESSION_IDS.includes(sessionId) || DEMO_EXAM_IDS.includes(examId)) {
       return null;
     }
-    
+
     if (!videoRef.current || !canvasRef.current || !ctxRef.current) {
       console.warn('[Evidence] Cannot capture: missing video/canvas');
       return null;
     }
-    
+
     try {
       // Draw current video frame to canvas
       const video = videoRef.current;
       const canvas = canvasRef.current;
       const ctx = ctxRef.current;
-      
+
       // Ensure video is ready
       if (video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA || !video.videoWidth) {
         console.warn('[Evidence] Video not ready for capture');
         return null;
       }
-      
+
       // Draw frame
       ctx.drawImage(video, 0, 0, 640, 480);
-      
+
       // Convert canvas to blob (JPEG for smaller file size)
       const blob = await new Promise((resolve) => {
         canvas.toBlob(resolve, 'image/jpeg', SCREENSHOT_QUALITY);
       });
-      
+
       if (!blob) {
         console.warn('[Evidence] Failed to create blob from canvas');
         return null;
       }
-      
+
       // Generate unique filename with timestamp (sanitize for storage)
       const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
       const filename = `${sessionId}_${timestamp}.jpg`;
-      
+
       // Upload to Supabase Storage
       const { data, error } = await supabase.storage
         .from('proctoring-evidence')
@@ -1063,17 +1068,17 @@ export default function Exam() {
           cacheControl: '3600',
           upsert: false
         });
-      
+
       if (error) {
         console.error('[Evidence] Upload failed:', error);
         return null;
       }
-      
+
       // Get public URL
       const { data: urlData } = supabase.storage
         .from('proctoring-evidence')
         .getPublicUrl(filename);
-      
+
       console.log('[Evidence] Screenshot captured:', urlData.publicUrl);
       return urlData.publicUrl;
     } catch (err) {
@@ -1081,11 +1086,11 @@ export default function Exam() {
       return null;
     }
   };
-  
+
   // ============================================
   // PROCTORING LOG WITH EVIDENCE
   // ============================================
-  
+
   const logProctoring = async (eventType, details, captureScreenshot = false) => {
     // Skip logging if no session or if in demo mode
     if (!sessionId) return;
@@ -1093,12 +1098,12 @@ export default function Exam() {
 
     try {
       let screenshot_url = null;
-      
+
       // Capture screenshot for critical events
       if (captureScreenshot) {
         screenshot_url = await captureEvidenceScreenshot();
       }
-      
+
       await supabase.from('proctoring_logs').insert({
         session_id: sessionId,
         event_type: eventType,
@@ -1106,7 +1111,7 @@ export default function Exam() {
         severity: eventType.includes('detected') ? 'critical' : 'warning',
         screenshot_url: screenshot_url
       });
-      
+
       if (screenshot_url) {
         console.log('[Evidence] Logged with screenshot:', eventType);
       }
@@ -1362,23 +1367,19 @@ export default function Exam() {
   const handleSubmit = async (isAuto = false) => {
     if (isSubmitting) return;
 
-    // Confirmation for manual submit
+    // For manual submit, show custom confirmation modal (window.confirm doesn't work well in fullscreen)
     if (!isAuto) {
-      const unanswered = questions.filter(q => !answers[q.id]).length;
-      const flagged = flaggedQuestions.size;
-
-      let confirmMsg = t('exam.submitConfirm');
-      if (unanswered > 0) {
-        confirmMsg += `\n\n⚠️ ${unanswered} ${t('exam.unansweredWarning')}`;
-      }
-      if (flagged > 0) {
-        confirmMsg += `\n⚠️ ${flagged} ${t('exam.flaggedWarning')}`;
-      }
-
-      if (!window.confirm(confirmMsg)) {
-        return;
-      }
+      setShowSubmitConfirm(true);
+      return;
     }
+
+    // Auto-submit or confirmed submit proceeds here
+    await executeSubmit(isAuto);
+  };
+
+  // Actual submit execution (called after confirmation)
+  const executeSubmit = async (isAuto = false) => {
+    setShowSubmitConfirm(false);
 
     setIsSubmitting(true);
     isSubmittingRef.current = true; // Update ref for event handlers
@@ -1787,7 +1788,79 @@ export default function Exam() {
         )}
       </AnimatePresence>
 
-      {/* Network Alert Overlay */}
+      {/* Submit Confirmation Modal - using custom modal instead of window.confirm for fullscreen compatibility */}
+      <AnimatePresence>
+        {showSubmitConfirm && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/70 z-[200] flex items-center justify-center p-4"
+          >
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              className="bg-paper rounded-2xl shadow-xl max-w-md w-full p-6"
+            >
+              <div className="text-center mb-6">
+                <div className="inline-flex items-center justify-center w-16 h-16 bg-warning-100 rounded-full mb-4">
+                  <Send className="w-8 h-8 text-warning" />
+                </div>
+                <h3 className="text-xl font-bold text-text-main">{t('exam.submitConfirm')}</h3>
+              </div>
+
+              {/* Warnings */}
+              <div className="space-y-3 mb-6">
+                {questions.filter(q => !answers[q.id]).length > 0 && (
+                  <div className="flex items-center space-x-3 p-3 bg-warning-50 rounded-lg">
+                    <AlertTriangle className="w-5 h-5 text-warning flex-shrink-0" />
+                    <span className="text-sm text-gray-700">
+                      {questions.filter(q => !answers[q.id]).length} {t('exam.unansweredWarning')}
+                    </span>
+                  </div>
+                )}
+                {flaggedQuestions.size > 0 && (
+                  <div className="flex items-center space-x-3 p-3 bg-warning-50 rounded-lg">
+                    <Flag className="w-5 h-5 text-warning flex-shrink-0" />
+                    <span className="text-sm text-gray-700">
+                      {flaggedQuestions.size} {t('exam.flaggedWarning')}
+                    </span>
+                  </div>
+                )}
+                <div className="flex items-center space-x-3 p-3 bg-primary-50 rounded-lg">
+                  <CheckCircle className="w-5 h-5 text-primary flex-shrink-0" />
+                  <span className="text-sm text-gray-700">
+                    {t('exam.answered')}: {Object.keys(answers).length}/{questions.length}
+                  </span>
+                </div>
+              </div>
+
+              {/* Buttons */}
+              <div className="flex space-x-3">
+                <button
+                  onClick={() => setShowSubmitConfirm(false)}
+                  className="flex-1 btn-secondary py-3"
+                >
+                  {t('common.cancel')}
+                </button>
+                <button
+                  onClick={() => executeSubmit(false)}
+                  disabled={isSubmitting}
+                  className="flex-1 btn-success py-3"
+                >
+                  {isSubmitting ? (
+                    <Loader2 className="w-5 h-5 mr-2 animate-spin" />
+                  ) : (
+                    <Send className="w-5 h-5 mr-2" />
+                  )}
+                  {t('common.submit')}
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
       <AnimatePresence>
         {isOffline && (
           <motion.div
@@ -1869,8 +1942,8 @@ export default function Exam() {
                 <button
                   onClick={() => toggleFlag(currentQuestion.id)}
                   className={`flex items-center space-x-1 px-3 py-1.5 rounded-lg transition-colors ${flaggedQuestions.has(currentQuestion.id)
-                      ? 'bg-warning-100 text-warning-700'
-                      : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                    ? 'bg-warning-100 text-warning-700'
+                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
                     }`}
                 >
                   {flaggedQuestions.has(currentQuestion.id) ? (
@@ -1896,8 +1969,8 @@ export default function Exam() {
                     <label
                       key={option.id}
                       className={`flex items-center p-4 border-2 rounded-xl cursor-pointer transition-all ${answers[currentQuestion.id] === option.id
-                          ? 'border-primary bg-primary-50'
-                          : 'border-gray-200 hover:border-primary-300 hover:bg-gray-50'
+                        ? 'border-primary bg-primary-50'
+                        : 'border-gray-200 hover:border-primary-300 hover:bg-gray-50'
                         }`}
                     >
                       <input
@@ -1909,8 +1982,8 @@ export default function Exam() {
                         className="sr-only"
                       />
                       <div className={`w-8 h-8 rounded-full border-2 flex items-center justify-center mr-4 flex-shrink-0 ${answers[currentQuestion.id] === option.id
-                          ? 'border-primary bg-primary text-white'
-                          : 'border-gray-300'
+                        ? 'border-primary bg-primary text-white'
+                        : 'border-gray-300'
                         }`}>
                         <span className="font-semibold">{option.id}</span>
                       </div>
@@ -2056,10 +2129,10 @@ export default function Exam() {
                     key={q.id}
                     onClick={() => goToQuestion(idx)}
                     className={`relative w-10 h-10 rounded-lg font-medium text-sm transition-all ${isCurrent
-                        ? 'bg-primary text-white ring-2 ring-primary ring-offset-2'
-                        : isAnswered
-                          ? 'bg-success-100 text-success-700 hover:bg-success-200'
-                          : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                      ? 'bg-primary text-white ring-2 ring-primary ring-offset-2'
+                      : isAnswered
+                        ? 'bg-success-100 text-success-700 hover:bg-success-200'
+                        : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
                       }`}
                   >
                     {idx + 1}
