@@ -199,11 +199,14 @@ export async function silentVerifyFace(videoElement, storedEmbedding) {
   // Convert distance to similarity score (0-1) for logging
   const similarity = Math.exp(-distance);
   
-  console.log('[FaceUtils] Silent verification result:', {
-    distance: distance.toFixed(4),
-    threshold: CONFIG.EUCLIDEAN_THRESHOLD,
-    isMatch
-  });
+  // Only log detailed results in development - biometric data is sensitive
+  if (typeof import.meta !== 'undefined' && import.meta.env?.DEV) {
+    console.log('[FaceUtils] Silent verification result:', {
+      distance: distance.toFixed(4),
+      threshold: CONFIG.EUCLIDEAN_THRESHOLD,
+      isMatch
+    });
+  }
   
   return {
     success: true,

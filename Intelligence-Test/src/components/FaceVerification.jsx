@@ -455,11 +455,14 @@ export default function FaceVerification({
     const distance = euclideanDistance(capturedDescriptor, storedEmbedding);
     const similarity = Math.exp(-distance); // Convert to 0-1 scale for display
     
-    console.log('[FaceVerification] Verification result:', {
-      distance: distance.toFixed(4),
-      threshold: FACE_CONFIG.EUCLIDEAN_THRESHOLD,
-      match: distance <= FACE_CONFIG.EUCLIDEAN_THRESHOLD
-    });
+    // Only log in development mode - don't expose biometric data in production
+    if (import.meta.env.DEV) {
+      console.log('[FaceVerification] Verification result:', {
+        distance: distance.toFixed(4),
+        threshold: FACE_CONFIG.EUCLIDEAN_THRESHOLD,
+        match: distance <= FACE_CONFIG.EUCLIDEAN_THRESHOLD
+      });
+    }
 
     if (distance <= FACE_CONFIG.EUCLIDEAN_THRESHOLD) {
       updateStatus('success');

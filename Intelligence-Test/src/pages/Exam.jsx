@@ -1165,8 +1165,8 @@ export default function Exam() {
     if (isDemo) return;
 
     // Skip if no stored face embedding (can't verify)
-    if (!storedFaceEmbedding) {
-      console.log('[Silent Verification] No stored embedding, skipping periodic checks');
+    if (!storedFaceEmbedding || !Array.isArray(storedFaceEmbedding) || storedFaceEmbedding.length !== 128) {
+      console.log('[Silent Verification] No valid stored embedding, skipping periodic checks');
       return;
     }
 
