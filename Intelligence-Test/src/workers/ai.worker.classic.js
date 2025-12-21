@@ -7,6 +7,9 @@
 // - Eye gaze tracking
 // - Multi-person detection
 
+/* eslint-disable no-undef */
+// ort is loaded via importScripts from CDN
+
 // ============================================
 // LOAD DEPENDENCIES VIA importScripts
 // ============================================

@@ -179,7 +179,7 @@ async function initializeAI() {
               delegate: delegate
             },
             runningMode: "IMAGE",
-            numFaces: 1,
+            numFaces: 2, // Detect up to 2 faces for multi-person detection
             minFaceDetectionConfidence: CONFIG.FACE.MIN_DETECTION_CONFIDENCE,
             minTrackingConfidence: CONFIG.FACE.MIN_TRACKING_CONFIDENCE,
             outputFaceBlendshapes: false,
@@ -516,8 +516,8 @@ async function processFrame(imageData) {
   let suspicionReason = '';
 
   // ============================================
-  // STAGE 1: FACE MESH DETECTION WITH ADVANCED ANALYTICS
-  // ============================================
+// STAGE 1: FACE MESH DETECTION WITH ADVANCED ANALYTICS
+// ============================================
   if (faceLandmarker) {
     try {
       // Create ImageBitmap from ImageData
@@ -525,6 +525,20 @@ async function processFrame(imageData) {
 
       const result = faceLandmarker.detect(imageBitmap);
       imageBitmap.close();
+
+      // ============================================
+      // MULTI-PERSON DETECTION (Using MediaPipe - more reliable than YOLO)
+      // ============================================
+      if (result.faceLandmarks.length > 1 && now - multiPersonAlertTime > 10000) {
+        self.postMessage({
+          type: 'ALERT',
+          payload: 'MULTI_PERSON',
+          code: 'multiPerson',
+          count: result.faceLandmarks.length
+        });
+        multiPersonAlertTime = now;
+        console.log('🚨 Multi-person detected via MediaPipe:', result.faceLandmarks.length, 'faces');
+      }
 
       if (result.faceLandmarks.length === 0) {
         suspiciousFrameCount++;
