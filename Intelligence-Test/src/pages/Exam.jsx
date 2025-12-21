@@ -1233,7 +1233,7 @@ export default function Exam() {
               }, true); // captureScreenshot = true
               
               // Show warning toast (but don't interrupt exam)
-              toast.warning(t('face.mismatch') || 'Khuôn mặt không khớp. Hệ thống đã ghi nhận.');
+              toast.warning(t('face.silentMismatch') || 'Khuôn mặt không khớp. Hệ thống đã ghi nhận.');
               
               // Increment cheat count
               setCheatCount(prev => prev + 1);

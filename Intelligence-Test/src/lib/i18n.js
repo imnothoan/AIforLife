@@ -424,6 +424,7 @@ const translations = {
     'face.centerFace': 'Đặt khuôn mặt vào giữa khung hình',
     'face.failed': 'Xác minh thất bại. Vui lòng thử lại.',
     'face.mismatch': 'Khuôn mặt không khớp với thí sinh đã đăng ký!',
+    'face.silentMismatch': 'Khuôn mặt không khớp. Hệ thống đã ghi nhận.',
     'face.noFaceDetected': 'Không phát hiện khuôn mặt. Vui lòng thử lại.',
     'face.multipleFaces': 'Phát hiện nhiều người. Chỉ được có 1 người trong khung hình.',
     'face.poorQuality': 'Chất lượng ảnh thấp. Vui lòng đảm bảo ánh sáng tốt.',
@@ -432,6 +433,8 @@ const translations = {
     'face.randomCheckDesc': 'Hệ thống yêu cầu xác minh lại danh tính của bạn.',
     'face.timeLimit': 'Bạn có 30 giây để hoàn thành xác minh.',
     'face.countdown': 'Còn lại: {seconds} giây',
+    'face.loadingModels': 'Đang tải mô hình nhận dạng...',
+    'face.startingCamera': 'Đang khởi động camera...',
 
     // Profile & Face Registration
     'profile.faceVerification': 'Xác minh khuôn mặt',
@@ -875,6 +878,7 @@ const translations = {
     'face.success': 'Verification successful!',
     'face.failed': 'Verification failed. Please try again.',
     'face.mismatch': 'Face does not match the registered student!',
+    'face.silentMismatch': 'Face mismatch detected. This has been recorded.',
     'face.noFaceDetected': 'No face detected. Please try again.',
     'face.multipleFaces': 'Multiple people detected. Only 1 person allowed in frame.',
     'face.poorQuality': 'Poor image quality. Please ensure good lighting.',
@@ -887,6 +891,8 @@ const translations = {
     'face.moveCloser': 'Move closer to the camera',
     'face.moveFarther': 'Move away from the camera',
     'face.centerFace': 'Center your face in the frame',
+    'face.loadingModels': 'Loading face recognition models...',
+    'face.startingCamera': 'Starting camera...',
 
     // Profile & Face Registration
     'profile.faceVerification': 'Face Verification',
