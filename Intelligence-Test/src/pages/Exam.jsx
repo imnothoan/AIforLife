@@ -12,6 +12,7 @@ import {
   Shield, Loader2, CheckCircle, XCircle, Eye, EyeOff, Monitor
 } from 'lucide-react';
 import FaceVerification from '../components/FaceVerification';
+import { silentVerifyFace, loadFaceModels, captureVideoFrame } from '../lib/faceVerificationUtils';
 
 // ============================================
 // CONSTANTS
@@ -37,7 +38,11 @@ const SUBMIT_TIMEOUT_ERROR = 'SUBMIT_TIMEOUT';
 
 // Evidence capture constants
 const SCREENSHOT_QUALITY = 0.85; // JPEG quality for evidence screenshots
-const CRITICAL_EVENTS_FOR_EVIDENCE = ['phoneDetected', 'headphonesDetected', 'materialDetected', 'multiPerson'];
+const CRITICAL_EVENTS_FOR_EVIDENCE = ['phoneDetected', 'headphonesDetected', 'materialDetected', 'multiPerson', 'faceVerificationFailed'];
+
+// Silent face verification constants
+const SILENT_VERIFICATION_INTERVAL_MS = 3 * 60 * 1000; // 3 minutes
+const SILENT_VERIFICATION_COOLDOWN_MS = 30 * 1000; // 30 seconds between warnings
 
 export default function Exam() {
   const { id: examId } = useParams();
@@ -1149,6 +1154,9 @@ export default function Exam() {
   }, [user?.id]);
 
   // Schedule random face verifications during exam - fixed 3-minute interval
+  // Uses SILENT verification - no popup, just checks in background
+  const lastSilentVerificationWarning = useRef(0);
+  
   useEffect(() => {
     if (!examStarted || !sessionId) return;
 
@@ -1156,24 +1164,105 @@ export default function Exam() {
     const isDemo = examId === 'demo' || examId === '1';
     if (isDemo) return;
 
-    // Fixed 3-minute interval for face verification
-    const CHECK_INTERVAL_MS = 3 * 60 * 1000; // 3 minutes
+    // Skip if no stored face embedding (can't verify)
+    if (!storedFaceEmbedding) {
+      console.log('[Silent Verification] No stored embedding, skipping periodic checks');
+      return;
+    }
 
-    console.log('[Face Verification] Setting up 3-minute interval checks');
+    console.log('[Silent Verification] Setting up 3-minute interval checks');
 
-    const interval = setInterval(() => {
-      // Only trigger if exam is still in progress
-      if (examStarted && !isSubmitting && !showFaceVerification) {
-        console.log('[Face Verification] Triggering random check (3-min interval)');
-        triggerRandomVerification();
+    // Preload face models for faster verification
+    loadFaceModels().catch(err => {
+      console.warn('[Silent Verification] Failed to preload models:', err);
+    });
+
+    const interval = setInterval(async () => {
+      // Only verify if exam is still in progress and not submitting
+      if (!examStarted || isSubmitting || showFaceVerification) return;
+      
+      // Check if video is available
+      if (!videoRef.current || videoRef.current.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) {
+        console.log('[Silent Verification] Video not ready, skipping this check');
+        return;
       }
-    }, CHECK_INTERVAL_MS);
+
+      console.log('[Silent Verification] Performing background face check...');
+      
+      try {
+        // Perform silent verification from current video frame
+        const result = await silentVerifyFace(videoRef.current, storedFaceEmbedding);
+        
+        if (result.success) {
+          setFaceVerificationCount(prev => prev + 1);
+          
+          // Log verification result
+          if (sessionId && !DEMO_SESSION_IDS.includes(sessionId)) {
+            try {
+              await supabase.rpc('log_face_verification', {
+                p_session_id: sessionId,
+                p_verification_type: 'silent',
+                p_similarity_score: result.similarity || (result.isMatch ? 1.0 : 0),
+                p_is_match: result.isMatch
+              });
+            } catch (error) {
+              console.warn('[Silent Verification] Could not log:', error);
+            }
+          }
+          
+          if (result.isMatch) {
+            console.log('[Silent Verification] ✅ Face verified successfully (background)');
+            // Silent success - no toast, no interruption
+          } else {
+            // Face mismatch detected!
+            console.warn('[Silent Verification] ⚠️ Face mismatch detected!');
+            
+            const now = Date.now();
+            // Only show warning if cooldown has passed
+            if (now - lastSilentVerificationWarning.current > SILENT_VERIFICATION_COOLDOWN_MS) {
+              lastSilentVerificationWarning.current = now;
+              
+              // Capture evidence screenshot
+              const evidence = await captureVideoFrame(videoRef.current, SCREENSHOT_QUALITY);
+              
+              // Log as proctoring event with evidence
+              logProctoring('face_not_detected', { 
+                type: 'silent_verification_failed',
+                distance: result.distance,
+                similarity: result.similarity
+              }, true); // captureScreenshot = true
+              
+              // Show warning toast (but don't interrupt exam)
+              toast.warning(t('face.mismatch') || 'Khuôn mặt không khớp. Hệ thống đã ghi nhận.');
+              
+              // Increment cheat count
+              setCheatCount(prev => prev + 1);
+            }
+          }
+        } else {
+          // Extraction failed - could be no face, multiple faces, etc
+          console.log('[Silent Verification] Check failed:', result.error);
+          
+          if (result.error === 'MULTI_PERSON') {
+            // Multi-person is handled by ai.worker, just log here
+            console.log('[Silent Verification] Multiple people detected');
+          } else if (result.error === 'NO_FACE') {
+            // No face detected - could be looking away, covered camera, etc
+            // This is already handled by ai.worker with gaze detection
+            console.log('[Silent Verification] No face in frame');
+          }
+        }
+      } catch (error) {
+        console.error('[Silent Verification] Error:', error);
+      }
+    }, SILENT_VERIFICATION_INTERVAL_MS);
 
     return () => {
       clearInterval(interval);
     };
-  }, [examStarted, sessionId, examId, isSubmitting, showFaceVerification]);
+  }, [examStarted, sessionId, examId, isSubmitting, showFaceVerification, storedFaceEmbedding, t]);
 
+  // Legacy trigger function - only used for start/submit verification
   const triggerRandomVerification = () => {
     setFaceVerificationMode('random');
     setShowFaceVerification(true);
