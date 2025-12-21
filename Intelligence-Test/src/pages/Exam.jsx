@@ -1200,6 +1200,20 @@ export default function Exam() {
 
     toast.success(t('face.success'));
 
+    // Ensure exam camera is still active after face verification
+    // FaceVerification component has its own camera which is now stopped
+    // We need to make sure exam camera stream is reattached
+    if (cameraStreamRef.current && videoRef.current) {
+      const stream = cameraStreamRef.current;
+      if (stream.getTracks().some(track => track.readyState === 'live')) {
+        videoRef.current.srcObject = stream;
+        videoRef.current.play().catch(() => {});
+      } else {
+        // Camera stream died - restart it
+        retryCamera();
+      }
+    }
+
     // Execute pending callback if any
     if (pendingVerificationCallback) {
       pendingVerificationCallback();
@@ -1251,6 +1265,18 @@ export default function Exam() {
     }
 
     toast.success(t('face.enrollSuccess'));
+
+    // Ensure exam camera is still active after face enrollment
+    if (cameraStreamRef.current && videoRef.current) {
+      const stream = cameraStreamRef.current;
+      if (stream.getTracks().some(track => track.readyState === 'live')) {
+        videoRef.current.srcObject = stream;
+        videoRef.current.play().catch(() => {});
+      } else {
+        // Camera stream died - restart it
+        retryCamera();
+      }
+    }
 
     // Execute pending callback
     if (pendingVerificationCallback) {
