@@ -23,6 +23,10 @@ const FACE_CONFIG = {
   VERIFICATION_TIMEOUT: 30, // Seconds for random verification
   // Model URL (using vladmandic's face-api fork with better models)
   MODEL_URL: 'https://cdn.jsdelivr.net/npm/@vladmandic/face-api@1.7.14/model',
+  // Performance optimization: use TinyFaceDetector for faster initial detection
+  USE_TINY_DETECTOR: true,
+  // Reduce detection interval to save CPU
+  DETECTION_INTERVAL_MS: 300, // 3.3 FPS for guidance, reduced from 200ms
 };
 
 // Model loading state (singleton to avoid reloading)
@@ -30,8 +34,9 @@ let modelsLoaded = false;
 let modelLoadingPromise = null;
 
 /**
- * Load face-api.js models (SSD MobileNet + FaceNet for 128D embeddings)
+ * Load face-api.js models (TinyFaceDetector + FaceNet for 128D embeddings)
  * Uses singleton pattern to prevent multiple loads
+ * Optimized for performance: TinyFaceDetector is much lighter than SSD MobileNet
  */
 async function loadModels() {
   if (modelsLoaded) return true;
@@ -45,10 +50,12 @@ async function loadModels() {
       console.log('[FaceVerification] Loading face-api.js models from:', FACE_CONFIG.MODEL_URL);
       
       // Load required models:
-      // - ssdMobilenetv1: Fast face detection
+      // - tinyFaceDetector: Very fast face detection (recommended for real-time)
+      // - ssdMobilenetv1: Backup for more accurate detection when capturing
       // - faceLandmark68Net: 68-point face landmarks (needed for descriptor extraction)
       // - faceRecognitionNet: FaceNet 128D embeddings for recognition
       await Promise.all([
+        faceapi.nets.tinyFaceDetector.loadFromUri(FACE_CONFIG.MODEL_URL),
         faceapi.nets.ssdMobilenetv1.loadFromUri(FACE_CONFIG.MODEL_URL),
         faceapi.nets.faceLandmark68Net.loadFromUri(FACE_CONFIG.MODEL_URL),
         faceapi.nets.faceRecognitionNet.loadFromUri(FACE_CONFIG.MODEL_URL),
@@ -264,6 +271,7 @@ export default function FaceVerification({
 
   // ============================================
   // FACE DETECTION LOOP (Real-time guidance)
+  // Uses TinyFaceDetector for better performance
   // ============================================
   const startFaceDetectionLoop = useCallback(() => {
     if (detectionIntervalRef.current) {
@@ -285,16 +293,17 @@ export default function FaceVerification({
           return;
         }
         
-        // Detect face (lightweight detection only for guidance)
-        const detections = await faceapi.detectAllFaces(
-          video,
-          new faceapi.SsdMobilenetv1Options({ minConfidence: FACE_CONFIG.MIN_DETECTION_CONFIDENCE })
-        );
+        // Use TinyFaceDetector for faster real-time guidance (much lighter than SSD)
+        const detectorOptions = FACE_CONFIG.USE_TINY_DETECTOR
+          ? new faceapi.TinyFaceDetectorOptions({ inputSize: 320, scoreThreshold: FACE_CONFIG.MIN_DETECTION_CONFIDENCE })
+          : new faceapi.SsdMobilenetv1Options({ minConfidence: FACE_CONFIG.MIN_DETECTION_CONFIDENCE });
+        
+        const detections = await faceapi.detectAllFaces(video, detectorOptions);
         
         frameCount++;
         
-        // Log periodically
-        if (frameCount % 30 === 1) {
+        // Log periodically (reduced frequency)
+        if (frameCount % 50 === 1) {
           console.log('[FaceVerification] Detection:', detections.length, 'faces');
         }
         
@@ -329,11 +338,11 @@ export default function FaceVerification({
       }
     };
 
-    // Run detection every 200ms (5 FPS) for smooth feedback
-    detectionIntervalRef.current = setInterval(detectFace, 200);
+    // Run detection at optimized interval for smooth but lightweight feedback
+    detectionIntervalRef.current = setInterval(detectFace, FACE_CONFIG.DETECTION_INTERVAL_MS);
     detectFace(); // Run immediately
     
-    console.log('[FaceVerification] Face detection loop started');
+    console.log('[FaceVerification] Face detection loop started with TinyFaceDetector');
   }, []);
 
   // ============================================

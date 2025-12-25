@@ -40,28 +40,25 @@ const CONFIG = {
     LIP_MOVEMENT_THRESHOLD: 0.02, // Threshold for detecting speech
     BLINK_THRESHOLD: 0.2,         // Eye aspect ratio for blink detection
   },
-  // YOLO settings - Custom trained SEGMENTATION model for anti-cheat detection
+  // YOLO settings - Custom trained YOLOv11n SEGMENTATION model for anti-cheat detection
+  // Model: best.onnx (11.3MB) - YOLOv11n-seg trained on custom anti-cheat dataset
   // Model outputs: [1, 40, 8400] = 4 bbox + 4 classes + 32 mask coefficients
   // IMPORTANT: ONNX model outputs RAW LOGITS, not probabilities!
   // We must apply sigmoid to convert to probabilities
-  // NOTE: Current model has quality issues - all raw logits ~0, so sigmoid gives ~50%
-  // Need to retrain model with better data for reliable detection
   YOLO: {
-    MODEL_PATH: '/models/anticheat_yolo11s.onnx',
+    MODEL_PATH: '/models/best.onnx', // YOLOv11n-seg nano model (11.3MB, much faster)
     INPUT_SIZE: 640, // Model was trained with 640x640 input
     // Confidence threshold - applied AFTER sigmoid activation
-    // Set to 0.6 to filter out ~50% noise from untrained model
-    // Lower this when model is properly trained
-    CONFIDENCE_THRESHOLD: 0.6,
+    // Lowered to 0.4 for the new trained model to detect more objects
+    CONFIDENCE_THRESHOLD: 0.4,
     IOU_THRESHOLD: 0.45,
     CLASSES: ['person', 'phone', 'material', 'headphones'], // Must match training classes (4 classes)
     // Only alert on phone, material, headphones - NOT person (use MediaPipe for multi-person)
     ALERT_CLASSES: ['phone', 'material', 'headphones'],
     MASK_COEFFICIENTS: 32, // Number of mask coefficients for segmentation models
-    // Multi-person detection - DISABLED in YOLO due to model quality issues
-    // Use MediaPipe FaceLandmarker for reliable multi-person detection instead
-    MULTI_PERSON_ALERT: false, // Disabled - model detects 140+ false positives
-    MULTI_PERSON_THRESHOLD: 0.7, // High threshold if re-enabled
+    // Multi-person detection - DISABLED in YOLO, use MediaPipe FaceLandmarker instead
+    MULTI_PERSON_ALERT: false,
+    MULTI_PERSON_THRESHOLD: 0.7,
   },
   // Cascade timing
   CASCADE: {
