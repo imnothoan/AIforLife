@@ -11,6 +11,8 @@ import * as faceapi from 'face-api.js';
 // ============================================
 
 const FACE_CONFIG = {
+  // FaceNet descriptor dimension (128-dimensional embeddings)
+  DESCRIPTOR_SIZE: 128,
   // Face detection thresholds
   MIN_DETECTION_CONFIDENCE: 0.5,
   MIN_FACE_SIZE: 0.08,
@@ -429,10 +431,10 @@ export default function FaceVerification({
           return;
         }
 
-        // Get the 128D face descriptor
+        // Get the face descriptor (128-dimensional for FaceNet)
         const descriptor = descriptorToArray(detection.descriptor);
         
-        if (descriptor && descriptor.length === 128) {
+        if (descriptor && descriptor.length === FACE_CONFIG.DESCRIPTOR_SIZE) {
           descriptors.push(descriptor);
           lastImage = canvas.toDataURL('image/jpeg', 0.85);
         }
@@ -454,18 +456,19 @@ export default function FaceVerification({
         finalDescriptor = descriptors[0];
       } else {
         // Compute element-wise average of all descriptors
-        finalDescriptor = new Array(128).fill(0);
+        const descSize = FACE_CONFIG.DESCRIPTOR_SIZE;
+        finalDescriptor = new Array(descSize).fill(0);
         for (const desc of descriptors) {
-          for (let j = 0; j < 128; j++) {
+          for (let j = 0; j < descSize; j++) {
             finalDescriptor[j] += desc[j];
           }
         }
-        for (let j = 0; j < 128; j++) {
+        for (let j = 0; j < descSize; j++) {
           finalDescriptor[j] /= descriptors.length;
         }
       }
 
-      console.log(`[FaceVerification] ✅ Face descriptor extracted from ${descriptors.length} frames (128D averaged)`);
+      console.log(`[FaceVerification] ✅ Face descriptor extracted from ${descriptors.length} frames (${FACE_CONFIG.DESCRIPTOR_SIZE}D averaged)`);
 
       // Store captured data
       setCapturedImage(lastImage);

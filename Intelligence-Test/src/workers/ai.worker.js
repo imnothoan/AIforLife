@@ -89,15 +89,24 @@ function sigmoid(x) {
 // Check if scores need sigmoid (if all scores are in logit range, not 0-1 probability range)
 // YOLOv8/v11 exports already have sigmoid applied, so we should NOT apply it again
 function needsSigmoid(scores) {
-  // If any score is outside [-10, 10] range or values look like probabilities (0-1), skip sigmoid
-  // Raw logits are typically in range [-5, 5] or wider
-  const hasNegative = scores.some(s => s < 0);
-  const hasLargePositive = scores.some(s => s > 1);
-  const hasLargeNegative = scores.some(s => s < -1);
+  // If array is empty or all values are invalid, don't apply sigmoid (safer default)
+  if (!scores || scores.length === 0) {
+    return false;
+  }
   
-  // If we see negative values or values > 1, these are logits
-  // YOLOv8/v11 ONNX exports output probabilities (0-1 range)
-  return hasNegative || hasLargePositive || hasLargeNegative;
+  // Filter out invalid values (NaN, Infinity)
+  const validScores = scores.filter(s => !isNaN(s) && isFinite(s));
+  if (validScores.length === 0) {
+    return false;
+  }
+  
+  // If any score is outside [0, 1] range, these are logits (need sigmoid)
+  // Raw logits can be negative or > 1
+  // Probabilities are always in [0, 1]
+  const hasNegative = validScores.some(s => s < 0);
+  const hasLargePositive = validScores.some(s => s > 1);
+  
+  return hasNegative || hasLargePositive;
 }
 
 // ============================================
@@ -861,12 +870,35 @@ function parseYoloOutput(output, dims, originalWidth, originalHeight) {
       
       for (const pos of samplePositions) {
         if (isTransposed) {
-          // Transposed: class scores at channels 4-7
+          // Transposed: class scores at channels 4-7, each channel has dim2 values
           for (let c = 0; c < numClasses; c++) {
             const idx = (4 + c) * dim2 + pos;
             if (idx < output.length) {
               sampleScores.push(output[idx]);
             }
+          }
+        } else {
+          // Standard: data is [box0, box1, ...], each box has `channels` values
+          // Class scores start at offset 4 within each box
+          const channels = dim2;
+          const offset = pos * channels;
+          for (let c = 0; c < numClasses; c++) {
+            const idx = offset + 4 + c;
+            if (idx < output.length) {
+              sampleScores.push(output[idx]);
+            }
+          }
+        }
+      }
+    } else if (dims.length === 2) {
+      // 2D format: [numBoxes, channels]
+      const channels = dims[1];
+      for (const pos of samplePositions) {
+        const offset = pos * channels;
+        for (let c = 0; c < numClasses; c++) {
+          const idx = offset + 4 + c;
+          if (idx < output.length) {
+            sampleScores.push(output[idx]);
           }
         }
       }
