@@ -3,11 +3,16 @@
  * 
  * Provides silent face verification from video stream without interrupting the user.
  * Uses face-api.js with FaceNet (128D embeddings) for accurate face recognition.
+ * 
+ * Optimized for SmartExamPro - "Nền tảng khảo thí thông minh"
+ * - TinyFaceDetector for real-time detection (faster)
+ * - SSD MobileNet for capture (more accurate)
+ * - Singleton pattern to prevent multiple model loads
  */
 
 import * as faceapi from 'face-api.js';
 
-// Configuration
+// Configuration - Optimized for performance
 const CONFIG = {
   // Model URL (using vladmandic's face-api fork with better models)
   MODEL_URL: 'https://cdn.jsdelivr.net/npm/@vladmandic/face-api@1.7.14/model',
@@ -15,9 +20,13 @@ const CONFIG = {
   MIN_DETECTION_CONFIDENCE: 0.5,
   // Face recognition - Euclidean distance threshold
   // FaceNet uses Euclidean distance. Lower = stricter matching.
+  // 0.5 is balanced - increase to 0.55 for more lenient matching
   EUCLIDEAN_THRESHOLD: 0.5,
   // Timeout for model loading (ms)
   MODEL_LOAD_TIMEOUT: 30000,
+  // Use TinyFaceDetector for faster detection in silent verification
+  USE_TINY_DETECTOR: true,
+  TINY_INPUT_SIZE: 320, // Smaller = faster but less accurate
 };
 
 // Model loading state (singleton)
@@ -26,6 +35,7 @@ let modelLoadingPromise = null;
 
 /**
  * Load face-api.js models (singleton pattern)
+ * Loads TinyFaceDetector for fast detection + SSD for accurate capture
  * @returns {Promise<boolean>} True if models loaded successfully
  */
 export async function loadFaceModels() {
@@ -37,16 +47,22 @@ export async function loadFaceModels() {
   
   modelLoadingPromise = (async () => {
     try {
-      console.log('[FaceUtils] Loading face-api.js models...');
+      console.log('[FaceUtils] Loading face-api.js models (optimized)...');
       
+      // Load all required models in parallel for faster startup
       await Promise.all([
+        // TinyFaceDetector - fast detection for real-time
+        faceapi.nets.tinyFaceDetector.loadFromUri(CONFIG.MODEL_URL),
+        // SSD MobileNet - accurate detection for capture
         faceapi.nets.ssdMobilenetv1.loadFromUri(CONFIG.MODEL_URL),
+        // Face landmarks - required for descriptor extraction
         faceapi.nets.faceLandmark68Net.loadFromUri(CONFIG.MODEL_URL),
+        // Face recognition - FaceNet 128D embeddings
         faceapi.nets.faceRecognitionNet.loadFromUri(CONFIG.MODEL_URL),
       ]);
       
       modelsLoaded = true;
-      console.log('[FaceUtils] ✅ Models loaded successfully');
+      console.log('[FaceUtils] ✅ All models loaded successfully');
       return true;
     } catch (error) {
       console.error('[FaceUtils] ❌ Failed to load models:', error);
@@ -100,6 +116,7 @@ function toArray(descriptor) {
 
 /**
  * Extract face descriptor from a video element (silent - no user interaction)
+ * Uses TinyFaceDetector for fast multi-face check, SSD for accurate extraction
  * 
  * @param {HTMLVideoElement} videoElement - The video element to capture from
  * @returns {Promise<{success: boolean, descriptor?: number[], error?: string, faceCount?: number}>}
@@ -124,11 +141,15 @@ export async function extractDescriptorFromVideo(videoElement) {
   }
   
   try {
-    // Detect all faces first (to check for multi-person)
-    const allFaces = await faceapi.detectAllFaces(
-      videoElement,
-      new faceapi.SsdMobilenetv1Options({ minConfidence: CONFIG.MIN_DETECTION_CONFIDENCE })
-    );
+    // Use TinyFaceDetector for fast multi-face check first
+    const detectorOptions = CONFIG.USE_TINY_DETECTOR
+      ? new faceapi.TinyFaceDetectorOptions({ 
+          inputSize: CONFIG.TINY_INPUT_SIZE, 
+          scoreThreshold: CONFIG.MIN_DETECTION_CONFIDENCE 
+        })
+      : new faceapi.SsdMobilenetv1Options({ minConfidence: CONFIG.MIN_DETECTION_CONFIDENCE });
+    
+    const allFaces = await faceapi.detectAllFaces(videoElement, detectorOptions);
     
     if (allFaces.length === 0) {
       return { success: false, error: 'NO_FACE', faceCount: 0 };
@@ -138,7 +159,7 @@ export async function extractDescriptorFromVideo(videoElement) {
       return { success: false, error: 'MULTI_PERSON', faceCount: allFaces.length };
     }
     
-    // Extract descriptor from the single face
+    // For descriptor extraction, use SSD MobileNet for better accuracy
     const detection = await faceapi
       .detectSingleFace(videoElement, new faceapi.SsdMobilenetv1Options({ minConfidence: CONFIG.MIN_DETECTION_CONFIDENCE }))
       .withFaceLandmarks()

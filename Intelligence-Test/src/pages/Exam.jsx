@@ -566,16 +566,36 @@ export default function Exam() {
       return messageMap[code] || messageMap[payload] || payload;
     };
 
-    // Local cache for AI warning messages to reduce API calls
+    // ============================================
+    // AI WARNING OPTIMIZATION
+    // - Long-term cache (5 minutes) to reduce API calls
+    // - Skip API for repeated same-type violations
+    // - Debounce rapid violations
+    // ============================================
     const aiWarningCache = new Map();
-    const AI_CACHE_TTL = 60000; // 1 minute cache
+    const AI_CACHE_TTL = 300000; // 5 minutes cache (tăng từ 1 phút)
     
-    // Function to get AI-generated warning message with caching
+    // Track last warning time per type to debounce
+    const lastWarningTimePerType = new Map();
+    const WARNING_DEBOUNCE_MS = 5000; // 5 seconds between same type warnings
+    
+    // Function to get AI-generated warning message with smart caching
     const fetchAIWarning = async (eventCode, warningNum, progress) => {
-      // Check cache first
-      const cacheKey = `${eventCode}-${warningNum}`;
+      // Debounce: Skip if same event type was warned recently
+      const lastTime = lastWarningTimePerType.get(eventCode) || 0;
+      if (Date.now() - lastTime < WARNING_DEBOUNCE_MS) {
+        console.log(`[AI Warning] Debounced ${eventCode} (too soon)`);
+        return null; // Use fallback toast instead
+      }
+      lastWarningTimePerType.set(eventCode, Date.now());
+      
+      // Check cache first - use eventCode + warningNum as key
+      // Limit warningNum to 3 for cache efficiency (messages are similar after 3)
+      const cacheWarningNum = Math.min(warningNum, 3);
+      const cacheKey = `${eventCode}-${cacheWarningNum}`;
       const cached = aiWarningCache.get(cacheKey);
       if (cached && (Date.now() - cached.time < AI_CACHE_TTL)) {
+        console.log(`[AI Warning] Using cached message for ${cacheKey}`);
         return cached.message;
       }
       
@@ -591,7 +611,7 @@ export default function Exam() {
           },
           body: JSON.stringify({
             eventType: eventCode,
-            warningCount: warningNum,
+            warningCount: cacheWarningNum, // Use capped warning count
             progress: progress
           })
         });
@@ -601,7 +621,7 @@ export default function Exam() {
         const result = await response.json();
         const message = result.success ? result.message : null;
         
-        // Store in cache
+        // Store in cache with longer TTL
         if (message) {
           aiWarningCache.set(cacheKey, { message, time: Date.now() });
         }
