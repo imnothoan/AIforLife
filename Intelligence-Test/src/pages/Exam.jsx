@@ -1597,6 +1597,8 @@ export default function Exam() {
 
     // For manual submit, show custom confirmation modal (window.confirm doesn't work well in fullscreen)
     if (!isAuto) {
+      // Set submitting flag early to prevent tab switch warnings during confirmation
+      isSubmittingRef.current = true;
       setShowSubmitConfirm(true);
       return;
     }
@@ -1605,12 +1607,18 @@ export default function Exam() {
     await executeSubmit(isAuto);
   };
 
+  // Called when user cancels the submit confirmation
+  const cancelSubmit = () => {
+    isSubmittingRef.current = false;
+    setShowSubmitConfirm(false);
+  };
+
   // Actual submit execution (called after confirmation)
   const executeSubmit = async (isAuto = false) => {
     setShowSubmitConfirm(false);
 
     setIsSubmitting(true);
-    isSubmittingRef.current = true; // Update ref for event handlers
+    isSubmittingRef.current = true; // Ensure ref is set (may already be set from handleSubmit)
 
     try {
       const isDemo = DEMO_EXAM_IDS.includes(examId) || DEMO_SESSION_IDS.includes(sessionId);
@@ -1751,6 +1759,8 @@ export default function Exam() {
         // Continue anyway - not critical
       }
 
+      // Keep isSubmittingRef.current = true during navigation to prevent tab switch warnings
+      // Don't reset it - the component will unmount anyway
       navigate('/');
     } catch (error) {
       console.error('Submit error:', error);
@@ -1760,9 +1770,10 @@ export default function Exam() {
       } else {
         toast.error(t('exam.submitError'));
       }
-    } finally {
+      
+      // Only reset on error - successful submit navigates away
       setIsSubmitting(false);
-      isSubmittingRef.current = false; // Reset ref
+      isSubmittingRef.current = false;
     }
   };
 
@@ -2075,7 +2086,7 @@ export default function Exam() {
               {/* Buttons */}
               <div className="flex space-x-3">
                 <button
-                  onClick={() => setShowSubmitConfirm(false)}
+                  onClick={cancelSubmit}
                   className="flex-1 btn-secondary py-3"
                 >
                   {t('common.cancel')}

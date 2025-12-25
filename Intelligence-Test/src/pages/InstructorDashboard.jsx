@@ -1457,11 +1457,14 @@ function StudentAnalyticsTab({ classId, exams }) {
 
       setLoading(true);
       try {
+        // Use explicit foreign key hint to avoid PGRST201 error
+        // exam_sessions has two FK to profiles: student_id and reviewed_by
+        // We need to specify which one to join on
         const { data, error } = await supabase
           .from('exam_sessions')
           .select(`
             *,
-            student:profiles(id, full_name, email, student_id)
+            student:profiles!exam_sessions_student_id_fkey(id, full_name, email, student_id)
           `)
           .eq('exam_id', selectedExamId)
           .order('submitted_at', { ascending: false });
