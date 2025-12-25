@@ -8,10 +8,11 @@ import { toast } from 'react-toastify';
 import {
   FileText, Users, Plus, Clock, BarChart3, CheckCircle, Trash2,
   Calendar, X, Save, Loader2, BookOpen, Shield, ClipboardList,
-  Edit2, GraduationCap, Activity, AlertTriangle, Search, LogOut, User, Settings
+  Edit2, GraduationCap, Activity, AlertTriangle, Search, LogOut, User, Settings, Bot
 } from 'lucide-react';
 import LanguageSwitcher from '../components/LanguageSwitcher';
 import ProfileSettings from '../components/ProfileSettings';
+import IntegrityReport from '../components/IntegrityReport';
 import { ACADEMIC_YEAR_PAST_YEARS, ACADEMIC_YEAR_FUTURE_YEARS } from '../lib/constants';
 
 // ============================================
@@ -1443,6 +1444,7 @@ function StudentAnalyticsTab({ classId, exams }) {
   const [analyticsData, setAnalyticsData] = useState(null);
   const [expandedSessionId, setExpandedSessionId] = useState(null);
   const [proctoringLogs, setProctoringLogs] = useState({});
+  const [integrityReportSessionId, setIntegrityReportSessionId] = useState(null); // For AI Integrity Report modal
 
   // Load sessions for selected exam
   useEffect(() => {
@@ -1744,9 +1746,23 @@ function StudentAnalyticsTab({ classId, exams }) {
                           </div>
                         </td>
                         <td className="px-4 py-3">
-                          <span className={`px-2 py-1 rounded-full text-xs font-medium ${integrity.color}`}>
-                            {integrity.label}
-                          </span>
+                          <div className="flex items-center space-x-2">
+                            <span className={`px-2 py-1 rounded-full text-xs font-medium ${integrity.color}`}>
+                              {integrity.label}
+                            </span>
+                            {(session.status === 'submitted' || session.status === 'auto_submitted') && (
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setIntegrityReportSessionId(session.id);
+                                }}
+                                className="p-1 text-primary hover:bg-primary-50 rounded transition-colors"
+                                title="Xem báo cáo AI"
+                              >
+                                <Bot className="w-4 h-4" />
+                              </button>
+                            )}
+                          </div>
                         </td>
                         <td className="px-4 py-3">
                           <span className={`badge ${
@@ -1837,6 +1853,26 @@ function StudentAnalyticsTab({ classId, exams }) {
           </div>
         </>
       )}
+
+      {/* AI Integrity Report Modal */}
+      <AnimatePresence>
+        {integrityReportSessionId && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4"
+            onClick={() => setIntegrityReportSessionId(null)}
+          >
+            <div onClick={(e) => e.stopPropagation()}>
+              <IntegrityReport
+                sessionId={integrityReportSessionId}
+                onClose={() => setIntegrityReportSessionId(null)}
+              />
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

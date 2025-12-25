@@ -12,6 +12,7 @@ import {
   Shield, Loader2, CheckCircle, XCircle, Eye, EyeOff, Monitor
 } from 'lucide-react';
 import FaceVerification from '../components/FaceVerification';
+import AIWarningToast from '../components/AIWarningToast';
 import { silentVerifyFace, loadFaceModels, captureVideoFrame } from '../lib/faceVerificationUtils';
 
 // ============================================
@@ -43,6 +44,9 @@ const CRITICAL_EVENTS_FOR_EVIDENCE = ['phoneDetected', 'headphonesDetected', 'ma
 // Silent face verification constants
 const SILENT_VERIFICATION_INTERVAL_MS = 3 * 60 * 1000; // 3 minutes
 const SILENT_VERIFICATION_COOLDOWN_MS = 30 * 1000; // 30 seconds between warnings
+
+// API URL for AI proctoring endpoints
+const API_URL = import.meta.env.VITE_API_URL || 'https://smartexampro-api.onrender.com';
 
 export default function Exam() {
   const { id: examId } = useParams();
@@ -95,6 +99,10 @@ export default function Exam() {
   const [showNotes, setShowNotes] = useState(false);
   const [showQuestionNav, setShowQuestionNav] = useState(true);
   const [showSubmitConfirm, setShowSubmitConfirm] = useState(false); // Custom confirmation modal
+
+  // AI Warning State
+  const [aiWarning, setAiWarning] = useState(null);
+  const [aiWarningSeverity, setAiWarningSeverity] = useState('warning');
 
   // Current question
   const currentQuestion = questions[currentQuestionIndex];
@@ -558,6 +566,121 @@ export default function Exam() {
       return messageMap[code] || messageMap[payload] || payload;
     };
 
+    // ============================================
+    // AI WARNING OPTIMIZATION
+    // - Long-term cache (5 minutes) to reduce API calls
+    // - Skip API for repeated same-type violations
+    // - Debounce rapid violations
+    // ============================================
+    const aiWarningCache = new Map();
+    const AI_CACHE_TTL = 300000; // 5 minutes cache (tăng từ 1 phút)
+    
+    // Track last warning time per type to debounce
+    const lastWarningTimePerType = new Map();
+    const WARNING_DEBOUNCE_MS = 5000; // 5 seconds between same type warnings
+    
+    // Function to get AI-generated warning message with smart caching
+    const fetchAIWarning = async (eventCode, warningNum, progress) => {
+      // Debounce: Skip if same event type was warned recently
+      const lastTime = lastWarningTimePerType.get(eventCode) || 0;
+      if (Date.now() - lastTime < WARNING_DEBOUNCE_MS) {
+        console.log(`[AI Warning] Debounced ${eventCode} (too soon)`);
+        return null; // Use fallback toast instead
+      }
+      lastWarningTimePerType.set(eventCode, Date.now());
+      
+      // Check cache first - use eventCode + warningNum as key
+      // Limit warningNum to 3 for cache efficiency (messages are similar after 3)
+      const cacheWarningNum = Math.min(warningNum, 3);
+      const cacheKey = `${eventCode}-${cacheWarningNum}`;
+      const cached = aiWarningCache.get(cacheKey);
+      if (cached && (Date.now() - cached.time < AI_CACHE_TTL)) {
+        console.log(`[AI Warning] Using cached message for ${cacheKey}`);
+        return cached.message;
+      }
+      
+      try {
+        const token = await supabase.auth.getSession().then(r => r.data?.session?.access_token);
+        if (!token) return null;
+        
+        const response = await fetch(`${API_URL}/api/ai/explain-warning`, {
+          method: 'POST',
+          headers: { 
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json' 
+          },
+          body: JSON.stringify({
+            eventType: eventCode,
+            warningCount: cacheWarningNum, // Use capped warning count
+            progress: progress
+          })
+        });
+        
+        if (!response.ok) return null;
+        
+        const result = await response.json();
+        const message = result.success ? result.message : null;
+        
+        // Store in cache with longer TTL
+        if (message) {
+          aiWarningCache.set(cacheKey, { message, time: Date.now() });
+        }
+        
+        return message;
+      } catch (error) {
+        console.warn('[AI Warning] Failed to fetch:', error);
+        return null;
+      }
+    };
+
+    // Message queue to handle async processing sequentially
+    let processingMessage = false;
+    const messageQueue = [];
+    
+    const processNextMessage = async () => {
+      if (processingMessage || messageQueue.length === 0) return;
+      
+      processingMessage = true;
+      const e = messageQueue.shift();
+      
+      try {
+        const { type, payload, code } = e.data;
+        const translatedMessage = translateWorkerMessage(e.data);
+
+        if (type === 'STATUS') {
+          setStatus(translatedMessage);
+        } else if (type === 'ALERT') {
+          const newCheatCount = cheatCount + 1;
+          setCheatCount(newCheatCount);
+          
+          // Capture screenshot for critical AI detections
+          const shouldCaptureScreenshot = CRITICAL_EVENTS_FOR_EVIDENCE.includes(code);
+          logProctoring('ai_alert', { message: payload, code }, shouldCaptureScreenshot);
+          
+          // Try to get AI-generated warning message
+          const progress = questions.length > 0 
+            ? Math.round((currentQuestionIndex / questions.length) * 100)
+            : 0;
+          
+          const aiMessage = await fetchAIWarning(code, newCheatCount, progress);
+          
+          if (aiMessage) {
+            // Show AI warning toast
+            setAiWarning(aiMessage);
+            setAiWarningSeverity(newCheatCount >= 3 ? 'critical' : 'warning');
+          } else {
+            // Fallback to regular toast
+            toast.warning(`${translate('anticheat.aiWarning')}: ${translatedMessage}`);
+          }
+        } else if (type === 'GAZE_AWAY') {
+          setGazeAwayCount(prev => prev + 1);
+        }
+      } finally {
+        processingMessage = false;
+        processNextMessage(); // Process next in queue
+      }
+    };
+
     // Initialize AI Worker
     workerRef.current = new Worker(new URL('../workers/ai.worker.js', import.meta.url), { type: 'module' });
 
@@ -565,19 +688,9 @@ export default function Exam() {
     workerRef.current.postMessage({ type: 'INIT' });
 
     workerRef.current.onmessage = (e) => {
-      const { type, payload, code } = e.data;
-      const translatedMessage = translateWorkerMessage(e.data);
-
-      if (type === 'STATUS') setStatus(translatedMessage);
-      else if (type === 'ALERT') {
-        setCheatCount(prev => prev + 1);
-        toast.warning(`${translate('anticheat.aiWarning')}: ${translatedMessage}`);
-        // Capture screenshot for critical AI detections
-        const shouldCaptureScreenshot = CRITICAL_EVENTS_FOR_EVIDENCE.includes(code);
-        logProctoring('ai_alert', { message: payload, code }, shouldCaptureScreenshot);
-      } else if (type === 'GAZE_AWAY') {
-        setGazeAwayCount(prev => prev + 1);
-      }
+      // Queue messages to process sequentially
+      messageQueue.push(e);
+      processNextMessage();
     };
 
     // Handle worker errors
@@ -1883,6 +1996,14 @@ export default function Exam() {
   // ============================================
   return (
     <div className="flex h-screen bg-background no-select">
+      {/* AI Warning Toast for intelligent proctoring alerts */}
+      <AIWarningToast
+        message={aiWarning}
+        severity={aiWarningSeverity}
+        onClose={() => setAiWarning(null)}
+        duration={8000}
+      />
+
       {/* Face Verification Modal for random checks */}
       <AnimatePresence>
         {showFaceVerification && (

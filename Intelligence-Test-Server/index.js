@@ -611,6 +611,96 @@ app.get('/api/instructor/session/:sessionId/logs', verifyAuth, async (req, res) 
   }
 });
 
+// --- AI Proctoring Endpoints ---
+
+const { generateWarningMessage, generateIntegrityReport } = require('./ai-guardian');
+
+// Generate intelligent warning message during exam
+app.post('/api/ai/explain-warning', verifyAuth, async (req, res) => {
+  const { eventType, warningCount, progress } = req.body;
+  
+  if (!eventType) {
+    return res.status(400).json({ error: 'eventType is required' });
+  }
+
+  try {
+    const message = await generateWarningMessage(genAI, eventType, {
+      warningCount: warningCount || 1,
+      progress: progress || 0
+    });
+    
+    res.json({ success: true, message });
+  } catch (error) {
+    console.error('AI Warning Error:', error);
+    // Fallback message nếu API fail
+    res.json({ 
+      success: true, 
+      message: 'Vui lòng tập trung vào bài thi.',
+      fallback: true 
+    });
+  }
+});
+
+// Generate integrity report after exam submission
+app.get('/api/ai/integrity-report/:sessionId', verifyAuth, async (req, res) => {
+  const { sessionId } = req.params;
+
+  try {
+    // Get session data
+    const { data: session, error: sessionError } = await supabase
+      .from('exam_sessions')
+      .select('*')
+      .eq('id', sessionId)
+      .single();
+
+    if (sessionError || !session) {
+      return res.status(404).json({ error: 'Session not found' });
+    }
+
+    // Verify user has access (student who took exam or instructor)
+    const isStudent = session.student_id === req.user.id;
+    
+    // Check if user is instructor of this exam's class
+    let isInstructor = false;
+    if (!isStudent) {
+      const { data: examData } = await supabase
+        .from('exams')
+        .select('class_id')
+        .eq('id', session.exam_id)
+        .single();
+      
+      if (examData) {
+        const { data: classData } = await supabase
+          .from('classes')
+          .select('instructor_id')
+          .eq('id', examData.class_id)
+          .single();
+        
+        isInstructor = classData?.instructor_id === req.user.id;
+      }
+    }
+
+    if (!isStudent && !isInstructor) {
+      return res.status(403).json({ error: 'Access denied' });
+    }
+
+    // Get proctoring logs
+    const { data: logs } = await supabase
+      .from('proctoring_logs')
+      .select('*')
+      .eq('session_id', sessionId)
+      .order('timestamp', { ascending: true });
+
+    // Generate integrity report
+    const report = await generateIntegrityReport(genAI, session, logs || []);
+
+    res.json({ success: true, report });
+  } catch (error) {
+    console.error('Integrity Report Error:', error);
+    res.status(500).json({ error: 'Failed to generate integrity report' });
+  }
+});
+
 // --- Helper Functions ---
 
 function shuffleArray(array) {
