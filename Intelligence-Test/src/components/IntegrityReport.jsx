@@ -48,7 +48,16 @@ export default function IntegrityReport({ sessionId, onClose }) {
 
       if (!response.ok) {
         const errData = await response.json().catch(() => ({}));
-        throw new Error(errData.error || 'Failed to fetch report');
+        // Provide specific error messages based on status
+        let errorMessage = errData.error || 'Không thể tải báo cáo';
+        if (response.status === 404) {
+          errorMessage = 'Không tìm thấy phiên thi';
+        } else if (response.status === 403) {
+          errorMessage = 'Bạn không có quyền xem báo cáo này';
+        } else if (response.status >= 500) {
+          errorMessage = 'Lỗi máy chủ, vui lòng thử lại sau';
+        }
+        throw new Error(errorMessage);
       }
 
       const data = await response.json();

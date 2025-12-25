@@ -101,7 +101,7 @@ export default function AIWarningToast({
                 <p className={`font-medium ${colors.title} flex items-center`}>
                   AI Proctor
                   {severity === 'critical' && (
-                    <span className="ml-2 px-1.5 py-0.5 text-[10px] uppercase font-bold bg-danger text-white rounded">
+                    <span className="ml-2 px-1.5 py-0.5 text-[10px] leading-tight uppercase font-bold bg-danger text-white rounded">
                       Nghiêm trọng
                     </span>
                   )}

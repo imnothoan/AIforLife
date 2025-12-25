@@ -566,8 +566,19 @@ export default function Exam() {
       return messageMap[code] || messageMap[payload] || payload;
     };
 
-    // Function to get AI-generated warning message
+    // Local cache for AI warning messages to reduce API calls
+    const aiWarningCache = new Map();
+    const AI_CACHE_TTL = 60000; // 1 minute cache
+    
+    // Function to get AI-generated warning message with caching
     const fetchAIWarning = async (eventCode, warningNum, progress) => {
+      // Check cache first
+      const cacheKey = `${eventCode}-${warningNum}`;
+      const cached = aiWarningCache.get(cacheKey);
+      if (cached && (Date.now() - cached.time < AI_CACHE_TTL)) {
+        return cached.message;
+      }
+      
       try {
         const token = await supabase.auth.getSession().then(r => r.data?.session?.access_token);
         if (!token) return null;
@@ -588,10 +599,65 @@ export default function Exam() {
         if (!response.ok) return null;
         
         const result = await response.json();
-        return result.success ? result.message : null;
+        const message = result.success ? result.message : null;
+        
+        // Store in cache
+        if (message) {
+          aiWarningCache.set(cacheKey, { message, time: Date.now() });
+        }
+        
+        return message;
       } catch (error) {
         console.warn('[AI Warning] Failed to fetch:', error);
         return null;
+      }
+    };
+
+    // Message queue to handle async processing sequentially
+    let processingMessage = false;
+    const messageQueue = [];
+    
+    const processNextMessage = async () => {
+      if (processingMessage || messageQueue.length === 0) return;
+      
+      processingMessage = true;
+      const e = messageQueue.shift();
+      
+      try {
+        const { type, payload, code } = e.data;
+        const translatedMessage = translateWorkerMessage(e.data);
+
+        if (type === 'STATUS') {
+          setStatus(translatedMessage);
+        } else if (type === 'ALERT') {
+          const newCheatCount = cheatCount + 1;
+          setCheatCount(newCheatCount);
+          
+          // Capture screenshot for critical AI detections
+          const shouldCaptureScreenshot = CRITICAL_EVENTS_FOR_EVIDENCE.includes(code);
+          logProctoring('ai_alert', { message: payload, code }, shouldCaptureScreenshot);
+          
+          // Try to get AI-generated warning message
+          const progress = questions.length > 0 
+            ? Math.round((currentQuestionIndex / questions.length) * 100)
+            : 0;
+          
+          const aiMessage = await fetchAIWarning(code, newCheatCount, progress);
+          
+          if (aiMessage) {
+            // Show AI warning toast
+            setAiWarning(aiMessage);
+            setAiWarningSeverity(newCheatCount >= 3 ? 'critical' : 'warning');
+          } else {
+            // Fallback to regular toast
+            toast.warning(`${translate('anticheat.aiWarning')}: ${translatedMessage}`);
+          }
+        } else if (type === 'GAZE_AWAY') {
+          setGazeAwayCount(prev => prev + 1);
+        }
+      } finally {
+        processingMessage = false;
+        processNextMessage(); // Process next in queue
       }
     };
 
@@ -601,37 +667,10 @@ export default function Exam() {
     // Send explicit INIT message to ensure models are loaded (backup to auto-init)
     workerRef.current.postMessage({ type: 'INIT' });
 
-    workerRef.current.onmessage = async (e) => {
-      const { type, payload, code } = e.data;
-      const translatedMessage = translateWorkerMessage(e.data);
-
-      if (type === 'STATUS') setStatus(translatedMessage);
-      else if (type === 'ALERT') {
-        const newCheatCount = cheatCount + 1;
-        setCheatCount(newCheatCount);
-        
-        // Capture screenshot for critical AI detections
-        const shouldCaptureScreenshot = CRITICAL_EVENTS_FOR_EVIDENCE.includes(code);
-        logProctoring('ai_alert', { message: payload, code }, shouldCaptureScreenshot);
-        
-        // Try to get AI-generated warning message
-        const progress = questions.length > 0 
-          ? Math.round((currentQuestionIndex / questions.length) * 100)
-          : 0;
-        
-        const aiMessage = await fetchAIWarning(code, newCheatCount, progress);
-        
-        if (aiMessage) {
-          // Show AI warning toast
-          setAiWarning(aiMessage);
-          setAiWarningSeverity(newCheatCount >= 3 ? 'critical' : 'warning');
-        } else {
-          // Fallback to regular toast
-          toast.warning(`${translate('anticheat.aiWarning')}: ${translatedMessage}`);
-        }
-      } else if (type === 'GAZE_AWAY') {
-        setGazeAwayCount(prev => prev + 1);
-      }
+    workerRef.current.onmessage = (e) => {
+      // Queue messages to process sequentially
+      messageQueue.push(e);
+      processNextMessage();
     };
 
     // Handle worker errors
