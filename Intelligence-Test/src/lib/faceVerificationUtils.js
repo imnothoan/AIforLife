@@ -7,12 +7,13 @@
  * Optimized for SmartExamPro - "Nền tảng khảo thí thông minh"
  * - TinyFaceDetector for real-time detection (faster)
  * - SSD MobileNet for capture (more accurate)
+ * - Multi-frame verification for reliability (3 frames with majority voting)
  * - Singleton pattern to prevent multiple model loads
  */
 
 import * as faceapi from 'face-api.js';
 
-// Configuration - Optimized for performance
+// Configuration - Optimized for performance and accuracy
 const CONFIG = {
   // Model URL (using vladmandic's face-api fork with better models)
   MODEL_URL: 'https://cdn.jsdelivr.net/npm/@vladmandic/face-api@1.7.14/model',
@@ -20,13 +21,27 @@ const CONFIG = {
   MIN_DETECTION_CONFIDENCE: 0.5,
   // Face recognition - Euclidean distance threshold
   // FaceNet uses Euclidean distance. Lower = stricter matching.
-  // 0.5 is balanced - increase to 0.55 for more lenient matching
-  EUCLIDEAN_THRESHOLD: 0.5,
+  // 0.5 is balanced - handles minor expression changes (smile, slight head tilt)
+  // Increase to 0.55 for more lenient matching (recommended for real-world use)
+  EUCLIDEAN_THRESHOLD: 0.55,
   // Timeout for model loading (ms)
   MODEL_LOAD_TIMEOUT: 30000,
   // Use TinyFaceDetector for faster detection in silent verification
   USE_TINY_DETECTOR: true,
   TINY_INPUT_SIZE: 320, // Smaller = faster but less accurate
+  // Multi-frame verification settings
+  MULTI_FRAME: {
+    FRAME_COUNT: 3,           // Number of frames to capture
+    FRAME_DELAY_MS: 200,      // Delay between frames (ms)
+    MIN_MATCH_COUNT: 2,       // Minimum matches required (majority voting)
+    AGGREGATE_METHOD: 'median', // 'median' or 'mean' for distance aggregation
+  },
+  // Head pose tolerance (radians) - allow small head movements
+  HEAD_POSE_TOLERANCE: {
+    YAW: 0.4,    // Left/right rotation (about 23 degrees)
+    PITCH: 0.35, // Up/down rotation (about 20 degrees)
+    ROLL: 0.3,   // Tilt rotation (about 17 degrees)
+  },
 };
 
 // Model loading state (singleton)
@@ -183,25 +198,122 @@ export async function extractDescriptorFromVideo(videoElement) {
 /**
  * Verify face from video against stored embedding (silent verification)
  * 
- * This function captures a frame from the video, extracts the face descriptor,
- * and compares it with the stored embedding - all without user interaction.
+ * This function captures MULTIPLE frames from the video, extracts the face descriptor,
+ * and compares each with the stored embedding using majority voting for reliability.
+ * This prevents false negatives from motion blur, lighting changes, or momentary expressions.
  * 
  * @param {HTMLVideoElement} videoElement - The video element to capture from
  * @param {number[]} storedEmbedding - The stored face embedding to compare against
+ * @param {boolean} singleFrame - If true, use single frame (faster but less reliable)
  * @returns {Promise<{
  *   success: boolean,
  *   isMatch?: boolean,
  *   distance?: number,
  *   similarity?: number,
  *   error?: string,
- *   faceCount?: number
+ *   faceCount?: number,
+ *   frameResults?: Array<{distance: number, isMatch: boolean}>
  * }>}
  */
-export async function silentVerifyFace(videoElement, storedEmbedding) {
+export async function silentVerifyFace(videoElement, storedEmbedding, singleFrame = false) {
   if (!storedEmbedding || !Array.isArray(storedEmbedding) || storedEmbedding.length !== 128) {
     return { success: false, error: 'Invalid stored embedding' };
   }
   
+  // For single frame mode (backward compatibility or when speed is critical)
+  if (singleFrame) {
+    return silentVerifyFaceSingleFrame(videoElement, storedEmbedding);
+  }
+  
+  // Multi-frame verification for better reliability
+  const { FRAME_COUNT, FRAME_DELAY_MS, MIN_MATCH_COUNT, AGGREGATE_METHOD } = CONFIG.MULTI_FRAME;
+  const frameResults = [];
+  let lastError = null;
+  let faceCount = 0;
+  
+  for (let i = 0; i < FRAME_COUNT; i++) {
+    // Extract descriptor from current video frame
+    const extraction = await extractDescriptorFromVideo(videoElement);
+    
+    if (!extraction.success) {
+      lastError = extraction.error;
+      faceCount = extraction.faceCount || 0;
+      // Continue to next frame even if this one fails
+      if (i < FRAME_COUNT - 1) {
+        await new Promise(resolve => setTimeout(resolve, FRAME_DELAY_MS));
+        continue;
+      }
+    } else {
+      // Calculate Euclidean distance
+      const distance = euclideanDistance(extraction.descriptor, storedEmbedding);
+      const isMatch = distance <= CONFIG.EUCLIDEAN_THRESHOLD;
+      frameResults.push({ distance, isMatch });
+      faceCount = extraction.faceCount || 1;
+    }
+    
+    // Wait before next frame (except for last frame)
+    if (i < FRAME_COUNT - 1) {
+      await new Promise(resolve => setTimeout(resolve, FRAME_DELAY_MS));
+    }
+  }
+  
+  // If no frames were successfully processed
+  if (frameResults.length === 0) {
+    return {
+      success: false,
+      error: lastError || 'All frames failed',
+      faceCount
+    };
+  }
+  
+  // Majority voting - count matches
+  const matchCount = frameResults.filter(r => r.isMatch).length;
+  const isMatch = matchCount >= MIN_MATCH_COUNT;
+  
+  // Calculate aggregated distance (median or mean)
+  const distances = frameResults.map(r => r.distance).sort((a, b) => a - b);
+  let aggregatedDistance;
+  if (AGGREGATE_METHOD === 'median') {
+    const mid = Math.floor(distances.length / 2);
+    aggregatedDistance = distances.length % 2 === 0 
+      ? (distances[mid - 1] + distances[mid]) / 2 
+      : distances[mid];
+  } else {
+    aggregatedDistance = distances.reduce((a, b) => a + b, 0) / distances.length;
+  }
+  
+  // Convert distance to similarity score (0-1) for logging
+  const similarity = Math.exp(-aggregatedDistance);
+  
+  // Only log detailed results in development - biometric data is sensitive
+  if (typeof import.meta !== 'undefined' && import.meta.env?.DEV) {
+    console.log('[FaceUtils] Multi-frame verification result:', {
+      framesProcessed: frameResults.length,
+      matchCount,
+      minRequired: MIN_MATCH_COUNT,
+      aggregatedDistance: aggregatedDistance.toFixed(4),
+      threshold: CONFIG.EUCLIDEAN_THRESHOLD,
+      isMatch,
+      frameDistances: frameResults.map(r => r.distance.toFixed(4))
+    });
+  }
+  
+  return {
+    success: true,
+    isMatch,
+    distance: aggregatedDistance,
+    similarity,
+    faceCount,
+    matchCount,
+    frameResults
+  };
+}
+
+/**
+ * Single-frame verification (faster but less reliable)
+ * Used when speed is critical or for backward compatibility
+ */
+async function silentVerifyFaceSingleFrame(videoElement, storedEmbedding) {
   // Extract descriptor from current video frame
   const extraction = await extractDescriptorFromVideo(videoElement);
   
@@ -222,7 +334,7 @@ export async function silentVerifyFace(videoElement, storedEmbedding) {
   
   // Only log detailed results in development - biometric data is sensitive
   if (typeof import.meta !== 'undefined' && import.meta.env?.DEV) {
-    console.log('[FaceUtils] Silent verification result:', {
+    console.log('[FaceUtils] Single-frame verification result:', {
       distance: distance.toFixed(4),
       threshold: CONFIG.EUCLIDEAN_THRESHOLD,
       isMatch

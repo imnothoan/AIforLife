@@ -80,9 +80,33 @@ const CONFIG = {
 };
 
 // Sigmoid function to convert raw logits to probabilities
-// ONNX models output raw logits, not probabilities
+// NOTE: YOLOv8/v11 ONNX models already apply sigmoid internally for class scores
+// Only use this for models that output raw logits
 function sigmoid(x) {
   return 1 / (1 + Math.exp(-x));
+}
+
+// Check if scores need sigmoid (if all scores are in logit range, not 0-1 probability range)
+// YOLOv8/v11 exports already have sigmoid applied, so we should NOT apply it again
+function needsSigmoid(scores) {
+  // If array is empty or all values are invalid, don't apply sigmoid (safer default)
+  if (!scores || scores.length === 0) {
+    return false;
+  }
+  
+  // Filter out invalid values (NaN, Infinity)
+  const validScores = scores.filter(s => !isNaN(s) && isFinite(s));
+  if (validScores.length === 0) {
+    return false;
+  }
+  
+  // If any score is outside [0, 1] range, these are logits (need sigmoid)
+  // Raw logits can be negative or > 1
+  // Probabilities are always in [0, 1]
+  const hasNegative = validScores.some(s => s < 0);
+  const hasLargePositive = validScores.some(s => s > 1);
+  
+  return hasNegative || hasLargePositive;
 }
 
 // ============================================
@@ -150,7 +174,10 @@ async function initializeAI() {
   };
 
   let mediaPipeLoaded = false;
+  let mediaPipeSkipped = false;
 
+  // MediaPipe requires importScripts which doesn't work in ES module workers
+  // We need to catch and handle this gracefully
   try {
     // Load MediaPipe Face Landmarker
     // NOTE: These values must match MEDIAPIPE_CONFIG in lib/constants.js
@@ -158,55 +185,63 @@ async function initializeAI() {
     const MEDIAPIPE_WASM = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.18/wasm";
     const MEDIAPIPE_MODEL = "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task";
 
-    // Add 15 second timeout for vision tasks initialization (increased from 10)
-    const vision = await withTimeoutFallback(
-      FilesetResolver.forVisionTasks(MEDIAPIPE_WASM),
-      15000,
-      null
-    );
-
-    if (!vision) {
-      console.warn('MediaPipe WASM loading timed out - using basic mode');
-      self.postMessage({ type: 'STATUS', payload: 'AI monitoring active (basic mode)', code: 'basicMode' });
-      isInitialized = true;
-      return;
+    // Check if FilesetResolver is available and works in this context
+    // ES module workers don't support importScripts which MediaPipe may use internally
+    let vision = null;
+    try {
+      // Add 15 second timeout for vision tasks initialization
+      vision = await withTimeoutFallback(
+        FilesetResolver.forVisionTasks(MEDIAPIPE_WASM),
+        15000,
+        null
+      );
+    } catch (fsError) {
+      // This typically happens in ES module workers where importScripts isn't available
+      console.warn('MediaPipe WASM loading failed (expected in module workers):', fsError.message);
+      mediaPipeSkipped = true;
     }
 
-    // Try GPU first, fallback to CPU if it fails
-    let delegateOptions = ["GPU", "CPU"];
-    let lastError = null;
+    if (!vision && !mediaPipeSkipped) {
+      console.warn('MediaPipe WASM loading timed out - continuing without face detection');
+    }
 
-    for (const delegate of delegateOptions) {
-      try {
-        // Add 20 second timeout for model loading (increased from 15)
-        faceLandmarker = await withTimeout(
-          FaceLandmarker.createFromOptions(vision, {
-            baseOptions: {
-              modelAssetPath: MEDIAPIPE_MODEL,
-              delegate: delegate
-            },
-            runningMode: "IMAGE",
-            numFaces: 2, // Detect up to 2 faces for multi-person detection
-            minFaceDetectionConfidence: CONFIG.FACE.MIN_DETECTION_CONFIDENCE,
-            minTrackingConfidence: CONFIG.FACE.MIN_TRACKING_CONFIDENCE,
-            outputFaceBlendshapes: false,
-            outputFacialTransformationMatrixes: true // For head pose
-          }),
-          20000,
-          `FaceLandmarker (${delegate})`
-        );
-        console.log(`MediaPipe Face Landmarker loaded successfully with ${delegate} delegate`);
-        lastError = null;
-        mediaPipeLoaded = true;
-        break;
-      } catch (err) {
-        console.warn(`Failed to load MediaPipe with ${delegate} delegate:`, err.message);
-        lastError = err;
+    if (vision) {
+      // Try GPU first, fallback to CPU if it fails
+      let delegateOptions = ["GPU", "CPU"];
+      let lastError = null;
+
+      for (const delegate of delegateOptions) {
+        try {
+          // Add 20 second timeout for model loading
+          faceLandmarker = await withTimeout(
+            FaceLandmarker.createFromOptions(vision, {
+              baseOptions: {
+                modelAssetPath: MEDIAPIPE_MODEL,
+                delegate: delegate
+              },
+              runningMode: "IMAGE",
+              numFaces: 2, // Detect up to 2 faces for multi-person detection
+              minFaceDetectionConfidence: CONFIG.FACE.MIN_DETECTION_CONFIDENCE,
+              minTrackingConfidence: CONFIG.FACE.MIN_TRACKING_CONFIDENCE,
+              outputFaceBlendshapes: false,
+              outputFacialTransformationMatrixes: true // For head pose
+            }),
+            20000,
+            `FaceLandmarker (${delegate})`
+          );
+          console.log(`MediaPipe Face Landmarker loaded successfully with ${delegate} delegate`);
+          lastError = null;
+          mediaPipeLoaded = true;
+          break;
+        } catch (err) {
+          console.warn(`Failed to load MediaPipe with ${delegate} delegate:`, err.message);
+          lastError = err;
+        }
       }
-    }
 
-    if (lastError && !mediaPipeLoaded) {
-      console.warn('MediaPipe failed to load - continuing with basic mode');
+      if (lastError && !mediaPipeLoaded) {
+        console.warn('MediaPipe failed to load with all delegates - continuing without face detection');
+      }
     }
 
     self.postMessage({ type: 'STATUS', payload: 'Đang tải YOLO...', code: 'yoloLoading' });
@@ -820,6 +855,70 @@ function parseYoloOutput(output, dims, originalWidth, originalHeight) {
     maxScorePerClassPersistent = new Array(numClasses).fill(0);
   }
 
+  // Detect if model outputs raw logits or probabilities
+  // Sample first few class scores to determine
+  let applySigmoid = false;
+  if (!self.sigmoidDetected) {
+    // Sample some class scores from different positions
+    const sampleScores = [];
+    const samplePositions = [0, 100, 500, 1000];
+    
+    if (dims.length === 3) {
+      const dim1 = dims[1];
+      const dim2 = dims[2];
+      const isTransposed = dim1 < dim2 && dim1 <= 100;
+      
+      for (const pos of samplePositions) {
+        if (isTransposed) {
+          // Transposed: class scores at channels 4-7, each channel has dim2 values
+          for (let c = 0; c < numClasses; c++) {
+            const idx = (4 + c) * dim2 + pos;
+            if (idx < output.length) {
+              sampleScores.push(output[idx]);
+            }
+          }
+        } else {
+          // Standard: data is [box0, box1, ...], each box has `channels` values
+          // Class scores start at offset 4 within each box
+          const channels = dim2;
+          const offset = pos * channels;
+          for (let c = 0; c < numClasses; c++) {
+            const idx = offset + 4 + c;
+            if (idx < output.length) {
+              sampleScores.push(output[idx]);
+            }
+          }
+        }
+      }
+    } else if (dims.length === 2) {
+      // 2D format: [numBoxes, channels]
+      const channels = dims[1];
+      for (const pos of samplePositions) {
+        const offset = pos * channels;
+        for (let c = 0; c < numClasses; c++) {
+          const idx = offset + 4 + c;
+          if (idx < output.length) {
+            sampleScores.push(output[idx]);
+          }
+        }
+      }
+    }
+    
+    // Check if these look like logits or probabilities
+    // Logits can be negative or > 1, probabilities are always 0-1
+    applySigmoid = needsSigmoid(sampleScores);
+    self.applySigmoid = applySigmoid;
+    self.sigmoidDetected = true;
+    
+    console.log('📊 Score analysis:', {
+      sampleScores: sampleScores.slice(0, 8).map(s => s.toFixed(4)),
+      applySigmoid: applySigmoid,
+      interpretation: applySigmoid ? 'Raw logits detected - will apply sigmoid' : 'Probabilities detected - no sigmoid needed'
+    });
+  } else {
+    applySigmoid = self.applySigmoid;
+  }
+
   // Handle different output formats
   // YOLO11 segmentation outputs: [1, 40, 8400] = 4 bbox + 4 classes + 32 mask coefficients
 
@@ -904,10 +1003,10 @@ function parseYoloOutput(output, dims, originalWidth, originalHeight) {
         h = output[3 * numBoxes + i];
 
         // Extract class scores (indices 4, 5, 6, 7 for 4 classes)
-        // CRITICAL: Apply sigmoid to convert raw logits to probabilities
+        // Only apply sigmoid if the model outputs raw logits (not probabilities)
         for (let c = 0; c < numClasses; c++) {
-          const rawLogit = output[(4 + c) * numBoxes + i];
-          classScores.push(sigmoid(rawLogit));
+          const rawValue = output[(4 + c) * numBoxes + i];
+          classScores.push(applySigmoid ? sigmoid(rawValue) : rawValue);
         }
       } else {
         // Standard format: data is arranged [box0_cx, box0_cy, box0_w, box0_h, box0_class0, ..., box1_cx, ...]
@@ -917,10 +1016,10 @@ function parseYoloOutput(output, dims, originalWidth, originalHeight) {
         w = output[offset + 2];
         h = output[offset + 3];
 
-        // Extract class scores - apply sigmoid
+        // Extract class scores - only apply sigmoid if needed
         for (let c = 0; c < numClasses; c++) {
-          const rawLogit = output[offset + 4 + c];
-          classScores.push(sigmoid(rawLogit));
+          const rawValue = output[offset + 4 + c];
+          classScores.push(applySigmoid ? sigmoid(rawValue) : rawValue);
         }
       }
 
@@ -990,11 +1089,11 @@ function parseYoloOutput(output, dims, originalWidth, originalHeight) {
       const w = output[offset + 2];
       const h = output[offset + 3];
 
-      // Extract class scores - apply sigmoid
+      // Extract class scores - only apply sigmoid if needed
       let classScores = [];
       for (let c = 0; c < numClasses; c++) {
-        const rawLogit = output[offset + 4 + c];
-        classScores.push(sigmoid(rawLogit));
+        const rawValue = output[offset + 4 + c];
+        classScores.push(applySigmoid ? sigmoid(rawValue) : rawValue);
       }
 
       // Get max class score

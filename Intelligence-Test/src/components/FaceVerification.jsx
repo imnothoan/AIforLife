@@ -11,6 +11,8 @@ import * as faceapi from 'face-api.js';
 // ============================================
 
 const FACE_CONFIG = {
+  // FaceNet descriptor dimension (128-dimensional embeddings)
+  DESCRIPTOR_SIZE: 128,
   // Face detection thresholds
   MIN_DETECTION_CONFIDENCE: 0.5,
   MIN_FACE_SIZE: 0.08,
@@ -18,15 +20,23 @@ const FACE_CONFIG = {
   // Face recognition - Euclidean distance threshold
   // FaceNet uses Euclidean distance. Lower = stricter matching.
   // Typical values: 0.4 (very strict) - 0.6 (lenient)
-  // We use 0.5 as a balanced threshold
-  EUCLIDEAN_THRESHOLD: 0.5,
+  // We use 0.55 as balanced threshold to handle minor expression changes (smile, slight tilt)
+  EUCLIDEAN_THRESHOLD: 0.55,
   VERIFICATION_TIMEOUT: 30, // Seconds for random verification
   // Model URL (using vladmandic's face-api fork with better models)
   MODEL_URL: 'https://cdn.jsdelivr.net/npm/@vladmandic/face-api@1.7.14/model',
   // Performance optimization: use TinyFaceDetector for faster initial detection
   USE_TINY_DETECTOR: true,
-  // Reduce detection interval to save CPU
-  DETECTION_INTERVAL_MS: 300, // 3.3 FPS for guidance, reduced from 200ms
+  // Reduce detection interval to save CPU (higher = less CPU, slower feedback)
+  DETECTION_INTERVAL_MS: 400, // 2.5 FPS for guidance, increased from 300ms for less lag
+  // Use lower input size for TinyFaceDetector to reduce lag
+  TINY_INPUT_SIZE: 224, // Reduced from 320 for faster detection
+  // Multi-capture settings for more reliable enrollment
+  MULTI_CAPTURE: {
+    ENABLED: true,
+    FRAME_COUNT: 3,       // Capture 3 frames
+    FRAME_DELAY_MS: 300,  // 300ms between frames
+  },
 };
 
 // Model loading state (singleton to avoid reloading)
@@ -294,8 +304,12 @@ export default function FaceVerification({
         }
         
         // Use TinyFaceDetector for faster real-time guidance (much lighter than SSD)
+        // Use smaller input size to reduce processing time
         const detectorOptions = FACE_CONFIG.USE_TINY_DETECTOR
-          ? new faceapi.TinyFaceDetectorOptions({ inputSize: 320, scoreThreshold: FACE_CONFIG.MIN_DETECTION_CONFIDENCE })
+          ? new faceapi.TinyFaceDetectorOptions({ 
+              inputSize: FACE_CONFIG.TINY_INPUT_SIZE, 
+              scoreThreshold: FACE_CONFIG.MIN_DETECTION_CONFIDENCE 
+            })
           : new faceapi.SsdMobilenetv1Options({ minConfidence: FACE_CONFIG.MIN_DETECTION_CONFIDENCE });
         
         const detections = await faceapi.detectAllFaces(video, detectorOptions);
@@ -368,6 +382,7 @@ export default function FaceVerification({
 
   // ============================================
   // CAPTURE PHOTO AND EXTRACT DESCRIPTOR
+  // Multi-frame capture for better reliability
   // ============================================
   const handleCapture = async () => {
     if (!videoRef.current || !canvasRef.current || !modelsLoaded) return;
@@ -378,40 +393,86 @@ export default function FaceVerification({
 
     canvas.width = video.videoWidth;
     canvas.height = video.videoHeight;
-    ctx.drawImage(video, 0, 0);
 
     try {
-      // Detect face with landmarks and extract 128D descriptor
-      const detection = await faceapi
-        .detectSingleFace(canvas, new faceapi.SsdMobilenetv1Options({ minConfidence: FACE_CONFIG.MIN_DETECTION_CONFIDENCE }))
-        .withFaceLandmarks()
-        .withFaceDescriptor();
-
-      if (!detection) {
-        setErrorMessage(t('face.noFaceDetected'));
-        return;
-      }
-
-      // Check for multiple faces
-      const allFaces = await faceapi.detectAllFaces(canvas, new faceapi.SsdMobilenetv1Options({ minConfidence: FACE_CONFIG.MIN_DETECTION_CONFIDENCE }));
-      if (allFaces.length > 1) {
-        setErrorMessage(t('face.multipleFaces'));
-        return;
-      }
-
-      // Get the 128D face descriptor
-      const descriptor = descriptorToArray(detection.descriptor);
+      // Multi-frame capture for more reliable enrollment
+      const { ENABLED, FRAME_COUNT, FRAME_DELAY_MS } = FACE_CONFIG.MULTI_CAPTURE;
+      const descriptors = [];
+      let lastImage = null;
       
-      if (!descriptor || descriptor.length !== 128) {
+      const frameCount = ENABLED ? FRAME_COUNT : 1;
+      
+      for (let i = 0; i < frameCount; i++) {
+        // Capture current frame
+        ctx.drawImage(video, 0, 0);
+        
+        // Detect face with landmarks and extract 128D descriptor
+        const detection = await faceapi
+          .detectSingleFace(canvas, new faceapi.SsdMobilenetv1Options({ minConfidence: FACE_CONFIG.MIN_DETECTION_CONFIDENCE }))
+          .withFaceLandmarks()
+          .withFaceDescriptor();
+
+        if (!detection) {
+          if (i === frameCount - 1 && descriptors.length === 0) {
+            setErrorMessage(t('face.noFaceDetected'));
+            return;
+          }
+          // Continue to next frame
+          if (i < frameCount - 1) {
+            await new Promise(resolve => setTimeout(resolve, FRAME_DELAY_MS));
+          }
+          continue;
+        }
+
+        // Check for multiple faces
+        const allFaces = await faceapi.detectAllFaces(canvas, new faceapi.SsdMobilenetv1Options({ minConfidence: FACE_CONFIG.MIN_DETECTION_CONFIDENCE }));
+        if (allFaces.length > 1) {
+          setErrorMessage(t('face.multipleFaces'));
+          return;
+        }
+
+        // Get the face descriptor (128-dimensional for FaceNet)
+        const descriptor = descriptorToArray(detection.descriptor);
+        
+        if (descriptor && descriptor.length === FACE_CONFIG.DESCRIPTOR_SIZE) {
+          descriptors.push(descriptor);
+          lastImage = canvas.toDataURL('image/jpeg', 0.85);
+        }
+        
+        // Wait before next capture (except for last frame)
+        if (i < frameCount - 1) {
+          await new Promise(resolve => setTimeout(resolve, FRAME_DELAY_MS));
+        }
+      }
+      
+      if (descriptors.length === 0) {
         setErrorMessage(t('face.poorQuality'));
         return;
       }
+      
+      // Average the descriptors for more stable embedding
+      let finalDescriptor;
+      if (descriptors.length === 1) {
+        finalDescriptor = descriptors[0];
+      } else {
+        // Compute element-wise average of all descriptors
+        const descSize = FACE_CONFIG.DESCRIPTOR_SIZE;
+        finalDescriptor = new Array(descSize).fill(0);
+        for (const desc of descriptors) {
+          for (let j = 0; j < descSize; j++) {
+            finalDescriptor[j] += desc[j];
+          }
+        }
+        for (let j = 0; j < descSize; j++) {
+          finalDescriptor[j] /= descriptors.length;
+        }
+      }
 
-      console.log('[FaceVerification] ✅ Face descriptor extracted (128D)');
+      console.log(`[FaceVerification] ✅ Face descriptor extracted from ${descriptors.length} frames (${FACE_CONFIG.DESCRIPTOR_SIZE}D averaged)`);
 
       // Store captured data
-      setCapturedImage(canvas.toDataURL('image/jpeg', 0.85));
-      setCapturedDescriptor(descriptor);
+      setCapturedImage(lastImage);
+      setCapturedDescriptor(finalDescriptor);
       updateStatus('captured');
       setErrorMessage('');
 
