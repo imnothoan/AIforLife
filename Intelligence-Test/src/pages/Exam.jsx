@@ -14,6 +14,7 @@ import {
 import FaceVerification from '../components/FaceVerification';
 import AIWarningToast from '../components/AIWarningToast';
 import { silentVerifyFace, loadFaceModels, captureVideoFrame } from '../lib/faceVerificationUtils';
+import { initMediaPipeProctoring, analyzeFrame, isMediaPipeReady, resetAlertCooldowns, cleanup as cleanupMediaPipe } from '../lib/mediaPipeProctoring';
 
 // ============================================
 // CONSTANTS
@@ -57,6 +58,7 @@ export default function Exam() {
   const timerRef = useRef(null);
   const randomVerifyRef = useRef(null);
   const isSubmittingRef = useRef(false); // Track submitting state for event handlers
+  const mediaPipeIntervalRef = useRef(null); // MediaPipe main thread processing interval
   const navigate = useNavigate();
 
   // Exam State
@@ -859,6 +861,90 @@ export default function Exam() {
       if (workerRef.current) {
         workerRef.current.terminate();
       }
+    };
+  }, [examStarted, cameraStatus]);
+
+  // ============================================
+  // MEDIAPIPE PROCTORING (Main Thread)
+  // Handles: Multi-person detection, Head pose, Speech detection
+  // Runs separately from YOLO worker for better accuracy
+  // ============================================
+  useEffect(() => {
+    if (!examStarted || cameraStatus !== 'ready') return;
+
+    let isActive = true;
+
+    const startMediaPipeProctoring = async () => {
+      try {
+        console.log('[MediaPipe] Initializing proctoring on main thread...');
+        const initialized = await initMediaPipeProctoring();
+        
+        if (!initialized || !isActive) {
+          console.warn('[MediaPipe] Failed to initialize or component unmounted');
+          return;
+        }
+
+        console.log('[MediaPipe] ✅ Proctoring initialized, starting analysis loop');
+        resetAlertCooldowns();
+
+        // Process frames at ~4 FPS for face analysis
+        const MEDIAPIPE_INTERVAL_MS = 250;
+        
+        mediaPipeIntervalRef.current = setInterval(async () => {
+          if (!isActive || !videoRef.current || isSubmittingRef.current) return;
+
+          try {
+            const result = await analyzeFrame(videoRef.current);
+            
+            if (result && result.alerts && result.alerts.length > 0) {
+              for (const alert of result.alerts) {
+                // Log proctoring event
+                logProctoring(alert.code || alert.type.toLowerCase(), {
+                  message: alert.message,
+                  severity: alert.severity,
+                  faceCount: result.faceCount,
+                  direction: alert.direction
+                });
+
+                // Show warning toast
+                if (alert.severity === 'critical') {
+                  setAiWarning(alert.message);
+                  setAiWarningSeverity('critical');
+                  setCheatCount(prev => prev + 1);
+                  toast.error(alert.message, { autoClose: 5000 });
+                } else {
+                  setAiWarning(alert.message);
+                  setAiWarningSeverity('warning');
+                  toast.warning(alert.message, { autoClose: 4000 });
+                }
+
+                // Update specific counters
+                if (alert.code === 'gazeAway' || alert.type === 'LOOKING_AWAY') {
+                  setGazeAwayCount(prev => prev + 1);
+                }
+              }
+            }
+          } catch (err) {
+            // Silently ignore analysis errors to not spam console
+          }
+        }, MEDIAPIPE_INTERVAL_MS);
+
+      } catch (error) {
+        console.error('[MediaPipe] Proctoring initialization error:', error);
+      }
+    };
+
+    // Small delay to ensure video is fully ready
+    const initTimeout = setTimeout(startMediaPipeProctoring, 500);
+
+    return () => {
+      isActive = false;
+      clearTimeout(initTimeout);
+      if (mediaPipeIntervalRef.current) {
+        clearInterval(mediaPipeIntervalRef.current);
+        mediaPipeIntervalRef.current = null;
+      }
+      cleanupMediaPipe();
     };
   }, [examStarted, cameraStatus]);
 
