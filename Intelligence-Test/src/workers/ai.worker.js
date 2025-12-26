@@ -19,7 +19,7 @@ const CONFIG = {
   // Model: anticheat_yolo11s.onnx - YOLOv11s segmentation model (~40MB)
   // Output format: [1, 40, 8400] = 4 bbox + 4 classes + 32 mask coefficients
   YOLO: {
-    MODEL_PATH: '/models/anticheat_yolo11s.onnx',
+    MODEL_PATH: '/models/lasttt.onnx',
     INPUT_SIZE: 640, // Model was trained with 640x640 input
     // Confidence threshold - use higher threshold to reduce false positives
     CONFIDENCE_THRESHOLD: 0.6,
@@ -91,10 +91,10 @@ function analyzeScoreDistribution(scores) {
   // Check for obvious logit indicators
   const hasNegative = min < SCORE_ANALYSIS.LOGIT_NEGATIVE_THRESHOLD;
   const hasLargePositive = max > SCORE_ANALYSIS.LOGIT_POSITIVE_THRESHOLD;
-  
+
   if (hasNegative || hasLargePositive) {
-    return { 
-      needsSigmoid: true, 
+    return {
+      needsSigmoid: true,
       reason: hasNegative ? 'has_negative_values' : 'has_values_gt_1',
       stats: { min, max, mean, stdDev }
     };
@@ -105,7 +105,7 @@ function analyzeScoreDistribution(scores) {
   // This pattern: mean ≈ 0.5, low stdDev, and narrow range
   const isCentered = mean > SCORE_ANALYSIS.CENTERED_MEAN_MIN && mean < SCORE_ANALYSIS.CENTERED_MEAN_MAX;
   const isNarrow = stdDev < SCORE_ANALYSIS.NARROW_STDDEV && (max - min) < SCORE_ANALYSIS.NARROW_RANGE;
-  
+
   if (isCentered && isNarrow) {
     // This is suspicious - likely already-sigmoidified logits near 0
     // which would indicate double sigmoid or incorrect data
@@ -121,7 +121,7 @@ function analyzeScoreDistribution(scores) {
   // and potential detections (higher values), these are likely probabilities
   const hasLowBackground = min < SCORE_ANALYSIS.LOW_BACKGROUND;
   const hasHighDetections = max > SCORE_ANALYSIS.HIGH_DETECTION;
-  
+
   if (hasLowBackground && hasHighDetections) {
     return {
       needsSigmoid: false,
@@ -248,7 +248,7 @@ async function processFrame(imageData) {
   if (!yoloSession || (now - lastYoloRunTime < CONFIG.YOLO.THROTTLE_MS)) {
     return;
   }
-  
+
   lastYoloRunTime = now;
 
   try {
@@ -304,7 +304,7 @@ async function processFrame(imageData) {
         const lastTimeForClass = lastAlertTimePerClass[detection.class] || 0;
         if (now - lastTimeForClass > 8000) {
           lastAlertTimePerClass[detection.class] = now;
-          
+
           // Send detection alert
           self.postMessage({
             type: 'ALERT',
@@ -424,12 +424,12 @@ function parseYoloOutput(output, dims, originalWidth, originalHeight) {
   // Detect if model outputs raw logits or probabilities
   // Use FORCE_SIGMOID config option or analyze scores
   let applySigmoid = CONFIG.YOLO.FORCE_SIGMOID;
-  
+
   if (!self.sigmoidDetected) {
     // Sample some class scores from different positions
     // Only sample valid positions within the output tensor
     const sampleScores = [];
-    
+
     // Get number of boxes from output dimensions
     let numBoxes = 0;
     if (dims.length === 3) {
@@ -439,7 +439,7 @@ function parseYoloOutput(output, dims, originalWidth, originalHeight) {
     } else if (dims.length === 2) {
       numBoxes = dims[0];
     }
-    
+
     // Sample positions must be within valid range (0 to numBoxes-1)
     const samplePositions = [0, 100, 500, 1000, 2000, 4000]
       .filter(pos => pos < numBoxes);
@@ -487,7 +487,7 @@ function parseYoloOutput(output, dims, originalWidth, originalHeight) {
 
     // Use improved score distribution analysis
     const analysis = analyzeScoreDistribution(sampleScores);
-    
+
     // Override with forced sigmoid if configured
     applySigmoid = CONFIG.YOLO.FORCE_SIGMOID || analysis.needsSigmoid;
     self.applySigmoid = applySigmoid;
