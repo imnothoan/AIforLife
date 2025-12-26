@@ -54,15 +54,34 @@ function sigmoid(x) {
 }
 
 // Score analysis thresholds for detecting if model outputs logits or probabilities
+// These constants are used to auto-detect the model's output format
 const SCORE_ANALYSIS = {
-  LOGIT_NEGATIVE_THRESHOLD: -0.01,  // Scores below this indicate raw logits (allow small negative from float errors)
-  LOGIT_POSITIVE_THRESHOLD: 1.01,    // Scores above this indicate raw logits (allow small overflow)
-  CENTERED_MEAN_MIN: 0.45,           // Mean lower bound for "clustered at 0.5" check
-  CENTERED_MEAN_MAX: 0.55,           // Mean upper bound for "clustered at 0.5" check
-  NARROW_STDDEV: 0.05,               // StdDev threshold for narrow distribution
-  NARROW_RANGE: 0.15,                // Max-min range threshold for narrow distribution
-  LOW_BACKGROUND: 0.05,              // Scores below this are "background"
-  HIGH_DETECTION: 0.3,               // Scores above this indicate possible detections
+  // Floating point tolerance for probability bounds
+  // Small negative values (-0.01) and small overflow (1.01) can occur due to 
+  // float precision errors during inference. Values outside this range
+  // definitively indicate raw logits rather than probabilities.
+  LOGIT_NEGATIVE_THRESHOLD: -0.01,
+  LOGIT_POSITIVE_THRESHOLD: 1.01,
+  
+  // Detection of "clustered at 0.5" pattern (indicates sigmoid already applied to ~0 logits)
+  CENTERED_MEAN_MIN: 0.45,
+  CENTERED_MEAN_MAX: 0.55,
+  NARROW_STDDEV: 0.05,
+  NARROW_RANGE: 0.15,
+  
+  // Probability distribution analysis
+  LOW_BACKGROUND: 0.05,   // Background predictions should be near 0
+  HIGH_DETECTION: 0.3,    // Valid detections should exceed this
+};
+
+// Input tensor validation thresholds
+const INPUT_VALIDATION = {
+  // Max expected value for normalized input (allow small float errors)
+  MAX_VALUE: 1.1,
+  // Min expected value (should not be negative after normalization)
+  MIN_VALUE: -0.1,
+  // Minimum ratio of non-letterbox pixels expected in a valid image
+  MIN_IMAGE_RATIO: 0.1,
 };
 
 // Improved sigmoid detection: Check if scores look like raw logits or probabilities
@@ -370,8 +389,15 @@ async function processFrame(imageData) {
 // ============================================
 
 /**
- * Bilinear interpolation helper for high-quality image resizing
- * This matches what Ultralytics/OpenCV does internally
+ * Bilinear interpolation helper for high-quality image resizing.
+ * This matches what Ultralytics/OpenCV uses internally (cv2.INTER_LINEAR).
+ * 
+ * @param {Uint8ClampedArray} data - RGBA pixel data from Canvas ImageData
+ * @param {number} width - Source image width in pixels
+ * @param {number} height - Source image height in pixels
+ * @param {number} x - X coordinate in source image (can be fractional)
+ * @param {number} y - Y coordinate in source image (can be fractional)
+ * @returns {{r: number, g: number, b: number}} Interpolated RGB values (0-255)
  */
 function bilinearInterpolate(data, width, height, x, y) {
   // Clamp coordinates to valid range
@@ -384,7 +410,7 @@ function bilinearInterpolate(data, width, height, x, y) {
   const xFrac = x - x0;
   const yFrac = y - y0;
   
-  // Get pixel indices (RGBA format)
+  // Get pixel indices (RGBA format - 4 bytes per pixel)
   const idx00 = (y0 * width + x0) * 4;
   const idx10 = (y0 * width + x1) * 4;
   const idx01 = (y1 * width + x0) * 4;
@@ -459,7 +485,10 @@ function preprocessWithLetterbox(imageData) {
   for (let dstY = 0; dstY < newH; dstY++) {
     for (let dstX = 0; dstX < newW; dstX++) {
       // Map destination coordinates back to source image coordinates
-      // Using continuous coordinates for bilinear interpolation
+      // The +0.5 / -0.5 offset implements "pixel center" sampling:
+      // - We map from the center of destination pixel to source space
+      // - This matches Ultralytics/OpenCV's INTER_LINEAR behavior
+      // - Without this offset, edge pixels would be slightly misaligned
       const srcX = (dstX + 0.5) / scale - 0.5;
       const srcY = (dstY + 0.5) / scale - 0.5;
       
@@ -570,14 +599,14 @@ async function runYoloInference(imageData) {
       console.log(`   Non-letterbox pixels: ${nonZeroCount} / ${input.length} (${(nonZeroCount/input.length*100).toFixed(1)}%)`);
       console.log(`   Expected: Min≈0, Max≤1, Mean≈0.3-0.5 for typical webcam image`);
       
-      // Warn if input looks wrong
-      if (maxVal > 1.1) {
+      // Warn if input looks wrong (using validation thresholds)
+      if (maxVal > INPUT_VALIDATION.MAX_VALUE) {
         console.warn('[YOLO] ⚠️ Input values > 1 detected! Image may not be normalized correctly');
       }
-      if (minVal < -0.1) {
+      if (minVal < INPUT_VALIDATION.MIN_VALUE) {
         console.warn('[YOLO] ⚠️ Negative input values detected! Check preprocessing');
       }
-      if (nonZeroCount < input.length * 0.1) {
+      if (nonZeroCount < input.length * INPUT_VALIDATION.MIN_IMAGE_RATIO) {
         console.warn('[YOLO] ⚠️ Very few non-letterbox pixels! Image may be mostly padding');
       }
     }
