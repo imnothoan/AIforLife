@@ -25,8 +25,8 @@ export const ACADEMIC_YEAR_FUTURE_YEARS = 2;
 export const AI_DELEGATE_OPTIONS = ['GPU', 'CPU'];
 
 // MediaPipe Face Landmarker configuration
-// Pinned versions for stability across components
+// Pinned versions for stability - MUST match package.json version
 export const MEDIAPIPE_CONFIG = {
-  WASM_PATH: "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.18/wasm",
+  WASM_PATH: "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.20/wasm",
   MODEL_PATH: "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task"
 };
