@@ -40,32 +40,54 @@ export default function IntegrityReport({ sessionId, onClose }) {
         return;
       }
 
-      const response = await fetch(`${API_URL}/api/ai/integrity-report/${sessionId}`, {
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
-      });
+      // Create AbortController for timeout
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
 
-      if (!response.ok) {
-        const errData = await response.json().catch(() => ({}));
-        // Provide specific error messages based on status
-        let errorMessage = errData.error || 'Không thể tải báo cáo';
-        if (response.status === 404) {
-          errorMessage = 'Không tìm thấy phiên thi';
-        } else if (response.status === 403) {
-          errorMessage = 'Bạn không có quyền xem báo cáo này';
-        } else if (response.status >= 500) {
-          errorMessage = 'Lỗi máy chủ, vui lòng thử lại sau';
-        }
-        throw new Error(errorMessage);
-      }
+      try {
+        const response = await fetch(`${API_URL}/api/ai/integrity-report/${sessionId}`, {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          },
+          signal: controller.signal
+        });
 
-      const data = await response.json();
-      
-      if (data.success && data.report) {
-        setReport(data.report);
-      } else {
-        throw new Error('Invalid report data');
+        clearTimeout(timeoutId);
+
+        if (!response.ok) {
+          const errData = await response.json().catch(() => ({}));
+          // Provide specific error messages based on status
+          let errorMessage = errData.error || 'Không thể tải báo cáo';
+          if (response.status === 404) {
+            errorMessage = 'Không tìm thấy phiên thi';
+          } else if (response.status === 403) {
+            errorMessage = 'Bạn không có quyền xem báo cáo này';
+          } else if (response.status >= 500) {
+            errorMessage = 'Lỗi máy chủ, vui lòng thử lại sau';
+          }
+          throw new Error(errorMessage);
+        }
+
+        const data = await response.json();
+        
+        if (data.success && data.report) {
+          setReport(data.report);
+        } else {
+          throw new Error('Invalid report data');
+        }
+      } catch (fetchErr) {
+        clearTimeout(timeoutId);
+        
+        if (fetchErr.name === 'AbortError') {
+          throw new Error('Kết nối tới máy chủ quá lâu. Máy chủ có thể đang khởi động, vui lòng thử lại sau 30 giây.');
+        }
+        
+        // Handle network errors
+        if (fetchErr.message.includes('Failed to fetch') || fetchErr.message.includes('Network')) {
+          throw new Error('Không thể kết nối đến máy chủ. Vui lòng kiểm tra kết nối mạng và thử lại.');
+        }
+        
+        throw fetchErr;
       }
     } catch (err) {
       console.error('[IntegrityReport] Error:', err);
