@@ -575,6 +575,25 @@ function parseYoloOutput(output, dims, originalWidth, originalHeight) {
       }
     }
 
+    // Enhanced diagnostic: Log raw output values once to understand model format
+    if (!self.loggedRawOutput) {
+      self.loggedRawOutput = true;
+      console.log('[YOLO] 🔬 Raw output analysis for first 3 predictions:');
+      for (let i = 0; i < Math.min(3, numBoxes); i++) {
+        const values = [];
+        for (let c = 0; c < Math.min(channels, 12); c++) {
+          if (isTransposed) {
+            values.push(output[c * numBoxes + i]);
+          } else {
+            values.push(output[i * channels + c]);
+          }
+        }
+        console.log(`   Pred[${i}]: [${values.map(v => v?.toFixed(3) || 'N/A').join(', ')}]`);
+      }
+      console.log(`   Format: ${isTransposed ? 'transposed [channels, boxes]' : 'standard [boxes, channels]'}`);
+      console.log(`   Total values: ${output.length}, Channels: ${channels}, Boxes: ${numBoxes}`);
+    }
+
     // Sample first few detections for debugging
     let sampleLogged = false;
 
