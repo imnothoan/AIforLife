@@ -16,25 +16,27 @@ import * as ort from 'onnxruntime-web';
 // ============================================
 const CONFIG = {
   // YOLO settings - Custom trained YOLOv11 model for anti-cheat detection
-  // Model: anticheat_yolo11s.onnx - YOLOv11s segmentation model (~40MB)
+  // Model: lasttt.onnx - YOLOv11s segmentation model (~40MB)
   // Output format: [1, 40, 8400] = 4 bbox + 4 classes + 32 mask coefficients
   YOLO: {
     MODEL_PATH: '/models/lasttt.onnx',
     INPUT_SIZE: 640, // Model was trained with 640x640 input
-    // Confidence threshold - use higher threshold to reduce false positives
-    CONFIDENCE_THRESHOLD: 0.6,
+    // Confidence threshold - lowered to 0.4 to match Python test code
+    // Can be increased to 0.5-0.6 for production to reduce false positives
+    CONFIDENCE_THRESHOLD: 0.4,
     IOU_THRESHOLD: 0.45,
-    CLASSES: ['person', 'phone', 'material', 'headphones'], // Must match training classes
+    CLASSES: ['person', 'phone', 'material', 'headphones'], // Must match training classes (from model metadata)
     // Only alert on phone, material, headphones - NOT person
     ALERT_CLASSES: ['phone', 'material', 'headphones'],
     MASK_COEFFICIENTS: 32, // For segmentation models
     // Multi-person detection via YOLO (backup to MediaPipe on main thread)
     MULTI_PERSON_ALERT: true,
-    MULTI_PERSON_THRESHOLD: 0.6,
+    MULTI_PERSON_THRESHOLD: 0.5,
     // Model output format:
-    // YOLOv8/v11 ONNX exports with default settings have sigmoid applied internally
-    // If scores cluster around 0.5 with FORCE_SIGMOID=true, try false (double sigmoid issue)
-    FORCE_SIGMOID: false,  // Try WITHOUT sigmoid first - YOLOv11 may have it built-in
+    // YOLOv11 ONNX exports RAW LOGITS for class scores - need sigmoid
+    FORCE_SIGMOID: true,  // Apply sigmoid to convert logits to probabilities
+    // Letterbox padding color (gray 114/255 = 0.447, same as Ultralytics)
+    LETTERBOX_COLOR: 114 / 255,
     // Processing settings
     THROTTLE_MS: 500,  // Run YOLO every 500ms for responsive detection
   }
@@ -332,37 +334,112 @@ async function processFrame(imageData) {
 }
 
 // ============================================
+// LETTERBOX PREPROCESSING (matches Ultralytics)
+// ============================================
+
+/**
+ * Preprocess image with letterbox padding (same as Ultralytics)
+ * This maintains aspect ratio and adds gray padding
+ * @returns {{ input: Float32Array, params: LetterboxParams }}
+ */
+function preprocessWithLetterbox(imageData) {
+  const { width, height, data } = imageData;
+  const inputSize = CONFIG.YOLO.INPUT_SIZE;
+  const letterboxColor = CONFIG.YOLO.LETTERBOX_COLOR;
+
+  // Calculate scale to fit image while maintaining aspect ratio
+  const scale = Math.min(inputSize / width, inputSize / height);
+  const newW = Math.round(width * scale);
+  const newH = Math.round(height * scale);
+
+  // Calculate padding to center the image
+  const padX = Math.floor((inputSize - newW) / 2);
+  const padY = Math.floor((inputSize - newH) / 2);
+
+  // Letterbox params for coordinate conversion later
+  const params = { scale, padX, padY, newW, newH, origW: width, origH: height };
+
+  // Log letterbox params once
+  if (!self.loggedLetterbox) {
+    console.log('[YOLO] Letterbox params:', params);
+    self.loggedLetterbox = true;
+  }
+
+  // Create output tensor filled with letterbox color (gray 114/255)
+  const input = new Float32Array(3 * inputSize * inputSize);
+  input.fill(letterboxColor);
+
+  // Resize and copy image data into letterboxed tensor
+  for (let y = 0; y < newH; y++) {
+    for (let x = 0; x < newW; x++) {
+      // Source coordinates in original image
+      const srcX = Math.min(Math.floor(x / scale), width - 1);
+      const srcY = Math.min(Math.floor(y / scale), height - 1);
+      const srcIdx = (srcY * width + srcX) * 4;
+
+      // Destination coordinates in letterboxed image
+      const dstX = padX + x;
+      const dstY = padY + y;
+
+      // Normalize to [0, 1]
+      const r = data[srcIdx] / 255.0;
+      const g = data[srcIdx + 1] / 255.0;
+      const b = data[srcIdx + 2] / 255.0;
+
+      // CHW format (Channel, Height, Width)
+      input[0 * inputSize * inputSize + dstY * inputSize + dstX] = r;
+      input[1 * inputSize * inputSize + dstY * inputSize + dstX] = g;
+      input[2 * inputSize * inputSize + dstY * inputSize + dstX] = b;
+    }
+  }
+
+  return { input, params };
+}
+
+/**
+ * Convert box coordinates from letterbox space to original image coordinates
+ * @param {number} cx - Center X in letterbox space
+ * @param {number} cy - Center Y in letterbox space  
+ * @param {number} w - Width in letterbox space
+ * @param {number} h - Height in letterbox space
+ * @param {Object} params - Letterbox parameters {scale, padX, padY, origW, origH}
+ * @returns {Object} Box in original image coordinates {x, y, width, height}
+ */
+function convertLetterboxToOriginalCoords(cx, cy, w, h, params) {
+  const { scale, padX, padY, origW, origH } = params;
+  
+  // Remove letterbox padding and scale back to original size
+  const x1 = (cx - w / 2 - padX) / scale;
+  const y1 = (cy - h / 2 - padY) / scale;
+  const x2 = (cx + w / 2 - padX) / scale;
+  const y2 = (cy + h / 2 - padY) / scale;
+  
+  // Clamp to image bounds
+  const boxX = Math.max(0, Math.min(x1, origW));
+  const boxY = Math.max(0, Math.min(y1, origH));
+  const boxW = Math.min(x2 - x1, origW - boxX);
+  const boxH = Math.min(y2 - y1, origH - boxY);
+
+  return {
+    x: boxX,
+    y: boxY,
+    width: Math.max(0, boxW),
+    height: Math.max(0, boxH)
+  };
+}
+
+// ============================================
 // YOLO INFERENCE
 // ============================================
 async function runYoloInference(imageData) {
   if (!yoloSession) return [];
 
   try {
-    const { width, height, data } = imageData;
+    const { width, height } = imageData;
     const inputSize = CONFIG.YOLO.INPUT_SIZE;
 
-    // Preprocess image data
-    // Resize and normalize to [0, 1] in RGB format
-    const input = new Float32Array(3 * inputSize * inputSize);
-    const scaleX = width / inputSize;
-    const scaleY = height / inputSize;
-
-    for (let y = 0; y < inputSize; y++) {
-      for (let x = 0; x < inputSize; x++) {
-        const srcX = Math.min(Math.floor(x * scaleX), width - 1);
-        const srcY = Math.min(Math.floor(y * scaleY), height - 1);
-        const srcIdx = (srcY * width + srcX) * 4;
-
-        const r = data[srcIdx] / 255.0;
-        const g = data[srcIdx + 1] / 255.0;
-        const b = data[srcIdx + 2] / 255.0;
-
-        // CHW format (Channel, Height, Width)
-        input[0 * inputSize * inputSize + y * inputSize + x] = r;
-        input[1 * inputSize * inputSize + y * inputSize + x] = g;
-        input[2 * inputSize * inputSize + y * inputSize + x] = b;
-      }
-    }
+    // Preprocess with letterbox (same as Ultralytics Python library)
+    const { input, params: letterboxParams } = preprocessWithLetterbox(imageData);
 
     // Create tensor with dynamic input name
     const tensor = new ort.Tensor('float32', input, [1, 3, inputSize, inputSize]);
@@ -385,7 +462,7 @@ async function runYoloInference(imageData) {
 
     // Log output info once for debugging
     if (!self.loggedOutputInfo) {
-      console.log('YOLO inference output:', {
+      console.log('[YOLO] Inference output:', {
         outputNames: yoloSession.outputNames,
         outputDims: outputTensor.dims,
         numElements: outputTensor.data.length
@@ -393,15 +470,15 @@ async function runYoloInference(imageData) {
       self.loggedOutputInfo = true;
     }
 
-    const detections = parseYoloOutput(outputTensor.data, outputTensor.dims, width, height);
+    const detections = parseYoloOutput(outputTensor.data, outputTensor.dims, letterboxParams);
     return detections;
   } catch (error) {
-    console.error('YOLO inference error:', error);
+    console.error('[YOLO] Inference error:', error);
     return [];
   }
 }
 
-function parseYoloOutput(output, dims, originalWidth, originalHeight) {
+function parseYoloOutput(output, dims, letterboxParams) {
   const detections = [];
   const numClasses = CONFIG.YOLO.CLASSES.length;
   const inputSize = CONFIG.YOLO.INPUT_SIZE;
@@ -654,19 +731,13 @@ function parseYoloOutput(output, dims, originalWidth, originalHeight) {
       }
 
       if (maxScore >= CONFIG.YOLO.CONFIDENCE_THRESHOLD) {
-        // Scale coordinates back to original image size
-        const scaleX = originalWidth / inputSize;
-        const scaleY = originalHeight / inputSize;
+        // Convert from letterbox coordinates back to original image coordinates
+        const box = convertLetterboxToOriginalCoords(cx, cy, w, h, letterboxParams);
 
         detections.push({
           class: CONFIG.YOLO.CLASSES[maxClass],
           confidence: maxScore,
-          box: {
-            x: (cx - w / 2) * scaleX,
-            y: (cy - h / 2) * scaleY,
-            width: w * scaleX,
-            height: h * scaleY
-          }
+          box
         });
       }
     }
@@ -713,18 +784,13 @@ function parseYoloOutput(output, dims, originalWidth, originalHeight) {
       }
 
       if (maxScore >= CONFIG.YOLO.CONFIDENCE_THRESHOLD) {
-        const scaleX = originalWidth / inputSize;
-        const scaleY = originalHeight / inputSize;
+        // Convert from letterbox coordinates back to original image coordinates
+        const box = convertLetterboxToOriginalCoords(cx, cy, w, h, letterboxParams);
 
         detections.push({
           class: CONFIG.YOLO.CLASSES[maxClass],
           confidence: maxScore,
-          box: {
-            x: (cx - w / 2) * scaleX,
-            y: (cy - h / 2) * scaleY,
-            width: w * scaleX,
-            height: h * scaleY
-          }
+          box
         });
       }
     }
