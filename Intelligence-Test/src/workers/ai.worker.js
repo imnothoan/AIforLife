@@ -50,7 +50,7 @@ const CONFIG = {
   // IMPORTANT: ONNX model outputs RAW LOGITS, not probabilities!
   // We must apply sigmoid to convert to probabilities
   YOLO: {
-    MODEL_PATH: '/models/best.onnx', // YOLOv11n-seg nano model (11.8MB, much faster than 40MB)
+    MODEL_PATH: '/models/anticheat_yolo11s.onnx', // YOLOv11n-seg nano model (11.8MB, much faster than 40MB)
     INPUT_SIZE: 640, // Model was trained with 640x640 input
     // Confidence threshold - optimized based on training results
     // Phone/headphones need lower threshold (~0.35) for better recall
@@ -93,19 +93,19 @@ function needsSigmoid(scores) {
   if (!scores || scores.length === 0) {
     return false;
   }
-  
+
   // Filter out invalid values (NaN, Infinity)
   const validScores = scores.filter(s => !isNaN(s) && isFinite(s));
   if (validScores.length === 0) {
     return false;
   }
-  
+
   // If any score is outside [0, 1] range, these are logits (need sigmoid)
   // Raw logits can be negative or > 1
   // Probabilities are always in [0, 1]
   const hasNegative = validScores.some(s => s < 0);
   const hasLargePositive = validScores.some(s => s > 1);
-  
+
   return hasNegative || hasLargePositive;
 }
 
@@ -563,7 +563,7 @@ async function processFrame(imageData) {
   // ============================================
   if (faceLandmarker && (now - lastMediaPipeRunTime >= MEDIAPIPE_THROTTLE_MS)) {
     lastMediaPipeRunTime = now;
-    
+
     try {
       // Create ImageBitmap from ImageData
       const imageBitmap = await createImageBitmap(imageData);
@@ -862,12 +862,12 @@ function parseYoloOutput(output, dims, originalWidth, originalHeight) {
     // Sample some class scores from different positions
     const sampleScores = [];
     const samplePositions = [0, 100, 500, 1000];
-    
+
     if (dims.length === 3) {
       const dim1 = dims[1];
       const dim2 = dims[2];
       const isTransposed = dim1 < dim2 && dim1 <= 100;
-      
+
       for (const pos of samplePositions) {
         if (isTransposed) {
           // Transposed: class scores at channels 4-7, each channel has dim2 values
@@ -903,13 +903,13 @@ function parseYoloOutput(output, dims, originalWidth, originalHeight) {
         }
       }
     }
-    
+
     // Check if these look like logits or probabilities
     // Logits can be negative or > 1, probabilities are always 0-1
     applySigmoid = needsSigmoid(sampleScores);
     self.applySigmoid = applySigmoid;
     self.sigmoidDetected = true;
-    
+
     console.log('📊 Score analysis:', {
       sampleScores: sampleScores.slice(0, 8).map(s => s.toFixed(4)),
       applySigmoid: applySigmoid,

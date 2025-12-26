@@ -48,7 +48,7 @@ const PRE_GENERATED_MESSAGES = {
   'material_detected_2': 'Tài liệu vẫn xuất hiện lần 2. Vui lòng cất tài liệu ngay.',
   'headphones_detected_1': 'Phát hiện bạn đang sử dụng tai nghe. Vui lòng tháo tai nghe trong khi thi.',
   'headphones_detected_2': 'Tai nghe vẫn được phát hiện lần 2. Đây là vi phạm quy chế thi.',
-  
+
   // Lần 3+: Nghiêm túc
   'gaze_away_3': 'Cảnh báo nghiêm trọng: Đây là lần thứ 3 bạn nhìn ra ngoài. Bài thi có thể bị đánh dấu nghi vấn.',
   'tab_switch_3': 'Cảnh báo: Chuyển tab lần 3. Nếu tiếp tục, bài thi sẽ bị đánh dấu gian lận.',
@@ -88,19 +88,19 @@ const EVENT_DESCRIPTIONS = {
 function checkRateLimit() {
   const now = Date.now();
   const windowStart = now - RATE_LIMIT_WINDOW_MS;
-  
+
   // Clean old entries
   for (const [time] of rateLimitWindow) {
     if (time < windowStart) {
       rateLimitWindow.delete(time);
     }
   }
-  
+
   // Check limit
   if (rateLimitWindow.size >= RATE_LIMIT_MAX_REQUESTS) {
     return false;
   }
-  
+
   rateLimitWindow.set(now, true);
   return true;
 }
@@ -114,11 +114,11 @@ function checkRateLimit() {
 function getPreGeneratedMessage(eventType, warningCount) {
   // Normalize event type (handle camelCase variants)
   const normalizedType = eventType.replace(/([A-Z])/g, '_$1').toLowerCase().replace(/^_/, '');
-  
+
   // Cap warning count at 3 for pre-generated messages
   const level = Math.min(warningCount, 3);
   const key = `${normalizedType}_${level}`;
-  
+
   return PRE_GENERATED_MESSAGES[key] || null;
 }
 
@@ -133,14 +133,14 @@ function getPreGeneratedMessage(eventType, warningCount) {
  */
 async function generateWarningMessage(genAI, eventType, context) {
   const warningCount = context.warningCount || 1;
-  
+
   // STEP 1: Try pre-generated message first (FREE - no API call)
   const preGenerated = getPreGeneratedMessage(eventType, warningCount);
   if (preGenerated) {
     console.log(`[AI Guardian] Using pre-generated message for ${eventType}_${warningCount}`);
     return preGenerated;
   }
-  
+
   // STEP 2: Check cache (FREE - no API call)
   const cacheKey = `${eventType}-${warningCount}`;
   if (messageCache.has(cacheKey)) {
@@ -150,19 +150,19 @@ async function generateWarningMessage(genAI, eventType, context) {
       return cached.message;
     }
   }
-  
+
   // STEP 3: Use default message if no API or rate limited
   if (!genAI || !checkRateLimit()) {
     console.log(`[AI Guardian] Using default message (no API or rate limited)`);
     return getDefaultMessage(eventType, warningCount);
   }
-  
+
   // STEP 4: Call Gemini API for unique scenarios
   try {
     console.log(`[AI Guardian] Calling Gemini API for ${eventType}_${warningCount}`);
-    const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash-preview-05-20" });
+    const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
     const eventDesc = EVENT_DESCRIPTIONS[eventType] || eventType;
-    
+
     const prompt = `Bạn là AI giám thị của hệ thống thi trực tuyến SmartExamPro.
 Sinh viên vừa bị phát hiện hành vi: ${eventDesc}
 Đây là lần cảnh báo thứ: ${warningCount}
@@ -176,10 +176,10 @@ Viết một thông báo ngắn gọn (20-40 từ) bằng tiếng Việt để n
 
     const result = await model.generateContent(prompt);
     const message = result.response.text().trim();
-    
+
     // Lưu cache với TTL dài hơn
     messageCache.set(cacheKey, { message, time: Date.now() });
-    
+
     return message;
   } catch (error) {
     console.error('[AI Guardian] Gemini API error:', error.message);
@@ -192,7 +192,7 @@ Viết một thông báo ngắn gọn (20-40 từ) bằng tiếng Việt để n
  */
 function getDefaultMessage(eventType, warningCount) {
   const eventDesc = EVENT_DESCRIPTIONS[eventType] || 'hành vi bất thường';
-  
+
   if (warningCount <= 2) {
     return `Hệ thống phát hiện ${eventDesc}. Vui lòng tập trung vào bài thi.`;
   } else {
@@ -219,56 +219,56 @@ async function generateIntegrityReport(genAI, sessionData, proctoringLogs) {
       return cached.report;
     }
   }
-  
+
   // Calculate base integrity score
   let score = 100;
-  
+
   // Deduct points for violations
   score -= (sessionData.cheat_count || 0) * 10;
   score -= (sessionData.tab_violations || 0) * 5;
   score -= (sessionData.fullscreen_violations || 0) * 5;
   score -= (sessionData.gaze_away_count || 0) * 1;
   score -= (sessionData.face_verification_failures || 0) * 15;
-  
+
   // Critical violations
   const criticalEvents = proctoringLogs?.filter(log => log.severity === 'critical') || [];
   score -= criticalEvents.length * 20;
-  
+
   // Clamp score
   score = Math.max(0, Math.min(100, score));
-  
+
   // Determine risk level
   let riskLevel;
   if (score >= 90) riskLevel = 'low';
   else if (score >= 70) riskLevel = 'medium';
   else if (score >= 50) riskLevel = 'high';
   else riskLevel = 'critical';
-  
+
   // Group events by type for summary
   const eventSummary = {};
   proctoringLogs?.forEach(log => {
     eventSummary[log.event_type] = (eventSummary[log.event_type] || 0) + 1;
   });
-  
+
   // Generate explanation - use default for most cases to save API calls
   // Only call API for critical/high risk cases (need detailed analysis)
   let explanation = '';
-  
+
   const totalEvents = proctoringLogs?.length || 0;
-  const shouldCallAPI = genAI && 
-                        (riskLevel === 'critical' || riskLevel === 'high') && 
-                        totalEvents > 5 &&
-                        checkRateLimit();
-  
+  const shouldCallAPI = genAI &&
+    (riskLevel === 'critical' || riskLevel === 'high') &&
+    totalEvents > 5 &&
+    checkRateLimit();
+
   if (shouldCallAPI) {
     try {
       console.log(`[AI Guardian] Calling Gemini API for integrity report (${riskLevel} risk)`);
-      const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash-preview-05-20" });
-      
+      const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+
       const eventList = Object.entries(eventSummary)
         .map(([type, count]) => `- ${EVENT_DESCRIPTIONS[type] || type}: ${count} lần`)
         .join('\n');
-      
+
       const prompt = `Bạn là AI phân tích độ tin cậy của bài thi trực tuyến.
       
 Điểm tin cậy: ${score}/100
@@ -294,7 +294,7 @@ Viết một đoạn nhận xét ngắn gọn (50-80 từ) bằng tiếng Việt
     console.log(`[AI Guardian] Using pre-generated explanation for ${riskLevel} risk`);
     explanation = getDefaultExplanation(score, riskLevel, eventSummary);
   }
-  
+
   const report = {
     score,
     riskLevel,
@@ -303,12 +303,12 @@ Viết một đoạn nhận xét ngắn gọn (50-80 từ) bằng tiếng Việt
     totalEvents: proctoringLogs?.length || 0,
     criticalEvents: criticalEvents.length
   };
-  
+
   // Cache report for future requests
   if (sessionId) {
     reportCache.set(sessionId, { report, time: Date.now() });
   }
-  
+
   return report;
 }
 
@@ -317,7 +317,7 @@ Viết một đoạn nhận xét ngắn gọn (50-80 từ) bằng tiếng Việt
  */
 function getDefaultExplanation(score, riskLevel, eventSummary) {
   const eventCount = Object.values(eventSummary).reduce((a, b) => a + b, 0);
-  
+
   if (riskLevel === 'low') {
     return `Bài thi có độ tin cậy cao (${score}/100). Sinh viên thực hiện bài thi nghiêm túc với ít hoặc không có vi phạm đáng kể.`;
   } else if (riskLevel === 'medium') {
