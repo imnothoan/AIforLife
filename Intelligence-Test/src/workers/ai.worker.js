@@ -21,8 +21,8 @@ const CONFIG = {
   YOLO: {
     MODEL_PATH: '/models/lasttt.onnx',
     INPUT_SIZE: 640, // Model was trained with 640x640 input
-    // Confidence threshold - lowered to 0.4 to match Python test code
-    // Can be increased to 0.5-0.6 for production to reduce false positives
+    // Confidence threshold - matches Python test code (conf=0.4)
+    // Production can use 0.5-0.6 for fewer false positives
     CONFIDENCE_THRESHOLD: 0.4,
     IOU_THRESHOLD: 0.45,
     CLASSES: ['person', 'phone', 'material', 'headphones'], // Must match training classes (from model metadata)
@@ -33,8 +33,11 @@ const CONFIG = {
     MULTI_PERSON_ALERT: true,
     MULTI_PERSON_THRESHOLD: 0.5,
     // Model output format:
-    // YOLOv11 ONNX exports RAW LOGITS for class scores - need sigmoid
-    FORCE_SIGMOID: true,  // Apply sigmoid to convert logits to probabilities
+    // IMPORTANT: This YOLOv11-seg ONNX model outputs PROBABILITIES directly (0-1 range)
+    // NOT raw logits! The model includes sigmoid activation in its output layer.
+    // Setting FORCE_SIGMOID to false because applying sigmoid to probabilities
+    // would compress all scores to ~50-66% range (sigmoid(0.66) ≈ 0.66)
+    FORCE_SIGMOID: false,  // DO NOT apply sigmoid - model outputs probabilities directly
     // Letterbox padding color (gray 114/255 = 0.447, same as Ultralytics)
     LETTERBOX_COLOR: 114 / 255,
     // Processing settings
@@ -52,35 +55,39 @@ function sigmoid(x) {
 
 // Score analysis thresholds for detecting if model outputs logits or probabilities
 const SCORE_ANALYSIS = {
-  LOGIT_NEGATIVE_THRESHOLD: -0.1,  // Scores below this indicate raw logits
-  LOGIT_POSITIVE_THRESHOLD: 1.5,    // Scores above this indicate raw logits
-  CENTERED_MEAN_MIN: 0.4,           // Mean lower bound for "clustered at 0.5" check
-  CENTERED_MEAN_MAX: 0.6,           // Mean upper bound for "clustered at 0.5" check
-  NARROW_STDDEV: 0.1,               // StdDev threshold for narrow distribution
-  NARROW_RANGE: 0.3,                // Max-min range threshold for narrow distribution
-  LOW_BACKGROUND: 0.1,              // Scores below this are "background"
-  HIGH_DETECTION: 0.7,              // Scores above this are "detections"
+  LOGIT_NEGATIVE_THRESHOLD: -0.01,  // Scores below this indicate raw logits (allow small negative from float errors)
+  LOGIT_POSITIVE_THRESHOLD: 1.01,    // Scores above this indicate raw logits (allow small overflow)
+  CENTERED_MEAN_MIN: 0.45,           // Mean lower bound for "clustered at 0.5" check
+  CENTERED_MEAN_MAX: 0.55,           // Mean upper bound for "clustered at 0.5" check
+  NARROW_STDDEV: 0.05,               // StdDev threshold for narrow distribution
+  NARROW_RANGE: 0.15,                // Max-min range threshold for narrow distribution
+  LOW_BACKGROUND: 0.05,              // Scores below this are "background"
+  HIGH_DETECTION: 0.3,               // Scores above this indicate possible detections
 };
 
 // Improved sigmoid detection: Check if scores look like raw logits or probabilities
+// 
+// This model (YOLOv11-seg ONNX) outputs PROBABILITIES in [0, 1] range.
+// The analysis function helps detect the output format automatically.
+//
 // Raw logits characteristics:
 // 1. Can be negative or > 1
 // 2. Often clustered around 0 (sigmoid(0) = 0.5)
-// 3. High variance for actual detections
+// 3. Large variance for actual detections
 // 
 // Probability characteristics:
 // 1. Always in [0, 1] range
 // 2. Background boxes have scores near 0
-// 3. Actual detections have scores near 1
+// 3. Actual detections have scores > 0.3
 function analyzeScoreDistribution(scores) {
   if (!scores || scores.length === 0) {
-    return { needsSigmoid: true, reason: 'empty_scores' };  // Default to applying sigmoid
+    return { needsSigmoid: false, reason: 'empty_scores_using_config' };
   }
 
   // Filter out invalid values
   const validScores = scores.filter(s => !isNaN(s) && isFinite(s));
   if (validScores.length === 0) {
-    return { needsSigmoid: true, reason: 'no_valid_scores' };
+    return { needsSigmoid: false, reason: 'no_valid_scores_using_config' };
   }
 
   // Calculate statistics
@@ -90,7 +97,7 @@ function analyzeScoreDistribution(scores) {
   const variance = validScores.reduce((acc, val) => acc + Math.pow(val - mean, 2), 0) / validScores.length;
   const stdDev = Math.sqrt(variance);
 
-  // Check for obvious logit indicators
+  // KEY CHECK: If values are outside [0, 1], these are definitely raw logits
   const hasNegative = min < SCORE_ANALYSIS.LOGIT_NEGATIVE_THRESHOLD;
   const hasLargePositive = max > SCORE_ANALYSIS.LOGIT_POSITIVE_THRESHOLD;
 
@@ -102,16 +109,31 @@ function analyzeScoreDistribution(scores) {
     };
   }
 
-  // Check for "clustered around 0.5" pattern (sigmoid(0) = 0.5)
-  // If after sigmoid, everything is ~0.5, the raw values were ~0
-  // This pattern: mean ≈ 0.5, low stdDev, and narrow range
+  // Values are in [0, 1] range - likely probabilities
+  // Check if they have a sensible distribution
+
+  // If most values are near 0 (background) and some are higher (detections)
+  // this is characteristic of probability output
+  const nearZeroCount = validScores.filter(s => s < 0.1).length;
+  const nearZeroRatio = nearZeroCount / validScores.length;
+
+  if (nearZeroRatio > 0.8) {
+    // Most scores are near 0 (background), some may be higher - this is probability output
+    return {
+      needsSigmoid: false,
+      reason: 'probability_distribution_most_near_zero',
+      stats: { min, max, mean, stdDev, nearZeroRatio }
+    };
+  }
+
+  // Check for "clustered around 0.5" pattern
+  // This happens when sigmoid is applied to logits that are all ~0
+  // If we see this pattern, the model likely outputs raw logits
   const isCentered = mean > SCORE_ANALYSIS.CENTERED_MEAN_MIN && mean < SCORE_ANALYSIS.CENTERED_MEAN_MAX;
   const isNarrow = stdDev < SCORE_ANALYSIS.NARROW_STDDEV && (max - min) < SCORE_ANALYSIS.NARROW_RANGE;
 
   if (isCentered && isNarrow) {
-    // This is suspicious - likely already-sigmoidified logits near 0
-    // which would indicate double sigmoid or incorrect data
-    // Since this produces useless scores, assume we need sigmoid
+    // All scores clustered around 0.5 - this suggests raw logits near 0
     return {
       needsSigmoid: true,
       reason: 'scores_clustered_at_0.5_indicating_raw_logits_near_0',
@@ -119,12 +141,11 @@ function analyzeScoreDistribution(scores) {
     };
   }
 
-  // If scores have a good distribution with clear background (near 0) 
-  // and potential detections (higher values), these are likely probabilities
-  const hasLowBackground = min < SCORE_ANALYSIS.LOW_BACKGROUND;
-  const hasHighDetections = max > SCORE_ANALYSIS.HIGH_DETECTION;
+  // If we have good spread with some background (near 0) and some detections
+  const hasBackground = min < SCORE_ANALYSIS.LOW_BACKGROUND;
+  const hasDetections = max > SCORE_ANALYSIS.HIGH_DETECTION;
 
-  if (hasLowBackground && hasHighDetections) {
+  if (hasBackground && hasDetections) {
     return {
       needsSigmoid: false,
       reason: 'good_probability_distribution',
@@ -132,10 +153,10 @@ function analyzeScoreDistribution(scores) {
     };
   }
 
-  // Default: apply sigmoid to be safe
+  // Default: respect FORCE_SIGMOID config setting
   return {
-    needsSigmoid: true,
-    reason: 'uncertain_defaulting_to_sigmoid',
+    needsSigmoid: CONFIG.YOLO.FORCE_SIGMOID,
+    reason: 'uncertain_using_config',
     stats: { min, max, mean, stdDev }
   };
 }
@@ -218,12 +239,23 @@ async function initializeAI() {
       throw loadError;
     }
 
-    // Log model details
+    // Log model details including metadata
     console.log('[YOLO Worker] Input names:', yoloSession.inputNames);
     console.log('[YOLO Worker] Output names:', yoloSession.outputNames);
-    console.log('[YOLO Worker] Classes:', CONFIG.YOLO.CLASSES);
+    
+    // Try to extract class names from ONNX metadata if available
+    // Ultralytics ONNX exports include 'names' in metadata
+    try {
+      // ONNX Runtime Web doesn't expose metadata directly, but we can log what we have
+      console.log('[YOLO Worker] Session handler:', yoloSession.handler ? 'available' : 'not available');
+    } catch (metaErr) {
+      console.log('[YOLO Worker] Could not read metadata:', metaErr.message);
+    }
+    
+    console.log('[YOLO Worker] Configured classes:', CONFIG.YOLO.CLASSES);
     console.log('[YOLO Worker] Confidence threshold:', CONFIG.YOLO.CONFIDENCE_THRESHOLD);
     console.log('[YOLO Worker] Force sigmoid:', CONFIG.YOLO.FORCE_SIGMOID);
+    console.log('[YOLO Worker] Alert classes:', CONFIG.YOLO.ALERT_CLASSES);
 
     isInitialized = true;
     self.postMessage({ type: 'STATUS', payload: 'YOLO object detection active', code: 'yoloOnly' });
@@ -338,59 +370,130 @@ async function processFrame(imageData) {
 // ============================================
 
 /**
- * Preprocess image with letterbox padding (same as Ultralytics)
- * This maintains aspect ratio and adds gray padding
+ * Bilinear interpolation helper for high-quality image resizing
+ * This matches what Ultralytics/OpenCV does internally
+ */
+function bilinearInterpolate(data, width, height, x, y) {
+  // Clamp coordinates to valid range
+  const x0 = Math.floor(x);
+  const y0 = Math.floor(y);
+  const x1 = Math.min(x0 + 1, width - 1);
+  const y1 = Math.min(y0 + 1, height - 1);
+  
+  // Fractional parts for interpolation weights
+  const xFrac = x - x0;
+  const yFrac = y - y0;
+  
+  // Get pixel indices (RGBA format)
+  const idx00 = (y0 * width + x0) * 4;
+  const idx10 = (y0 * width + x1) * 4;
+  const idx01 = (y1 * width + x0) * 4;
+  const idx11 = (y1 * width + x1) * 4;
+  
+  // Bilinear interpolation weights
+  const w00 = (1 - xFrac) * (1 - yFrac);
+  const w10 = xFrac * (1 - yFrac);
+  const w01 = (1 - xFrac) * yFrac;
+  const w11 = xFrac * yFrac;
+  
+  // Interpolate each channel (RGB)
+  const r = data[idx00] * w00 + data[idx10] * w10 + data[idx01] * w01 + data[idx11] * w11;
+  const g = data[idx00 + 1] * w00 + data[idx10 + 1] * w10 + data[idx01 + 1] * w01 + data[idx11 + 1] * w11;
+  const b = data[idx00 + 2] * w00 + data[idx10 + 2] * w10 + data[idx01 + 2] * w01 + data[idx11 + 2] * w11;
+  
+  return { r, g, b };
+}
+
+/**
+ * Preprocess image with letterbox padding (matching Ultralytics exactly)
+ * 
+ * Ultralytics letterbox process:
+ * 1. Calculate scale to fit image while maintaining aspect ratio
+ * 2. Resize image using bilinear interpolation
+ * 3. Pad to target size with gray (114) color, centered
+ * 4. Convert to RGB float32 in range [0, 1]
+ * 5. Transpose to CHW format (Channel, Height, Width)
+ * 
  * @returns {{ input: Float32Array, params: LetterboxParams }}
  */
 function preprocessWithLetterbox(imageData) {
   const { width, height, data } = imageData;
   const inputSize = CONFIG.YOLO.INPUT_SIZE;
-  const letterboxColor = CONFIG.YOLO.LETTERBOX_COLOR;
+  const letterboxColor = CONFIG.YOLO.LETTERBOX_COLOR; // 114/255 ≈ 0.447
 
-  // Calculate scale to fit image while maintaining aspect ratio
+  // Step 1: Calculate scale to fit image while maintaining aspect ratio
+  // This is the SAME formula as Ultralytics: min(new_shape / old_shape)
   const scale = Math.min(inputSize / width, inputSize / height);
+  
+  // New dimensions after scaling (keeping aspect ratio)
   const newW = Math.round(width * scale);
   const newH = Math.round(height * scale);
 
-  // Calculate padding to center the image
+  // Padding to center the resized image (Ultralytics centers the image)
+  // Using floor ensures pixel-perfect alignment with Ultralytics
   const padX = Math.floor((inputSize - newW) / 2);
   const padY = Math.floor((inputSize - newH) / 2);
 
   // Letterbox params for coordinate conversion later
   const params = { scale, padX, padY, newW, newH, origW: width, origH: height };
 
-  // Log letterbox params once
+  // Log letterbox params once for debugging
   if (!self.loggedLetterbox) {
-    console.log('[YOLO] Letterbox params:', params);
+    console.log('[YOLO] Letterbox preprocessing params:');
+    console.log(`   Original size: ${width}x${height}`);
+    console.log(`   Target size: ${inputSize}x${inputSize}`);
+    console.log(`   Scale factor: ${scale.toFixed(4)}`);
+    console.log(`   Resized to: ${newW}x${newH}`);
+    console.log(`   Padding: X=${padX}, Y=${padY}`);
+    console.log(`   Letterbox color: ${letterboxColor.toFixed(4)} (114/255)`);
     self.loggedLetterbox = true;
   }
 
-  // Create output tensor filled with letterbox color (gray 114/255)
+  // Step 2: Create output tensor filled with letterbox color (gray 114/255)
+  // Format: CHW (Channel, Height, Width) - standard for YOLO
   const input = new Float32Array(3 * inputSize * inputSize);
   input.fill(letterboxColor);
 
-  // Resize and copy image data into letterboxed tensor
-  for (let y = 0; y < newH; y++) {
-    for (let x = 0; x < newW; x++) {
-      // Source coordinates in original image
-      const srcX = Math.min(Math.floor(x / scale), width - 1);
-      const srcY = Math.min(Math.floor(y / scale), height - 1);
-      const srcIdx = (srcY * width + srcX) * 4;
+  // Step 3: Resize and copy image with bilinear interpolation
+  // We iterate over the destination (resized) coordinates and sample from source
+  for (let dstY = 0; dstY < newH; dstY++) {
+    for (let dstX = 0; dstX < newW; dstX++) {
+      // Map destination coordinates back to source image coordinates
+      // Using continuous coordinates for bilinear interpolation
+      const srcX = (dstX + 0.5) / scale - 0.5;
+      const srcY = (dstY + 0.5) / scale - 0.5;
+      
+      // Clamp to valid range
+      const clampedSrcX = Math.max(0, Math.min(srcX, width - 1));
+      const clampedSrcY = Math.max(0, Math.min(srcY, height - 1));
+      
+      // Get interpolated RGB values using bilinear interpolation
+      const { r, g, b } = bilinearInterpolate(data, width, height, clampedSrcX, clampedSrcY);
 
-      // Destination coordinates in letterboxed image
-      const dstX = padX + x;
-      const dstY = padY + y;
+      // Destination coordinates in letterboxed tensor (with padding offset)
+      const tensorX = padX + dstX;
+      const tensorY = padY + dstY;
 
-      // Normalize to [0, 1]
-      const r = data[srcIdx] / 255.0;
-      const g = data[srcIdx + 1] / 255.0;
-      const b = data[srcIdx + 2] / 255.0;
-
-      // CHW format (Channel, Height, Width)
-      input[0 * inputSize * inputSize + dstY * inputSize + dstX] = r;
-      input[1 * inputSize * inputSize + dstY * inputSize + dstX] = g;
-      input[2 * inputSize * inputSize + dstY * inputSize + dstX] = b;
+      // Step 4: Normalize to [0, 1] and store in CHW format
+      // Channel order: R, G, B (same as Ultralytics - NOT BGR)
+      // Ultralytics uses RGB order for ONNX models
+      const baseIdx = tensorY * inputSize + tensorX;
+      input[0 * inputSize * inputSize + baseIdx] = r / 255.0;  // R channel
+      input[1 * inputSize * inputSize + baseIdx] = g / 255.0;  // G channel
+      input[2 * inputSize * inputSize + baseIdx] = b / 255.0;  // B channel
     }
+  }
+
+  // Debug: Log sample pixel values from center of image (once)
+  if (!self.loggedPixelSample) {
+    const centerX = Math.floor(inputSize / 2);
+    const centerY = Math.floor(inputSize / 2);
+    const idx = centerY * inputSize + centerX;
+    console.log('[YOLO] Sample pixel at center (', centerX, ',', centerY, '):');
+    console.log(`   R: ${input[0 * inputSize * inputSize + idx].toFixed(4)}`);
+    console.log(`   G: ${input[1 * inputSize * inputSize + idx].toFixed(4)}`);
+    console.log(`   B: ${input[2 * inputSize * inputSize + idx].toFixed(4)}`);
+    self.loggedPixelSample = true;
   }
 
   return { input, params };
@@ -441,6 +544,44 @@ async function runYoloInference(imageData) {
     // Preprocess with letterbox (same as Ultralytics Python library)
     const { input, params: letterboxParams } = preprocessWithLetterbox(imageData);
 
+    // Debug: Validate input tensor statistics (once)
+    if (!self.loggedInputStats) {
+      self.loggedInputStats = true;
+      
+      // Calculate min, max, mean of input tensor
+      let minVal = Infinity, maxVal = -Infinity, sum = 0;
+      let nonZeroCount = 0;
+      const letterboxColorApprox = 0.447; // 114/255
+      
+      for (let i = 0; i < input.length; i++) {
+        if (input[i] < minVal) minVal = input[i];
+        if (input[i] > maxVal) maxVal = input[i];
+        sum += input[i];
+        // Count non-letterbox pixels (approximately)
+        if (Math.abs(input[i] - letterboxColorApprox) > 0.01) {
+          nonZeroCount++;
+        }
+      }
+      const mean = sum / input.length;
+      
+      console.log('[YOLO] Input tensor statistics:');
+      console.log(`   Shape: [1, 3, ${inputSize}, ${inputSize}]`);
+      console.log(`   Min: ${minVal.toFixed(4)}, Max: ${maxVal.toFixed(4)}, Mean: ${mean.toFixed(4)}`);
+      console.log(`   Non-letterbox pixels: ${nonZeroCount} / ${input.length} (${(nonZeroCount/input.length*100).toFixed(1)}%)`);
+      console.log(`   Expected: Min≈0, Max≤1, Mean≈0.3-0.5 for typical webcam image`);
+      
+      // Warn if input looks wrong
+      if (maxVal > 1.1) {
+        console.warn('[YOLO] ⚠️ Input values > 1 detected! Image may not be normalized correctly');
+      }
+      if (minVal < -0.1) {
+        console.warn('[YOLO] ⚠️ Negative input values detected! Check preprocessing');
+      }
+      if (nonZeroCount < input.length * 0.1) {
+        console.warn('[YOLO] ⚠️ Very few non-letterbox pixels! Image may be mostly padding');
+      }
+    }
+
     // Create tensor with dynamic input name
     const tensor = new ort.Tensor('float32', input, [1, 3, inputSize, inputSize]);
     const inputName = yoloSession.inputNames[0] || 'images';
@@ -467,6 +608,16 @@ async function runYoloInference(imageData) {
         outputDims: outputTensor.dims,
         numElements: outputTensor.data.length
       });
+      
+      // Also check output statistics to understand model behavior
+      let outMin = Infinity, outMax = -Infinity;
+      for (let i = 0; i < Math.min(10000, outputTensor.data.length); i++) {
+        const v = outputTensor.data[i];
+        if (v < outMin) outMin = v;
+        if (v > outMax) outMax = v;
+      }
+      console.log(`[YOLO] Output range (first 10000 values): Min=${outMin.toFixed(4)}, Max=${outMax.toFixed(4)}`);
+      
       self.loggedOutputInfo = true;
     }
 
