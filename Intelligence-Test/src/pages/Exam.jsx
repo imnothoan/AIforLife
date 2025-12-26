@@ -576,11 +576,11 @@ export default function Exam() {
     // ============================================
     const aiWarningCache = new Map();
     const AI_CACHE_TTL = 300000; // 5 minutes cache (tăng từ 1 phút)
-    
+
     // Track last warning time per type to debounce
     const lastWarningTimePerType = new Map();
-    const WARNING_DEBOUNCE_MS = 5000; // 5 seconds between same type warnings
-    
+    const WARNING_DEBOUNCE_MS = 1000; // 1 second between same type warnings (instant response)
+
     // Function to get AI-generated warning message with smart caching
     const fetchAIWarning = async (eventCode, warningNum, progress) => {
       // Debounce: Skip if same event type was warned recently
@@ -590,7 +590,7 @@ export default function Exam() {
         return null; // Use fallback toast instead
       }
       lastWarningTimePerType.set(eventCode, Date.now());
-      
+
       // Check cache first - use eventCode + warningNum as key
       // Limit warningNum to 3 for cache efficiency (messages are similar after 3)
       const cacheWarningNum = Math.min(warningNum, 3);
@@ -600,16 +600,16 @@ export default function Exam() {
         console.log(`[AI Warning] Using cached message for ${cacheKey}`);
         return cached.message;
       }
-      
+
       try {
         const token = await supabase.auth.getSession().then(r => r.data?.session?.access_token);
         if (!token) return null;
-        
+
         const response = await fetch(`${API_URL}/api/ai/explain-warning`, {
           method: 'POST',
-          headers: { 
+          headers: {
             'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json' 
+            'Content-Type': 'application/json'
           },
           body: JSON.stringify({
             eventType: eventCode,
@@ -617,17 +617,17 @@ export default function Exam() {
             progress: progress
           })
         });
-        
+
         if (!response.ok) return null;
-        
+
         const result = await response.json();
         const message = result.success ? result.message : null;
-        
+
         // Store in cache with longer TTL
         if (message) {
           aiWarningCache.set(cacheKey, { message, time: Date.now() });
         }
-        
+
         return message;
       } catch (error) {
         console.warn('[AI Warning] Failed to fetch:', error);
@@ -638,13 +638,13 @@ export default function Exam() {
     // Message queue to handle async processing sequentially
     let processingMessage = false;
     const messageQueue = [];
-    
+
     const processNextMessage = async () => {
       if (processingMessage || messageQueue.length === 0) return;
-      
+
       processingMessage = true;
       const e = messageQueue.shift();
-      
+
       try {
         const { type, payload, code } = e.data;
         const translatedMessage = translateWorkerMessage(e.data);
@@ -654,18 +654,18 @@ export default function Exam() {
         } else if (type === 'ALERT') {
           const newCheatCount = cheatCount + 1;
           setCheatCount(newCheatCount);
-          
+
           // Capture screenshot for critical AI detections
           const shouldCaptureScreenshot = CRITICAL_EVENTS_FOR_EVIDENCE.includes(code);
           logProctoring('ai_alert', { message: payload, code }, shouldCaptureScreenshot);
-          
+
           // Try to get AI-generated warning message
-          const progress = questions.length > 0 
+          const progress = questions.length > 0
             ? Math.round((currentQuestionIndex / questions.length) * 100)
             : 0;
-          
+
           const aiMessage = await fetchAIWarning(code, newCheatCount, progress);
-          
+
           if (aiMessage) {
             // Show AI warning toast
             setAiWarning(aiMessage);
@@ -878,7 +878,7 @@ export default function Exam() {
       try {
         console.log('[MediaPipe] Initializing proctoring on main thread...');
         const initialized = await initMediaPipeProctoring();
-        
+
         if (!initialized || !isActive) {
           console.warn('[MediaPipe] Failed to initialize or component unmounted');
           return;
@@ -889,13 +889,13 @@ export default function Exam() {
 
         // Process frames at ~4 FPS for face analysis
         const MEDIAPIPE_INTERVAL_MS = 250;
-        
+
         mediaPipeIntervalRef.current = setInterval(async () => {
           if (!isActive || !videoRef.current || isSubmittingRef.current) return;
 
           try {
             const result = await analyzeFrame(videoRef.current);
-            
+
             if (result && result.alerts && result.alerts.length > 0) {
               for (const alert of result.alerts) {
                 // Log proctoring event
@@ -1355,7 +1355,7 @@ export default function Exam() {
   // Schedule random face verifications during exam - fixed 3-minute interval
   // Uses SILENT verification - no popup, just checks in background
   const lastSilentVerificationWarning = useRef(0);
-  
+
   useEffect(() => {
     if (!examStarted || !sessionId) return;
 
@@ -1379,7 +1379,7 @@ export default function Exam() {
     const interval = setInterval(async () => {
       // Only verify if exam is still in progress and not submitting
       if (!examStarted || isSubmitting || showFaceVerification) return;
-      
+
       // Check if video is available
       if (!videoRef.current || videoRef.current.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) {
         console.log('[Silent Verification] Video not ready, skipping this check');
@@ -1387,14 +1387,14 @@ export default function Exam() {
       }
 
       console.log('[Silent Verification] Performing background face check...');
-      
+
       try {
         // Perform silent verification from current video frame
         const result = await silentVerifyFace(videoRef.current, storedFaceEmbedding);
-        
+
         if (result.success) {
           setFaceVerificationCount(prev => prev + 1);
-          
+
           // Log verification result
           if (sessionId && !DEMO_SESSION_IDS.includes(sessionId)) {
             try {
@@ -1408,32 +1408,32 @@ export default function Exam() {
               console.warn('[Silent Verification] Could not log:', error);
             }
           }
-          
+
           if (result.isMatch) {
             console.log('[Silent Verification] ✅ Face verified successfully (background)');
             // Silent success - no toast, no interruption
           } else {
             // Face mismatch detected!
             console.warn('[Silent Verification] ⚠️ Face mismatch detected!');
-            
+
             const now = Date.now();
             // Only show warning if cooldown has passed
             if (now - lastSilentVerificationWarning.current > SILENT_VERIFICATION_COOLDOWN_MS) {
               lastSilentVerificationWarning.current = now;
-              
+
               // Capture evidence screenshot
               const evidence = await captureVideoFrame(videoRef.current, SCREENSHOT_QUALITY);
-              
+
               // Log as proctoring event with evidence
-              logProctoring('face_not_detected', { 
+              logProctoring('face_not_detected', {
                 type: 'silent_verification_failed',
                 distance: result.distance,
                 similarity: result.similarity
               }, true); // captureScreenshot = true
-              
+
               // Show warning toast (but don't interrupt exam)
               toast.warning(t('face.silentMismatch') || 'Khuôn mặt không khớp. Hệ thống đã ghi nhận.');
-              
+
               // Increment cheat count
               setCheatCount(prev => prev + 1);
             }
@@ -1441,7 +1441,7 @@ export default function Exam() {
         } else {
           // Extraction failed - could be no face, multiple faces, etc
           console.log('[Silent Verification] Check failed:', result.error);
-          
+
           if (result.error === 'MULTI_PERSON') {
             // Multi-person is handled by ai.worker, just log here
             console.log('[Silent Verification] Multiple people detected');
@@ -1495,7 +1495,7 @@ export default function Exam() {
       const stream = cameraStreamRef.current;
       if (stream.getTracks().some(track => track.readyState === 'live')) {
         videoRef.current.srcObject = stream;
-        videoRef.current.play().catch(() => {});
+        videoRef.current.play().catch(() => { });
       } else {
         // Camera stream died - restart it
         retryCamera();
@@ -1559,7 +1559,7 @@ export default function Exam() {
       const stream = cameraStreamRef.current;
       if (stream.getTracks().some(track => track.readyState === 'live')) {
         videoRef.current.srcObject = stream;
-        videoRef.current.play().catch(() => {});
+        videoRef.current.play().catch(() => { });
       } else {
         // Camera stream died - restart it
         retryCamera();
@@ -1856,7 +1856,7 @@ export default function Exam() {
       } else {
         toast.error(t('exam.submitError'));
       }
-      
+
       // Only reset on error - successful submit navigates away
       setIsSubmitting(false);
       isSubmittingRef.current = false;

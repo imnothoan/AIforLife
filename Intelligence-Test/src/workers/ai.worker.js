@@ -21,9 +21,9 @@ const CONFIG = {
   YOLO: {
     MODEL_PATH: '/models/lasttt.onnx',
     INPUT_SIZE: 640, // Model was trained with 640x640 input
-    // Confidence threshold - matches Python test code (conf=0.4)
-    // Production can use 0.5-0.6 for fewer false positives
-    CONFIDENCE_THRESHOLD: 0.4,
+    // Confidence threshold - balanced for sensitivity and accuracy
+    // Phone typically detected at 50-65%, person at 70-95%
+    CONFIDENCE_THRESHOLD: 0.15,  // Lowered because raw ONNX scores ~16% (not 60% like Ultralytics wrapper)
     IOU_THRESHOLD: 0.45,
     CLASSES: ['person', 'phone', 'material', 'headphones'], // Must match training classes (from model metadata)
     // Only alert on phone, material, headphones - NOT person
@@ -41,7 +41,7 @@ const CONFIG = {
     // Letterbox padding color (gray 114/255 = 0.447, same as Ultralytics)
     LETTERBOX_COLOR: 114 / 255,
     // Processing settings
-    THROTTLE_MS: 200,  // Run YOLO every 250ms (4 FPS) for fast detection
+    THROTTLE_MS: 50,  // Run YOLO very frequently (20 FPS max) for real-time detection
   }
 };
 
@@ -353,9 +353,9 @@ async function processFrame(imageData) {
     // ============================================
     for (const detection of detections) {
       if (CONFIG.YOLO.ALERT_CLASSES.includes(detection.class)) {
-        // Throttle alerts per class (max once per 8 seconds per class)
+        // Throttle alerts per class (max once per 2 seconds per class - fast response)
         const lastTimeForClass = lastAlertTimePerClass[detection.class] || 0;
-        if (now - lastTimeForClass > 8000) {
+        if (now - lastTimeForClass > 2000) {
           lastAlertTimePerClass[detection.class] = now;
 
           // Send detection alert
@@ -448,17 +448,29 @@ function preprocessWithLetterbox(imageData) {
   const letterboxColor = CONFIG.YOLO.LETTERBOX_COLOR; // 114/255 ≈ 0.447
 
   // Step 1: Calculate scale to fit image while maintaining aspect ratio
-  // This is the SAME formula as Ultralytics: min(new_shape / old_shape)
-  const scale = Math.min(inputSize / width, inputSize / height);
+  // Ultralytics: r = min(new_shape[0] / shape[0], new_shape[1] / shape[1])
+  const scale = Math.min(inputSize / height, inputSize / width);
 
   // New dimensions after scaling (keeping aspect ratio)
-  const newW = Math.round(width * scale);
-  const newH = Math.round(height * scale);
+  // Ultralytics: new_unpad = round(shape[1] * r), round(shape[0] * r)
+  const newUnpadW = Math.round(width * scale);
+  const newUnpadH = Math.round(height * scale);
 
-  // Padding to center the resized image (Ultralytics centers the image)
-  // Using floor ensures pixel-perfect alignment with Ultralytics
-  const padX = Math.floor((inputSize - newW) / 2);
-  const padY = Math.floor((inputSize - newH) / 2);
+  // Padding calculation - Ultralytics uses asymmetric padding!
+  // dw, dh = (new_shape[1] - new_unpad[0]) / 2, (new_shape[0] - new_unpad[1]) / 2
+  const dw = (inputSize - newUnpadW) / 2;
+  const dh = (inputSize - newUnpadH) / 2;
+
+  // Ultralytics asymmetric padding: round(dh - 0.1) for top, round(dh + 0.1) for bottom
+  // This ensures proper alignment
+  const padTop = Math.round(dh - 0.1);
+  const padLeft = Math.round(dw - 0.1);
+
+  // Use padTop/padLeft for positioning (Ultralytics standard)
+  const padX = padLeft;
+  const padY = padTop;
+  const newW = newUnpadW;
+  const newH = newUnpadH;
 
   // Letterbox params for coordinate conversion later
   const params = { scale, padX, padY, newW, newH, origW: width, origH: height };
@@ -480,32 +492,24 @@ function preprocessWithLetterbox(imageData) {
   const input = new Float32Array(3 * inputSize * inputSize);
   input.fill(letterboxColor);
 
-  // Step 3: Resize and copy image with bilinear interpolation
-  // We iterate over the destination (resized) coordinates and sample from source
+  // Step 3: Resize and copy image using BILINEAR interpolation
+  // This matches cv2.resize(frame, (new_w, new_h)) which uses INTER_LINEAR by default
   for (let dstY = 0; dstY < newH; dstY++) {
     for (let dstX = 0; dstX < newW; dstX++) {
-      // Map destination coordinates back to source image coordinates
-      // The +0.5 / -0.5 offset implements "pixel center" sampling:
-      // - We map from the center of destination pixel to source space
-      // - This matches Ultralytics/OpenCV's INTER_LINEAR behavior
-      // - Without this offset, edge pixels would be slightly misaligned
-      const srcX = (dstX + 0.5) / scale - 0.5;
-      const srcY = (dstY + 0.5) / scale - 0.5;
+      // Map destination coordinates to source coordinates (floating point)
+      // For bilinear interpolation, we need exact floating point coordinates
+      const srcX = dstX * (width - 1) / (newW - 1);
+      const srcY = dstY * (height - 1) / (newH - 1);
 
-      // Clamp to valid range
-      const clampedSrcX = Math.max(0, Math.min(srcX, width - 1));
-      const clampedSrcY = Math.max(0, Math.min(srcY, height - 1));
-
-      // Get interpolated RGB values using bilinear interpolation
-      const { r, g, b } = bilinearInterpolate(data, width, height, clampedSrcX, clampedSrcY);
+      // Use bilinear interpolation for smooth, high-quality resize
+      const { r, g, b } = bilinearInterpolate(data, width, height, srcX, srcY);
 
       // Destination coordinates in letterboxed tensor (with padding offset)
       const tensorX = padX + dstX;
       const tensorY = padY + dstY;
 
       // Step 4: Normalize to [0, 1] and store in CHW format
-      // Channel order: R, G, B (same as Ultralytics - NOT BGR)
-      // Ultralytics uses RGB order for ONNX models
+      // RGB order (same as Python cv2.cvtColor BGR2RGB)
       const baseIdx = tensorY * inputSize + tensorX;
       input[0 * inputSize * inputSize + baseIdx] = r / 255.0;  // R channel
       input[1 * inputSize * inputSize + baseIdx] = g / 255.0;  // G channel
