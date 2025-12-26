@@ -33,11 +33,12 @@ const CONFIG = {
     MULTI_PERSON_ALERT: true,
     MULTI_PERSON_THRESHOLD: 0.5,
     // Model output format:
-    // IMPORTANT: This YOLOv11-seg ONNX model outputs PROBABILITIES directly (0-1 range)
-    // NOT raw logits! The model includes sigmoid activation in its output layer.
-    // Setting FORCE_SIGMOID to false because applying sigmoid to probabilities
-    // would compress all scores to ~50-66% range (sigmoid(0.66) ≈ 0.66)
-    FORCE_SIGMOID: false,  // DO NOT apply sigmoid - model outputs probabilities directly
+    // IMPORTANT: This YOLOv11-seg ONNX model outputs RAW LOGITS (not probabilities)
+    // for class scores. The bbox coordinates (first 4 values) are in pixel space.
+    // Class scores at indices 4-7 are raw logits that need sigmoid transformation.
+    // Evidence: console shows class scores like -0.000, 0.000 which sigmoid to ~0.5
+    // Setting FORCE_SIGMOID to true to convert logits to probabilities
+    FORCE_SIGMOID: true,  // Apply sigmoid - model outputs raw logits for class scores
     // Letterbox padding color (gray 114/255 = 0.447, same as Ultralytics)
     LETTERBOX_COLOR: 114 / 255,
     // Processing settings
@@ -86,27 +87,27 @@ const INPUT_VALIDATION = {
 
 // Improved sigmoid detection: Check if scores look like raw logits or probabilities
 // 
-// This model (YOLOv11-seg ONNX) outputs PROBABILITIES in [0, 1] range.
+// This model (YOLOv11-seg ONNX) outputs RAW LOGITS for class scores.
 // The analysis function helps detect the output format automatically.
 //
 // Raw logits characteristics:
 // 1. Can be negative or > 1
-// 2. Often clustered around 0 (sigmoid(0) = 0.5)
-// 3. Large variance for actual detections
+// 2. Often ALL values clustered around 0 (sigmoid(0) = 0.5)
+// 3. No clear distinction between "background" and "detection" values
 // 
 // Probability characteristics:
 // 1. Always in [0, 1] range
-// 2. Background boxes have scores near 0
-// 3. Actual detections have scores > 0.3
+// 2. Clear bimodal distribution: most values very low (0.001-0.1), some high (0.5-1.0)
+// 3. Background boxes should have scores near 0.001, NOT 0.0
 function analyzeScoreDistribution(scores) {
   if (!scores || scores.length === 0) {
-    return { needsSigmoid: false, reason: 'empty_scores_using_config' };
+    return { needsSigmoid: CONFIG.YOLO.FORCE_SIGMOID, reason: 'empty_scores_using_config' };
   }
 
   // Filter out invalid values
   const validScores = scores.filter(s => !isNaN(s) && isFinite(s));
   if (validScores.length === 0) {
-    return { needsSigmoid: false, reason: 'no_valid_scores_using_config' };
+    return { needsSigmoid: CONFIG.YOLO.FORCE_SIGMOID, reason: 'no_valid_scores_using_config' };
   }
 
   // Calculate statistics
@@ -116,7 +117,7 @@ function analyzeScoreDistribution(scores) {
   const variance = validScores.reduce((acc, val) => acc + Math.pow(val - mean, 2), 0) / validScores.length;
   const stdDev = Math.sqrt(variance);
 
-  // KEY CHECK: If values are outside [0, 1], these are definitely raw logits
+  // KEY CHECK 1: If values are outside [-0.01, 1.01], these are definitely raw logits
   const hasNegative = min < SCORE_ANALYSIS.LOGIT_NEGATIVE_THRESHOLD;
   const hasLargePositive = max > SCORE_ANALYSIS.LOGIT_POSITIVE_THRESHOLD;
 
@@ -128,46 +129,52 @@ function analyzeScoreDistribution(scores) {
     };
   }
 
-  // Values are in [0, 1] range - likely probabilities
-  // Check if they have a sensible distribution
+  // KEY CHECK 2: If ALL values are very close to 0 (within ±0.05), these are likely raw logits
+  // Real probability outputs would have SOME values higher for actual detections
+  // Raw logits for background boxes are typically in range [-2, 2] -> after bounded check, near 0
+  const veryNearZeroCount = validScores.filter(s => Math.abs(s) < 0.05).length;
+  const veryNearZeroRatio = veryNearZeroCount / validScores.length;
+  
+  if (veryNearZeroRatio > 0.9 && max < 0.15) {
+    // Almost all values very close to 0, and no high values at all
+    // This is raw logits pattern, NOT probability pattern
+    // Real probabilities would have at least some scores > 0.3 if there's any detection
+    return {
+      needsSigmoid: true,
+      reason: 'all_scores_clustered_near_zero_likely_raw_logits',
+      stats: { min, max, mean, stdDev, veryNearZeroRatio }
+    };
+  }
 
-  // If most values are near 0 (background) and some are higher (detections)
-  // this is characteristic of probability output
-  const nearZeroCount = validScores.filter(s => s < 0.1).length;
-  const nearZeroRatio = nearZeroCount / validScores.length;
-
-  if (nearZeroRatio > 0.8) {
-    // Most scores are near 0 (background), some may be higher - this is probability output
+  // KEY CHECK 3: Check if we have a valid probability distribution
+  // Real probabilities should have:
+  // - Most background boxes with very low scores (0.001 - 0.1)
+  // - Some detection boxes with higher scores (0.3 - 1.0) when object present
+  // - A clear gap between background and detection scores
+  const lowScoreCount = validScores.filter(s => s < 0.1).length;
+  const highScoreCount = validScores.filter(s => s > 0.3).length;
+  const lowScoreRatio = lowScoreCount / validScores.length;
+  
+  // If we have low scores AND some high scores, this looks like real probabilities
+  if (lowScoreRatio > 0.7 && highScoreCount > 0 && max > 0.3) {
     return {
       needsSigmoid: false,
-      reason: 'probability_distribution_most_near_zero',
-      stats: { min, max, mean, stdDev, nearZeroRatio }
+      reason: 'valid_probability_distribution_with_detections',
+      stats: { min, max, mean, stdDev, lowScoreRatio, highScoreCount }
     };
   }
 
   // Check for "clustered around 0.5" pattern
-  // This happens when sigmoid is applied to logits that are all ~0
-  // If we see this pattern, the model likely outputs raw logits
+  // This happens when sigmoid is ALREADY applied to logits that are all ~0
   const isCentered = mean > SCORE_ANALYSIS.CENTERED_MEAN_MIN && mean < SCORE_ANALYSIS.CENTERED_MEAN_MAX;
   const isNarrow = stdDev < SCORE_ANALYSIS.NARROW_STDDEV && (max - min) < SCORE_ANALYSIS.NARROW_RANGE;
 
   if (isCentered && isNarrow) {
-    // All scores clustered around 0.5 - this suggests raw logits near 0
-    return {
-      needsSigmoid: true,
-      reason: 'scores_clustered_at_0.5_indicating_raw_logits_near_0',
-      stats: { min, max, mean, stdDev }
-    };
-  }
-
-  // If we have good spread with some background (near 0) and some detections
-  const hasBackground = min < SCORE_ANALYSIS.LOW_BACKGROUND;
-  const hasDetections = max > SCORE_ANALYSIS.HIGH_DETECTION;
-
-  if (hasBackground && hasDetections) {
+    // All scores clustered around 0.5 - sigmoid was already applied to ~0 logits
+    // Don't apply sigmoid again
     return {
       needsSigmoid: false,
-      reason: 'good_probability_distribution',
+      reason: 'scores_clustered_at_0.5_sigmoid_already_applied',
       stats: { min, max, mean, stdDev }
     };
   }
