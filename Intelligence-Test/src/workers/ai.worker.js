@@ -35,6 +35,8 @@ const CONFIG = {
     // YOLOv8/v11 ONNX exports with default settings have sigmoid applied internally
     // If scores cluster around 0.5 with FORCE_SIGMOID=true, try false (double sigmoid issue)
     FORCE_SIGMOID: false,  // Try WITHOUT sigmoid first - YOLOv11 may have it built-in
+    // Processing settings
+    THROTTLE_MS: 500,  // Run YOLO every 500ms for responsive detection
   }
 };
 
@@ -146,9 +148,6 @@ let lastAlertTimePerClass = {};
 let lastYoloRunTime = 0;
 let isInitialized = false;
 
-// YOLO throttle interval - run every 500ms for responsive detection
-const YOLO_THROTTLE_MS = 500;
-
 // Track max scores per class for debugging (persistent across inference runs)
 let maxScorePerClassPersistent = null;
 
@@ -246,7 +245,7 @@ async function processFrame(imageData) {
   const now = Date.now();
 
   // Throttle YOLO detection to reduce CPU usage
-  if (!yoloSession || (now - lastYoloRunTime < YOLO_THROTTLE_MS)) {
+  if (!yoloSession || (now - lastYoloRunTime < CONFIG.YOLO.THROTTLE_MS)) {
     return;
   }
   
