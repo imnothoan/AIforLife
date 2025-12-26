@@ -41,7 +41,7 @@ const CONFIG = {
     // Letterbox padding color (gray 114/255 = 0.447, same as Ultralytics)
     LETTERBOX_COLOR: 114 / 255,
     // Processing settings
-    THROTTLE_MS: 500,  // Run YOLO every 500ms for responsive detection
+    THROTTLE_MS: 200,  // Run YOLO every 250ms (4 FPS) for fast detection
   }
 };
 
@@ -62,13 +62,13 @@ const SCORE_ANALYSIS = {
   // definitively indicate raw logits rather than probabilities.
   LOGIT_NEGATIVE_THRESHOLD: -0.01,
   LOGIT_POSITIVE_THRESHOLD: 1.01,
-  
+
   // Detection of "clustered at 0.5" pattern (indicates sigmoid already applied to ~0 logits)
   CENTERED_MEAN_MIN: 0.45,
   CENTERED_MEAN_MAX: 0.55,
   NARROW_STDDEV: 0.05,
   NARROW_RANGE: 0.15,
-  
+
   // Probability distribution analysis
   LOW_BACKGROUND: 0.05,   // Background predictions should be near 0
   HIGH_DETECTION: 0.3,    // Valid detections should exceed this
@@ -261,7 +261,7 @@ async function initializeAI() {
     // Log model details including metadata
     console.log('[YOLO Worker] Input names:', yoloSession.inputNames);
     console.log('[YOLO Worker] Output names:', yoloSession.outputNames);
-    
+
     // Try to extract class names from ONNX metadata if available
     // Ultralytics ONNX exports include 'names' in metadata
     try {
@@ -270,7 +270,7 @@ async function initializeAI() {
     } catch (metaErr) {
       console.log('[YOLO Worker] Could not read metadata:', metaErr.message);
     }
-    
+
     console.log('[YOLO Worker] Configured classes:', CONFIG.YOLO.CLASSES);
     console.log('[YOLO Worker] Confidence threshold:', CONFIG.YOLO.CONFIDENCE_THRESHOLD);
     console.log('[YOLO Worker] Force sigmoid:', CONFIG.YOLO.FORCE_SIGMOID);
@@ -405,28 +405,28 @@ function bilinearInterpolate(data, width, height, x, y) {
   const y0 = Math.floor(y);
   const x1 = Math.min(x0 + 1, width - 1);
   const y1 = Math.min(y0 + 1, height - 1);
-  
+
   // Fractional parts for interpolation weights
   const xFrac = x - x0;
   const yFrac = y - y0;
-  
+
   // Get pixel indices (RGBA format - 4 bytes per pixel)
   const idx00 = (y0 * width + x0) * 4;
   const idx10 = (y0 * width + x1) * 4;
   const idx01 = (y1 * width + x0) * 4;
   const idx11 = (y1 * width + x1) * 4;
-  
+
   // Bilinear interpolation weights
   const w00 = (1 - xFrac) * (1 - yFrac);
   const w10 = xFrac * (1 - yFrac);
   const w01 = (1 - xFrac) * yFrac;
   const w11 = xFrac * yFrac;
-  
+
   // Interpolate each channel (RGB)
   const r = data[idx00] * w00 + data[idx10] * w10 + data[idx01] * w01 + data[idx11] * w11;
   const g = data[idx00 + 1] * w00 + data[idx10 + 1] * w10 + data[idx01 + 1] * w01 + data[idx11 + 1] * w11;
   const b = data[idx00 + 2] * w00 + data[idx10 + 2] * w10 + data[idx01 + 2] * w01 + data[idx11 + 2] * w11;
-  
+
   return { r, g, b };
 }
 
@@ -450,7 +450,7 @@ function preprocessWithLetterbox(imageData) {
   // Step 1: Calculate scale to fit image while maintaining aspect ratio
   // This is the SAME formula as Ultralytics: min(new_shape / old_shape)
   const scale = Math.min(inputSize / width, inputSize / height);
-  
+
   // New dimensions after scaling (keeping aspect ratio)
   const newW = Math.round(width * scale);
   const newH = Math.round(height * scale);
@@ -491,11 +491,11 @@ function preprocessWithLetterbox(imageData) {
       // - Without this offset, edge pixels would be slightly misaligned
       const srcX = (dstX + 0.5) / scale - 0.5;
       const srcY = (dstY + 0.5) / scale - 0.5;
-      
+
       // Clamp to valid range
       const clampedSrcX = Math.max(0, Math.min(srcX, width - 1));
       const clampedSrcY = Math.max(0, Math.min(srcY, height - 1));
-      
+
       // Get interpolated RGB values using bilinear interpolation
       const { r, g, b } = bilinearInterpolate(data, width, height, clampedSrcX, clampedSrcY);
 
@@ -539,13 +539,13 @@ function preprocessWithLetterbox(imageData) {
  */
 function convertLetterboxToOriginalCoords(cx, cy, w, h, params) {
   const { scale, padX, padY, origW, origH } = params;
-  
+
   // Remove letterbox padding and scale back to original size
   const x1 = (cx - w / 2 - padX) / scale;
   const y1 = (cy - h / 2 - padY) / scale;
   const x2 = (cx + w / 2 - padX) / scale;
   const y2 = (cy + h / 2 - padY) / scale;
-  
+
   // Clamp to image bounds
   const boxX = Math.max(0, Math.min(x1, origW));
   const boxY = Math.max(0, Math.min(y1, origH));
@@ -576,12 +576,12 @@ async function runYoloInference(imageData) {
     // Debug: Validate input tensor statistics (once)
     if (!self.loggedInputStats) {
       self.loggedInputStats = true;
-      
+
       // Calculate min, max, mean of input tensor
       let minVal = Infinity, maxVal = -Infinity, sum = 0;
       let nonZeroCount = 0;
       const letterboxColorApprox = 0.447; // 114/255
-      
+
       for (let i = 0; i < input.length; i++) {
         if (input[i] < minVal) minVal = input[i];
         if (input[i] > maxVal) maxVal = input[i];
@@ -592,13 +592,13 @@ async function runYoloInference(imageData) {
         }
       }
       const mean = sum / input.length;
-      
+
       console.log('[YOLO] Input tensor statistics:');
       console.log(`   Shape: [1, 3, ${inputSize}, ${inputSize}]`);
       console.log(`   Min: ${minVal.toFixed(4)}, Max: ${maxVal.toFixed(4)}, Mean: ${mean.toFixed(4)}`);
-      console.log(`   Non-letterbox pixels: ${nonZeroCount} / ${input.length} (${(nonZeroCount/input.length*100).toFixed(1)}%)`);
+      console.log(`   Non-letterbox pixels: ${nonZeroCount} / ${input.length} (${(nonZeroCount / input.length * 100).toFixed(1)}%)`);
       console.log(`   Expected: Min≈0, Max≤1, Mean≈0.3-0.5 for typical webcam image`);
-      
+
       // Warn if input looks wrong (using validation thresholds)
       if (maxVal > INPUT_VALIDATION.MAX_VALUE) {
         console.warn('[YOLO] ⚠️ Input values > 1 detected! Image may not be normalized correctly');
@@ -637,7 +637,7 @@ async function runYoloInference(imageData) {
         outputDims: outputTensor.dims,
         numElements: outputTensor.data.length
       });
-      
+
       // Also check output statistics to understand model behavior
       let outMin = Infinity, outMax = -Infinity;
       for (let i = 0; i < Math.min(10000, outputTensor.data.length); i++) {
@@ -646,7 +646,7 @@ async function runYoloInference(imageData) {
         if (v > outMax) outMax = v;
       }
       console.log(`[YOLO] Output range (first 10000 values): Min=${outMin.toFixed(4)}, Max=${outMax.toFixed(4)}`);
-      
+
       self.loggedOutputInfo = true;
     }
 
