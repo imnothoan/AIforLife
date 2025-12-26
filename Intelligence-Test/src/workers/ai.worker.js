@@ -1,167 +1,166 @@
-// AI Worker - Implements Advanced Cascade Strategy (MediaPipe Face Mesh → YOLO)
+// AI Worker - YOLO Object Detection for Anti-Cheat
 // This worker runs in a separate thread to avoid blocking the main UI
 // 
 // Features:
-// - Face detection and head pose estimation
-// - Eye gaze tracking (iris position analysis)
-// - Lip movement detection (speech detection)
-// - Multi-person detection (second person alert)
 // - Object detection (phone, headphones, materials)
-// - Blink rate analysis (fatigue/stress detection)
+// - Person detection (for multi-person alerts)
+// 
+// NOTE: MediaPipe face detection runs on MAIN THREAD (see mediaPipeProctoring.js)
+// because MediaPipe uses importScripts() which doesn't work in ES module workers.
 
-import { FaceLandmarker, FilesetResolver } from "@mediapipe/tasks-vision";
+// ONNX Runtime for YOLO model inference
 import * as ort from 'onnxruntime-web';
 
 // ============================================
 // CONFIGURATION
 // ============================================
 const CONFIG = {
-  // Face detection thresholds
-  FACE: {
-    MIN_DETECTION_CONFIDENCE: 0.5,
-    MIN_TRACKING_CONFIDENCE: 0.5,
-    // Head pose thresholds (in normalized range)
-    YAW_THRESHOLD: 0.25,      // Looking left/right
-    PITCH_THRESHOLD: 0.20,    // Looking up/down
-    CONSECUTIVE_FRAMES: 5,    // Number of suspicious frames before triggering
-    // MediaPipe Face Landmarker returns 478 landmarks (468 face mesh + 10 iris)
-    // We require at least 468 for full face mesh detection
-    MIN_LANDMARKS_FOR_POSE: 468,
-    // Eye tracking landmarks (iris)
-    LEFT_IRIS: [468, 469, 470, 471, 472], // Left iris landmarks
-    RIGHT_IRIS: [473, 474, 475, 476, 477], // Right iris landmarks
-    LEFT_EYE: [33, 7, 163, 144, 145, 153, 154, 155, 133, 173, 157, 158, 159, 160, 161, 246],
-    RIGHT_EYE: [362, 382, 381, 380, 374, 373, 390, 249, 263, 466, 388, 387, 386, 385, 384, 398],
-    // Lip landmarks for speech detection
-    UPPER_LIP: [61, 185, 40, 39, 37, 0, 267, 269, 270, 409, 291],
-    LOWER_LIP: [146, 91, 181, 84, 17, 314, 405, 321, 375, 291],
-    // Thresholds
-    EYE_GAZE_THRESHOLD: 0.15,     // How far iris can deviate from center
-    LIP_MOVEMENT_THRESHOLD: 0.02, // Threshold for detecting speech
-    BLINK_THRESHOLD: 0.2,         // Eye aspect ratio for blink detection
-  },
-  // YOLO settings - Custom trained YOLOv11n SEGMENTATION model for anti-cheat detection
-  // Model: best.onnx (11.8MB) - YOLOv11n-seg trained on custom anti-cheat dataset
-  // Training results (from notebook):
-  //   - mAP50: 92% (Box), 89.8% (Mask)
-  //   - mAP50-95: 75.3% (Box), 71.6% (Mask)
-  //   - Per-class mAP50: Person 96%, Phone 88.2%, Material 99.4%, Headphones 84.5%
-  // Model outputs: [1, 40, 8400] = 4 bbox + 4 classes + 32 mask coefficients
-  // IMPORTANT: ONNX model outputs RAW LOGITS, not probabilities!
-  // We must apply sigmoid to convert to probabilities
+  // YOLO settings - Custom trained YOLOv11 model for anti-cheat detection
+  // Model: anticheat_yolo11s.onnx - YOLOv11s segmentation model (~40MB)
+  // Output format: [1, 40, 8400] = 4 bbox + 4 classes + 32 mask coefficients
   YOLO: {
-    MODEL_PATH: '/models/anticheat_yolo11s.onnx', // YOLOv11n-seg nano model (11.8MB, much faster than 40MB)
+    MODEL_PATH: '/models/anticheat_yolo11s.onnx',
     INPUT_SIZE: 640, // Model was trained with 640x640 input
-    // Confidence threshold - optimized based on training results
-    // Phone/headphones need lower threshold (~0.35) for better recall
-    // Material detection is very accurate, can use higher threshold
-    CONFIDENCE_THRESHOLD: 0.35,
+    // Confidence threshold - use higher threshold to reduce false positives
+    CONFIDENCE_THRESHOLD: 0.6,
     IOU_THRESHOLD: 0.45,
-    CLASSES: ['person', 'phone', 'material', 'headphones'], // Must match training classes (4 classes)
-    // Only alert on phone, material, headphones - NOT person (use MediaPipe for multi-person)
+    CLASSES: ['person', 'phone', 'material', 'headphones'], // Must match training classes
+    // Only alert on phone, material, headphones - NOT person
     ALERT_CLASSES: ['phone', 'material', 'headphones'],
-    MASK_COEFFICIENTS: 32, // Number of mask coefficients for segmentation models
-    // Multi-person detection - DISABLED in YOLO, use MediaPipe FaceLandmarker instead
-    MULTI_PERSON_ALERT: false,
-    MULTI_PERSON_THRESHOLD: 0.7,
-  },
-  // Cascade timing
-  CASCADE: {
-    YOLO_ACTIVATION_SECONDS: 3, // Activate YOLO for N seconds after suspicious activity
-  },
-  // Advanced detection settings
-  ADVANCED: {
-    LIP_MOVEMENT_FRAMES: 10,    // Number of frames to track lip movement
-    LIP_ALERT_THRESHOLD: 5,    // Alert after this many frames of speaking
-    BLINK_RATE_WINDOW: 30000,  // 30 seconds window for blink rate
-    ABNORMAL_BLINK_RATE_LOW: 5,  // Too few blinks (staring at notes?)
-    ABNORMAL_BLINK_RATE_HIGH: 40, // Too many blinks (stress?)
+    MASK_COEFFICIENTS: 32, // For segmentation models
+    // Multi-person detection via YOLO (backup to MediaPipe on main thread)
+    MULTI_PERSON_ALERT: true,
+    MULTI_PERSON_THRESHOLD: 0.6,
+    // Model output format:
+    // YOLOv8/v11 ONNX exports with default settings have sigmoid applied internally
+    // If scores cluster around 0.5 with FORCE_SIGMOID=true, try false (double sigmoid issue)
+    FORCE_SIGMOID: false,  // Try WITHOUT sigmoid first - YOLOv11 may have it built-in
+    // Processing settings
+    THROTTLE_MS: 500,  // Run YOLO every 500ms for responsive detection
   }
 };
 
 // Sigmoid function to convert raw logits to probabilities
-// NOTE: YOLOv8/v11 ONNX models already apply sigmoid internally for class scores
-// Only use this for models that output raw logits
+// YOLOv11 ONNX exports output RAW LOGITS for class scores, not probabilities
 function sigmoid(x) {
-  return 1 / (1 + Math.exp(-x));
+  // Clamp to avoid overflow
+  const clampedX = Math.max(-20, Math.min(20, x));
+  return 1 / (1 + Math.exp(-clampedX));
 }
 
-// Check if scores need sigmoid (if all scores are in logit range, not 0-1 probability range)
-// YOLOv8/v11 exports already have sigmoid applied, so we should NOT apply it again
-function needsSigmoid(scores) {
-  // If array is empty or all values are invalid, don't apply sigmoid (safer default)
+// Score analysis thresholds for detecting if model outputs logits or probabilities
+const SCORE_ANALYSIS = {
+  LOGIT_NEGATIVE_THRESHOLD: -0.1,  // Scores below this indicate raw logits
+  LOGIT_POSITIVE_THRESHOLD: 1.5,    // Scores above this indicate raw logits
+  CENTERED_MEAN_MIN: 0.4,           // Mean lower bound for "clustered at 0.5" check
+  CENTERED_MEAN_MAX: 0.6,           // Mean upper bound for "clustered at 0.5" check
+  NARROW_STDDEV: 0.1,               // StdDev threshold for narrow distribution
+  NARROW_RANGE: 0.3,                // Max-min range threshold for narrow distribution
+  LOW_BACKGROUND: 0.1,              // Scores below this are "background"
+  HIGH_DETECTION: 0.7,              // Scores above this are "detections"
+};
+
+// Improved sigmoid detection: Check if scores look like raw logits or probabilities
+// Raw logits characteristics:
+// 1. Can be negative or > 1
+// 2. Often clustered around 0 (sigmoid(0) = 0.5)
+// 3. High variance for actual detections
+// 
+// Probability characteristics:
+// 1. Always in [0, 1] range
+// 2. Background boxes have scores near 0
+// 3. Actual detections have scores near 1
+function analyzeScoreDistribution(scores) {
   if (!scores || scores.length === 0) {
-    return false;
+    return { needsSigmoid: true, reason: 'empty_scores' };  // Default to applying sigmoid
   }
 
-  // Filter out invalid values (NaN, Infinity)
+  // Filter out invalid values
   const validScores = scores.filter(s => !isNaN(s) && isFinite(s));
   if (validScores.length === 0) {
-    return false;
+    return { needsSigmoid: true, reason: 'no_valid_scores' };
   }
 
-  // If any score is outside [0, 1] range, these are logits (need sigmoid)
-  // Raw logits can be negative or > 1
-  // Probabilities are always in [0, 1]
-  const hasNegative = validScores.some(s => s < 0);
-  const hasLargePositive = validScores.some(s => s > 1);
+  // Calculate statistics
+  const min = Math.min(...validScores);
+  const max = Math.max(...validScores);
+  const mean = validScores.reduce((a, b) => a + b, 0) / validScores.length;
+  const variance = validScores.reduce((acc, val) => acc + Math.pow(val - mean, 2), 0) / validScores.length;
+  const stdDev = Math.sqrt(variance);
 
-  return hasNegative || hasLargePositive;
+  // Check for obvious logit indicators
+  const hasNegative = min < SCORE_ANALYSIS.LOGIT_NEGATIVE_THRESHOLD;
+  const hasLargePositive = max > SCORE_ANALYSIS.LOGIT_POSITIVE_THRESHOLD;
+  
+  if (hasNegative || hasLargePositive) {
+    return { 
+      needsSigmoid: true, 
+      reason: hasNegative ? 'has_negative_values' : 'has_values_gt_1',
+      stats: { min, max, mean, stdDev }
+    };
+  }
+
+  // Check for "clustered around 0.5" pattern (sigmoid(0) = 0.5)
+  // If after sigmoid, everything is ~0.5, the raw values were ~0
+  // This pattern: mean ≈ 0.5, low stdDev, and narrow range
+  const isCentered = mean > SCORE_ANALYSIS.CENTERED_MEAN_MIN && mean < SCORE_ANALYSIS.CENTERED_MEAN_MAX;
+  const isNarrow = stdDev < SCORE_ANALYSIS.NARROW_STDDEV && (max - min) < SCORE_ANALYSIS.NARROW_RANGE;
+  
+  if (isCentered && isNarrow) {
+    // This is suspicious - likely already-sigmoidified logits near 0
+    // which would indicate double sigmoid or incorrect data
+    // Since this produces useless scores, assume we need sigmoid
+    return {
+      needsSigmoid: true,
+      reason: 'scores_clustered_at_0.5_indicating_raw_logits_near_0',
+      stats: { min, max, mean, stdDev }
+    };
+  }
+
+  // If scores have a good distribution with clear background (near 0) 
+  // and potential detections (higher values), these are likely probabilities
+  const hasLowBackground = min < SCORE_ANALYSIS.LOW_BACKGROUND;
+  const hasHighDetections = max > SCORE_ANALYSIS.HIGH_DETECTION;
+  
+  if (hasLowBackground && hasHighDetections) {
+    return {
+      needsSigmoid: false,
+      reason: 'good_probability_distribution',
+      stats: { min, max, mean, stdDev }
+    };
+  }
+
+  // Default: apply sigmoid to be safe
+  return {
+    needsSigmoid: true,
+    reason: 'uncertain_defaulting_to_sigmoid',
+    stats: { min, max, mean, stdDev }
+  };
 }
 
 // ============================================
 // STATE
 // ============================================
-let faceLandmarker = null;
 let yoloSession = null;
-let suspiciousFrameCount = 0;
 let lastAlertTime = 0;
 // Per-class alert tracking to prevent one class blocking others
 let lastAlertTimePerClass = {};
 let lastYoloRunTime = 0;
 let isInitialized = false;
 
-// YOLO throttle interval - optimized for performance
-// Run every 750ms to reduce CPU usage while maintaining detection accuracy
-const YOLO_THROTTLE_MS = 750;
-
-// MediaPipe throttle - run face detection at 5 FPS (200ms)
-const MEDIAPIPE_THROTTLE_MS = 200;
-let lastMediaPipeRunTime = 0;
-
 // Track max scores per class for debugging (persistent across inference runs)
 let maxScorePerClassPersistent = null;
 
-// Advanced detection state
-let lipMovementHistory = [];
-let lastLipDistance = 0;
-let speakingFrameCount = 0;
-let blinkHistory = [];
-let lastBlinkTime = 0;
-let lastEyeAspectRatio = 0;
+// Multi-person alert cooldown
 let multiPersonAlertTime = 0;
-let lastEyeGazeAlert = 0;
 
 // ============================================
-// INITIALIZATION
+// INITIALIZATION - YOLO Only
 // ============================================
 async function initializeAI() {
-  self.postMessage({ type: 'STATUS', payload: 'Đang tải model AI...', code: 'aiLoading' });
+  self.postMessage({ type: 'STATUS', payload: 'Đang tải YOLO model...', code: 'aiLoading' });
 
-  // Helper to add timeout to promises - resolves with fallback value instead of rejecting
-  // Uses AbortController pattern to properly cleanup timeout
-  const withTimeoutFallback = (promise, ms, fallbackValue = null) => {
-    let timeoutId;
-    const timeoutPromise = new Promise((resolve) => {
-      timeoutId = setTimeout(() => resolve(fallbackValue), ms);
-    });
-
-    return Promise.race([promise, timeoutPromise]).finally(() => {
-      clearTimeout(timeoutId);
-    });
-  };
-
-  // Helper that rejects on timeout - also cleans up timeout
+  // Helper that rejects on timeout
   const withTimeout = (promise, ms, name) => {
     let timeoutId;
     const timeoutPromise = new Promise((_, reject) => {
@@ -173,595 +172,162 @@ async function initializeAI() {
     });
   };
 
-  let mediaPipeLoaded = false;
-  let mediaPipeSkipped = false;
-
-  // MediaPipe requires importScripts which doesn't work in ES module workers
-  // We need to catch and handle this gracefully
   try {
-    // Load MediaPipe Face Landmarker
-    // NOTE: These values must match MEDIAPIPE_CONFIG in lib/constants.js
-    // Workers cannot import from main bundle, so values are duplicated here
-    const MEDIAPIPE_WASM = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.18/wasm";
-    const MEDIAPIPE_MODEL = "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task";
+    // Configure ONNX Runtime WASM paths - use CDN for better reliability
+    ort.env.wasm.wasmPaths = 'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.17.0/dist/';
 
-    // Check if FilesetResolver is available and works in this context
-    // ES module workers don't support importScripts which MediaPipe may use internally
-    let vision = null;
-    try {
-      // Add 15 second timeout for vision tasks initialization
-      vision = await withTimeoutFallback(
-        FilesetResolver.forVisionTasks(MEDIAPIPE_WASM),
-        15000,
-        null
-      );
-    } catch (fsError) {
-      // This typically happens in ES module workers where importScripts isn't available
-      console.warn('MediaPipe WASM loading failed (expected in module workers):', fsError.message);
-      mediaPipeSkipped = true;
-    }
+    // Disable SIMD and multi-threading for better browser compatibility
+    ort.env.wasm.numThreads = 1;
+    ort.env.wasm.simd = false;
 
-    if (!vision && !mediaPipeSkipped) {
-      console.warn('MediaPipe WASM loading timed out - continuing without face detection');
-    }
+    // Construct absolute URL for model
+    const modelPath = CONFIG.YOLO.MODEL_PATH;
+    const baseUrl = self.location.origin || '';
+    const absoluteModelPath = modelPath.startsWith('/') ? baseUrl + modelPath : modelPath;
+    const modelFilename = modelPath.split('/').pop();
 
-    if (vision) {
-      // Try GPU first, fallback to CPU if it fails
-      let delegateOptions = ["GPU", "CPU"];
-      let lastError = null;
+    console.log('[YOLO Worker] Loading model from:', absoluteModelPath);
 
-      for (const delegate of delegateOptions) {
-        try {
-          // Add 20 second timeout for model loading
-          faceLandmarker = await withTimeout(
-            FaceLandmarker.createFromOptions(vision, {
-              baseOptions: {
-                modelAssetPath: MEDIAPIPE_MODEL,
-                delegate: delegate
-              },
-              runningMode: "IMAGE",
-              numFaces: 2, // Detect up to 2 faces for multi-person detection
-              minFaceDetectionConfidence: CONFIG.FACE.MIN_DETECTION_CONFIDENCE,
-              minTrackingConfidence: CONFIG.FACE.MIN_TRACKING_CONFIDENCE,
-              outputFaceBlendshapes: false,
-              outputFacialTransformationMatrixes: true // For head pose
-            }),
-            20000,
-            `FaceLandmarker (${delegate})`
-          );
-          console.log(`MediaPipe Face Landmarker loaded successfully with ${delegate} delegate`);
-          lastError = null;
-          mediaPipeLoaded = true;
-          break;
-        } catch (err) {
-          console.warn(`Failed to load MediaPipe with ${delegate} delegate:`, err.message);
-          lastError = err;
-        }
-      }
+    // Try multiple paths
+    const pathsToTry = [absoluteModelPath, modelPath, `./models/${modelFilename}`];
+    let loadError = null;
 
-      if (lastError && !mediaPipeLoaded) {
-        console.warn('MediaPipe failed to load with all delegates - continuing without face detection');
-      }
-    }
-
-    self.postMessage({ type: 'STATUS', payload: 'Đang tải YOLO...', code: 'yoloLoading' });
-
-    // Load YOLO ONNX model with timeout
-    try {
-      // Configure ONNX Runtime WASM paths - use CDN for better reliability
-      // Version must match package.json (1.17.0 for stability)
-      ort.env.wasm.wasmPaths = 'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.17.0/dist/';
-
-      // Disable SIMD and multi-threading for better compatibility
-      ort.env.wasm.numThreads = 1;
-      ort.env.wasm.simd = false; // Disable SIMD for broader browser support
-
-      // Construct absolute URL for model (workers may have issues with relative paths)
-      const modelPath = CONFIG.YOLO.MODEL_PATH;
-      const baseUrl = self.location.origin || '';
-      const absoluteModelPath = modelPath.startsWith('/') ? baseUrl + modelPath : modelPath;
-
-      // Extract filename for fallback path (to avoid hardcoding)
-      const modelFilename = modelPath.split('/').pop();
-
-      console.log('Attempting to load YOLO model from:', absoluteModelPath);
-      console.log('Worker origin:', self.location.origin);
-
-      // Try to load the model with multiple fallback paths
-      let loadError = null;
-      const pathsToTry = [absoluteModelPath, modelPath, `./models/${modelFilename}`];
-
-      // Add 30 second timeout for YOLO model loading (model is ~40MB)
-      const loadWithTimeout = async (path) => {
-        return withTimeout(
-          ort.InferenceSession.create(path, {
+    for (const tryPath of pathsToTry) {
+      try {
+        console.log('[YOLO Worker] Trying path:', tryPath);
+        yoloSession = await withTimeout(
+          ort.InferenceSession.create(tryPath, {
             executionProviders: ['wasm'],
-            graphOptimizationLevel: 'basic'  // Use basic optimization for better compatibility
+            graphOptimizationLevel: 'basic'
           }),
-          30000,
-          `YOLO model from ${path}`
+          45000,  // 45 second timeout for large model
+          `YOLO model from ${tryPath}`
         );
-      };
-
-      for (const tryPath of pathsToTry) {
-        try {
-          console.log('Trying to load from:', tryPath);
-          yoloSession = await loadWithTimeout(tryPath);
-          console.log('✅ Successfully loaded from:', tryPath);
-          loadError = null;
-          break;
-        } catch (err) {
-          console.warn('Failed to load from', tryPath, ':', err.message);
-          loadError = err;
-        }
+        console.log('[YOLO Worker] ✅ Model loaded successfully from:', tryPath);
+        loadError = null;
+        break;
+      } catch (err) {
+        console.warn('[YOLO Worker] Failed to load from', tryPath, ':', err.message);
+        loadError = err;
       }
-
-      if (loadError) {
-        throw loadError;
-      }
-
-      // Log input/output details for debugging
-      console.log('✅ YOLO model loaded successfully!');
-      console.log('Input names:', yoloSession.inputNames);
-      console.log('Output names:', yoloSession.outputNames);
-
-      // Log input/output shapes if available
-      if (yoloSession.inputNames && yoloSession.inputNames.length > 0) {
-        console.log('Model is ready for inference with custom trained classes:', CONFIG.YOLO.CLASSES);
-        console.log('Confidence threshold:', CONFIG.YOLO.CONFIDENCE_THRESHOLD);
-      }
-
-      // Status will be reported in the final status update block below
-    } catch (yoloError) {
-      console.warn('YOLO model not available');
-      console.warn('Error details:', yoloError.message);
-      console.warn('Stack:', yoloError.stack);
-      // Status will be reported in the final status update block below
     }
+
+    if (loadError) {
+      throw loadError;
+    }
+
+    // Log model details
+    console.log('[YOLO Worker] Input names:', yoloSession.inputNames);
+    console.log('[YOLO Worker] Output names:', yoloSession.outputNames);
+    console.log('[YOLO Worker] Classes:', CONFIG.YOLO.CLASSES);
+    console.log('[YOLO Worker] Confidence threshold:', CONFIG.YOLO.CONFIDENCE_THRESHOLD);
+    console.log('[YOLO Worker] Force sigmoid:', CONFIG.YOLO.FORCE_SIGMOID);
 
     isInitialized = true;
+    self.postMessage({ type: 'STATUS', payload: 'YOLO object detection active', code: 'yoloOnly' });
 
-    // Report final status based on what loaded
-    if (mediaPipeLoaded && yoloSession) {
-      self.postMessage({ type: 'STATUS', payload: 'AI proctoring active (Face + YOLO)', code: 'monitoring' });
-    } else if (mediaPipeLoaded) {
-      self.postMessage({ type: 'STATUS', payload: 'Face monitoring active (YOLO unavailable)', code: 'faceOnly' });
-    } else if (yoloSession) {
-      self.postMessage({ type: 'STATUS', payload: 'Object detection active (Face detection unavailable)', code: 'yoloOnly' });
-    } else {
-      self.postMessage({ type: 'STATUS', payload: 'AI monitoring active (basic mode)', code: 'basicMode' });
-    }
   } catch (error) {
-    console.error('AI initialization error:', error);
-    // Continue with whatever was loaded - don't fail completely
-    self.postMessage({ type: 'STATUS', payload: 'AI monitoring active (basic mode)', code: 'basicMode' });
-
-    // Fallback: basic detection mode still works
-    isInitialized = true;
+    console.error('[YOLO Worker] Initialization error:', error);
+    self.postMessage({ type: 'STATUS', payload: 'YOLO unavailable - basic mode', code: 'basicMode' });
+    isInitialized = true;  // Allow worker to still receive frames
   }
 }
 
 // ============================================
-// HEAD POSE ESTIMATION
-// ============================================
-function extractHeadPose(faceLandmarks, transformMatrix) {
-  if (!faceLandmarks || faceLandmarks.length < CONFIG.FACE.MIN_LANDMARKS_FOR_POSE) {
-    return { yaw: 0, pitch: 0, roll: 0, isValid: false };
-  }
-
-  // Use transformation matrix if available
-  if (transformMatrix) {
-    // Extract rotation from transformation matrix
-    // The matrix is in column-major order
-    const m = transformMatrix.data;
-    const yaw = Math.atan2(m[8], m[10]); // Around Y-axis
-    const pitch = Math.asin(-m[9]); // Around X-axis
-    const roll = Math.atan2(m[1], m[5]); // Around Z-axis
-
-    return { yaw, pitch, roll, isValid: true };
-  }
-
-  // Fallback: Estimate from landmarks
-  // Key landmarks for head pose:
-  // - Nose tip: 1
-  // - Left eye outer: 33
-  // - Right eye outer: 263
-  // - Left ear: 127
-  // - Right ear: 356
-  // - Chin: 152
-  // - Forehead: 10
-
-  const noseTip = faceLandmarks[1];
-  const leftEye = faceLandmarks[33];
-  const rightEye = faceLandmarks[263];
-  const chin = faceLandmarks[152];
-  const forehead = faceLandmarks[10];
-
-  // Estimate yaw (left/right rotation)
-  const eyeCenter = {
-    x: (leftEye.x + rightEye.x) / 2,
-    y: (leftEye.y + rightEye.y) / 2
-  };
-  const yaw = (noseTip.x - eyeCenter.x) * 2; // Simplified estimation
-
-  // Estimate pitch (up/down rotation)
-  const faceHeight = Math.abs(chin.y - forehead.y);
-  const noseToForehead = noseTip.y - forehead.y;
-  const pitch = (noseToForehead / faceHeight - 0.5) * 2;
-
-  return { yaw, pitch, roll: 0, isValid: true };
-}
-
-// ============================================
-// EYE GAZE TRACKING
-// ============================================
-function analyzeEyeGaze(faceLandmarks) {
-  if (!faceLandmarks || faceLandmarks.length < 478) {
-    return { isLookingAway: false, direction: null };
-  }
-
-  // Get iris centers
-  const leftIrisCenter = faceLandmarks[468]; // Left iris center
-  const rightIrisCenter = faceLandmarks[473]; // Right iris center
-
-  // Get eye corners for reference
-  const leftEyeInner = faceLandmarks[133];
-  const leftEyeOuter = faceLandmarks[33];
-  const rightEyeInner = faceLandmarks[362];
-  const rightEyeOuter = faceLandmarks[263];
-
-  // Calculate eye width
-  const leftEyeWidth = Math.abs(leftEyeOuter.x - leftEyeInner.x);
-  const rightEyeWidth = Math.abs(rightEyeOuter.x - rightEyeInner.x);
-
-  // Calculate iris position relative to eye center
-  const leftEyeCenter = (leftEyeInner.x + leftEyeOuter.x) / 2;
-  const rightEyeCenter = (rightEyeInner.x + rightEyeOuter.x) / 2;
-
-  const leftGazeOffset = (leftIrisCenter.x - leftEyeCenter) / leftEyeWidth;
-  const rightGazeOffset = (rightIrisCenter.x - rightEyeCenter) / rightEyeWidth;
-
-  const avgGazeOffset = (leftGazeOffset + rightGazeOffset) / 2;
-
-  let direction = null;
-  let isLookingAway = false;
-
-  if (avgGazeOffset > CONFIG.FACE.EYE_GAZE_THRESHOLD) {
-    direction = 'right';
-    isLookingAway = true;
-  } else if (avgGazeOffset < -CONFIG.FACE.EYE_GAZE_THRESHOLD) {
-    direction = 'left';
-    isLookingAway = true;
-  }
-
-  return { isLookingAway, direction, gazeOffset: avgGazeOffset };
-}
-
-// ============================================
-// LIP MOVEMENT DETECTION (SPEECH DETECTION)
-// ============================================
-function analyzeLipMovement(faceLandmarks) {
-  if (!faceLandmarks || faceLandmarks.length < 400) {
-    return { isSpeaking: false, lipDistance: 0 };
-  }
-
-  // Upper lip center (point 13) and lower lip center (point 14)
-  const upperLip = faceLandmarks[13];
-  const lowerLip = faceLandmarks[14];
-
-  // Calculate vertical distance between lips
-  const lipDistance = Math.abs(upperLip.y - lowerLip.y);
-
-  // Track lip movement over time
-  lipMovementHistory.push(lipDistance);
-  if (lipMovementHistory.length > CONFIG.ADVANCED.LIP_MOVEMENT_FRAMES) {
-    lipMovementHistory.shift();
-  }
-
-  // Calculate movement variance
-  if (lipMovementHistory.length >= 3) {
-    const avgDistance = lipMovementHistory.reduce((a, b) => a + b, 0) / lipMovementHistory.length;
-    const variance = lipMovementHistory.reduce((acc, val) => acc + Math.pow(val - avgDistance, 2), 0) / lipMovementHistory.length;
-
-    // High variance indicates speaking
-    if (variance > CONFIG.FACE.LIP_MOVEMENT_THRESHOLD) {
-      speakingFrameCount++;
-    } else {
-      speakingFrameCount = Math.max(0, speakingFrameCount - 1);
-    }
-  }
-
-  const isSpeaking = speakingFrameCount >= CONFIG.ADVANCED.LIP_ALERT_THRESHOLD;
-
-  return { isSpeaking, lipDistance, speakingFrameCount };
-}
-
-// ============================================
-// BLINK DETECTION
-// ============================================
-function analyzeBlinking(faceLandmarks) {
-  if (!faceLandmarks || faceLandmarks.length < 400) {
-    return { isBlink: false, eyeAspectRatio: 0 };
-  }
-
-  // Eye Aspect Ratio (EAR) calculation
-  // Using 6 points around each eye
-
-  // Left eye points
-  const leftP1 = faceLandmarks[33];  // outer corner
-  const leftP2 = faceLandmarks[160]; // top outer
-  const leftP3 = faceLandmarks[158]; // top inner
-  const leftP4 = faceLandmarks[133]; // inner corner
-  const leftP5 = faceLandmarks[153]; // bottom inner
-  const leftP6 = faceLandmarks[144]; // bottom outer
-
-  // Right eye points
-  const rightP1 = faceLandmarks[362]; // outer corner
-  const rightP2 = faceLandmarks[385]; // top outer
-  const rightP3 = faceLandmarks[387]; // top inner
-  const rightP4 = faceLandmarks[263]; // inner corner
-  const rightP5 = faceLandmarks[373]; // bottom inner
-  const rightP6 = faceLandmarks[380]; // bottom outer
-
-  // Calculate EAR for each eye
-  const leftEAR = calculateEAR(leftP1, leftP2, leftP3, leftP4, leftP5, leftP6);
-  const rightEAR = calculateEAR(rightP1, rightP2, rightP3, rightP4, rightP5, rightP6);
-
-  const avgEAR = (leftEAR + rightEAR) / 2;
-  const isBlink = avgEAR < CONFIG.FACE.BLINK_THRESHOLD && lastEyeAspectRatio >= CONFIG.FACE.BLINK_THRESHOLD;
-
-  // Track blink history
-  const now = Date.now();
-  if (isBlink) {
-    blinkHistory.push(now);
-    // Remove old blinks
-    blinkHistory = blinkHistory.filter(t => now - t < CONFIG.ADVANCED.BLINK_RATE_WINDOW);
-  }
-
-  lastEyeAspectRatio = avgEAR;
-
-  // Calculate blink rate (blinks per minute)
-  const blinkRate = (blinkHistory.length / CONFIG.ADVANCED.BLINK_RATE_WINDOW) * 60000;
-
-  return {
-    isBlink,
-    eyeAspectRatio: avgEAR,
-    blinkRate,
-    isAbnormalBlinkRate: blinkRate < CONFIG.ADVANCED.ABNORMAL_BLINK_RATE_LOW || blinkRate > CONFIG.ADVANCED.ABNORMAL_BLINK_RATE_HIGH
-  };
-}
-
-function calculateEAR(p1, p2, p3, p4, p5, p6) {
-  // Eye Aspect Ratio = (|p2-p6| + |p3-p5|) / (2 * |p1-p4|)
-  const verticalDist1 = Math.sqrt(Math.pow(p2.x - p6.x, 2) + Math.pow(p2.y - p6.y, 2));
-  const verticalDist2 = Math.sqrt(Math.pow(p3.x - p5.x, 2) + Math.pow(p3.y - p5.y, 2));
-  const horizontalDist = Math.sqrt(Math.pow(p1.x - p4.x, 2) + Math.pow(p1.y - p4.y, 2));
-
-  if (horizontalDist === 0) return 0;
-  return (verticalDist1 + verticalDist2) / (2 * horizontalDist);
-}
-
-// ============================================
-// FRAME PROCESSING
+// FRAME PROCESSING - YOLO Only
+// MediaPipe face detection runs on main thread (see mediaPipeProctoring.js)
 // ============================================
 async function processFrame(imageData) {
   if (!isInitialized) {
-    // Fallback random detection for demo
-    if (Math.random() < 0.02) {
-      self.postMessage({ type: 'ALERT', payload: 'LOOK_AT_SCREEN', code: 'lookAtScreen' });
-    }
     return;
   }
 
   const now = Date.now();
-  let isSuspicious = false;
-  let suspicionReason = '';
 
-  // ============================================
-  // STAGE 1: FACE MESH DETECTION WITH ADVANCED ANALYTICS
-  // Throttled to reduce CPU usage - runs at ~5 FPS
-  // ============================================
-  if (faceLandmarker && (now - lastMediaPipeRunTime >= MEDIAPIPE_THROTTLE_MS)) {
-    lastMediaPipeRunTime = now;
+  // Throttle YOLO detection to reduce CPU usage
+  if (!yoloSession || (now - lastYoloRunTime < CONFIG.YOLO.THROTTLE_MS)) {
+    return;
+  }
+  
+  lastYoloRunTime = now;
 
-    try {
-      // Create ImageBitmap from ImageData
-      const imageBitmap = await createImageBitmap(imageData);
+  try {
+    const detections = await runYoloInference(imageData);
 
-      const result = faceLandmarker.detect(imageBitmap);
-      imageBitmap.close();
+    // Log detection count and max scores periodically (every 5 seconds for debugging)
+    if (!self.lastDetectionLog || (now - self.lastDetectionLog > 5000)) {
+      self.lastDetectionLog = now;
+      console.log(`[YOLO] Running: ${detections.length} detections (threshold: ${CONFIG.YOLO.CONFIDENCE_THRESHOLD})`);
 
-      // ============================================
-      // MULTI-PERSON DETECTION (Using MediaPipe - more reliable than YOLO)
-      // ============================================
-      if (result.faceLandmarks.length > 1 && now - multiPersonAlertTime > 10000) {
+      // Log max scores per class to help debug
+      if (maxScorePerClassPersistent) {
+        const maxScoreInfo = CONFIG.YOLO.CLASSES.map((cls, i) => {
+          const score = i < maxScorePerClassPersistent.length ? maxScorePerClassPersistent[i] : 0;
+          return `${cls}: ${(score * 100).toFixed(1)}%`;
+        }).join(', ');
+        console.log(`[YOLO] Max scores: ${maxScoreInfo}`);
+      }
+    }
+
+    // Log all alertable detections for debugging
+    if (detections.length > 0) {
+      const alertableDetections = detections.filter(d => CONFIG.YOLO.ALERT_CLASSES.includes(d.class));
+      if (alertableDetections.length > 0) {
+        console.log('[YOLO] Alert detections:', alertableDetections.map(d => `${d.class} (${(d.confidence * 100).toFixed(1)}%)`));
+      }
+    }
+
+    // ============================================
+    // MULTI-PERSON DETECTION (backup to MediaPipe on main thread)
+    // ============================================
+    if (CONFIG.YOLO.MULTI_PERSON_ALERT) {
+      const multiPersonThreshold = CONFIG.YOLO.MULTI_PERSON_THRESHOLD || 0.5;
+      const personDetections = detections.filter(d => d.class === 'person' && d.confidence > multiPersonThreshold);
+      if (personDetections.length > 1 && now - multiPersonAlertTime > 10000) {
         self.postMessage({
           type: 'ALERT',
           payload: 'MULTI_PERSON',
           code: 'multiPerson',
-          count: result.faceLandmarks.length
+          count: personDetections.length
         });
         multiPersonAlertTime = now;
-        console.log('🚨 Multi-person detected via MediaPipe:', result.faceLandmarks.length, 'faces');
+        console.log('[YOLO] Multi-person detected:', personDetections.length, 'people');
       }
+    }
 
-      if (result.faceLandmarks.length === 0) {
-        suspiciousFrameCount++;
-        if (suspiciousFrameCount >= CONFIG.FACE.CONSECUTIVE_FRAMES) {
-          isSuspicious = true;
-          suspicionReason = 'NO_FACE'; // Message code for translation
-        }
-      } else {
-        const landmarks = result.faceLandmarks[0];
-        const transformMatrix = result.facialTransformationMatrixes?.[0];
-        const pose = extractHeadPose(landmarks, transformMatrix);
-
-        if (pose.isValid) {
-          // Check for looking away (head pose)
-          if (Math.abs(pose.yaw) > CONFIG.FACE.YAW_THRESHOLD) {
-            suspiciousFrameCount++;
-            if (suspiciousFrameCount >= CONFIG.FACE.CONSECUTIVE_FRAMES) {
-              isSuspicious = true;
-              suspicionReason = pose.yaw > 0 ? 'LOOK_RIGHT' : 'LOOK_LEFT';
-            }
-          } else if (Math.abs(pose.pitch) > CONFIG.FACE.PITCH_THRESHOLD) {
-            suspiciousFrameCount++;
-            if (suspiciousFrameCount >= CONFIG.FACE.CONSECUTIVE_FRAMES) {
-              isSuspicious = true;
-              suspicionReason = pose.pitch > 0 ? 'LOOK_DOWN' : 'LOOK_UP';
-            }
-          } else {
-            // Reset counter if looking at screen
-            suspiciousFrameCount = Math.max(0, suspiciousFrameCount - 1);
-          }
-        }
-
-        // ============================================
-        // ADVANCED DETECTION: Eye Gaze Tracking
-        // ============================================
-        const eyeGaze = analyzeEyeGaze(landmarks);
-        if (eyeGaze.isLookingAway && now - lastEyeGazeAlert > 8000) {
-          self.postMessage({
-            type: 'GAZE_AWAY',
-            payload: eyeGaze.direction === 'left' ? 'GAZE_LEFT' : 'GAZE_RIGHT',
-            direction: eyeGaze.direction
-          });
-          lastEyeGazeAlert = now;
-        }
-
-        // ============================================
-        // ADVANCED DETECTION: Lip Movement (Speaking)
-        // ============================================
-        const lipAnalysis = analyzeLipMovement(landmarks);
-        if (lipAnalysis.isSpeaking && now - lastAlertTime > 10000) {
+    // ============================================
+    // OBJECT DETECTION ALERTS (phone, headphones, material)
+    // ============================================
+    for (const detection of detections) {
+      if (CONFIG.YOLO.ALERT_CLASSES.includes(detection.class)) {
+        // Throttle alerts per class (max once per 8 seconds per class)
+        const lastTimeForClass = lastAlertTimePerClass[detection.class] || 0;
+        if (now - lastTimeForClass > 8000) {
+          lastAlertTimePerClass[detection.class] = now;
+          
+          // Send detection alert
           self.postMessage({
             type: 'ALERT',
-            payload: 'SPEAKING_DETECTED',
-            code: 'speakingDetected'
+            payload: detection.class.toUpperCase() + '_DETECTED',
+            code: detection.class + 'Detected',
+            detectedClass: detection.class,
+            confidence: detection.confidence
           });
           lastAlertTime = now;
-        }
 
-        // ============================================
-        // ADVANCED DETECTION: Blink Analysis
-        // ============================================
-        const blinkAnalysis = analyzeBlinking(landmarks);
-        // Only report abnormal blink rate periodically (every 30 seconds)
-        if (blinkAnalysis.isAbnormalBlinkRate && blinkHistory.length > 10) {
-          // Log for instructor review but don't alert student
-          console.log('Abnormal blink rate detected:', blinkAnalysis.blinkRate, 'bpm');
-        }
-      }
-    } catch (error) {
-      console.warn('Face detection error:', error);
-    }
-  }
-
-  // ============================================
-  // STAGE 2: YOLO DETECTION
-  // ============================================
-  // Run YOLO detection continuously but throttled (every YOLO_THROTTLE_MS)
-  // This ensures objects like phones/headphones are always detected
-
-  // Debug: Log YOLO status every 5 seconds
-  if (!self.lastYoloStatusLog || (now - self.lastYoloStatusLog > 5000)) {
-    self.lastYoloStatusLog = now;
-    console.log(`🔧 YOLO Debug: session=${!!yoloSession}, timeSinceLastRun=${now - lastYoloRunTime}ms, throttle=${YOLO_THROTTLE_MS}ms`);
-  }
-
-  if (yoloSession && (now - lastYoloRunTime >= YOLO_THROTTLE_MS)) {
-    lastYoloRunTime = now;
-
-    try {
-      const detections = await runYoloInference(imageData);
-
-      // Log detection count and max scores periodically (every 3 seconds for debugging)
-      if (!self.lastDetectionLog || (now - self.lastDetectionLog > 3000)) {
-        self.lastDetectionLog = now;
-        console.log(`🔍 YOLO running: ${detections.length} detections (threshold: ${CONFIG.YOLO.CONFIDENCE_THRESHOLD})`);
-
-        // Log max scores per class to help debug
-        if (maxScorePerClassPersistent) {
-          const maxScoreInfo = CONFIG.YOLO.CLASSES.map((cls, i) => {
-            const score = i < maxScorePerClassPersistent.length ? maxScorePerClassPersistent[i] : 0;
-            return `${cls}: ${(score * 100).toFixed(1)}%`;
-          }).join(', ');
-          console.log(`📊 Max scores seen: ${maxScoreInfo}`);
-        }
-      }
-
-      // Log all detections for debugging (only non-person detections)
-      if (detections.length > 0) {
-        const alertableDetections = detections.filter(d => CONFIG.YOLO.ALERT_CLASSES.includes(d.class));
-        if (alertableDetections.length > 0) {
-          console.log('🚨 YOLO Alert Detections:', alertableDetections.map(d => `${d.class} (${(d.confidence * 100).toFixed(1)}%)`));
-        }
-      }
-
-      // ============================================
-      // MULTI-PERSON DETECTION
-      // ============================================
-      if (CONFIG.YOLO.MULTI_PERSON_ALERT) {
-        const multiPersonThreshold = CONFIG.YOLO.MULTI_PERSON_THRESHOLD || 0.5;
-        const personDetections = detections.filter(d => d.class === 'person' && d.confidence > multiPersonThreshold);
-        if (personDetections.length > 1 && now - multiPersonAlertTime > 10000) {
+          // Also update status to show detection
           self.postMessage({
-            type: 'ALERT',
-            payload: 'MULTI_PERSON',
-            code: 'multiPerson',
-            count: personDetections.length
+            type: 'STATUS',
+            payload: `Detected: ${detection.class} (${(detection.confidence * 100).toFixed(0)}%)`,
+            code: 'detection',
+            detectedClass: detection.class,
+            confidence: detection.confidence
           });
-          multiPersonAlertTime = now;
-          console.log('🚨 Multi-person detected:', personDetections.length, 'people');
         }
       }
-
-      for (const detection of detections) {
-        if (CONFIG.YOLO.ALERT_CLASSES.includes(detection.class)) {
-          // Throttle alerts per class (max once per 8 seconds per class)
-          const lastTimeForClass = lastAlertTimePerClass[detection.class] || 0;
-          if (now - lastTimeForClass > 8000) {
-            lastAlertTimePerClass[detection.class] = now;
-            // Send detection class as code for i18n translation
-            self.postMessage({
-              type: 'ALERT',
-              payload: detection.class.toUpperCase() + '_DETECTED',
-              code: detection.class + 'Detected',
-              detectedClass: detection.class,
-              confidence: detection.confidence
-            });
-            lastAlertTime = now;
-
-            // Also update status to show detection
-            self.postMessage({
-              type: 'STATUS',
-              payload: `DETECTION_${detection.class.toUpperCase()}`,
-              code: 'detection',
-              detectedClass: detection.class,
-              confidence: detection.confidence
-            });
-          }
-        }
-      }
-    } catch (error) {
-      console.warn('YOLO inference error:', error);
     }
-  }
-
-  // Send gaze away event (not blocking alert)
-  if (isSuspicious && suspiciousFrameCount === CONFIG.FACE.CONSECUTIVE_FRAMES) {
-    self.postMessage({ type: 'GAZE_AWAY', payload: suspicionReason, code: suspicionReason });
-
-    // Only send alert for prolonged suspicious activity
-    if (suspiciousFrameCount >= CONFIG.FACE.CONSECUTIVE_FRAMES * 2 && now - lastAlertTime > 5000) {
-      self.postMessage({ type: 'ALERT', payload: suspicionReason, code: suspicionReason });
-      lastAlertTime = now;
-    }
-  }
-
-  // Update status periodically
-  if (Math.random() < 0.01) {
-    self.postMessage({ type: 'STATUS', payload: 'MONITORING', code: 'monitoring' });
+  } catch (error) {
+    console.warn('[YOLO] Inference error:', error);
   }
 }
 
@@ -856,12 +422,27 @@ function parseYoloOutput(output, dims, originalWidth, originalHeight) {
   }
 
   // Detect if model outputs raw logits or probabilities
-  // Sample first few class scores to determine
-  let applySigmoid = false;
+  // Use FORCE_SIGMOID config option or analyze scores
+  let applySigmoid = CONFIG.YOLO.FORCE_SIGMOID;
+  
   if (!self.sigmoidDetected) {
     // Sample some class scores from different positions
+    // Only sample valid positions within the output tensor
     const sampleScores = [];
-    const samplePositions = [0, 100, 500, 1000];
+    
+    // Get number of boxes from output dimensions
+    let numBoxes = 0;
+    if (dims.length === 3) {
+      const dim1 = dims[1];
+      const dim2 = dims[2];
+      numBoxes = dim1 < dim2 ? dim2 : dim1;
+    } else if (dims.length === 2) {
+      numBoxes = dims[0];
+    }
+    
+    // Sample positions must be within valid range (0 to numBoxes-1)
+    const samplePositions = [0, 100, 500, 1000, 2000, 4000]
+      .filter(pos => pos < numBoxes);
 
     if (dims.length === 3) {
       const dim1 = dims[1];
@@ -904,16 +485,22 @@ function parseYoloOutput(output, dims, originalWidth, originalHeight) {
       }
     }
 
-    // Check if these look like logits or probabilities
-    // Logits can be negative or > 1, probabilities are always 0-1
-    applySigmoid = needsSigmoid(sampleScores);
+    // Use improved score distribution analysis
+    const analysis = analyzeScoreDistribution(sampleScores);
+    
+    // Override with forced sigmoid if configured
+    applySigmoid = CONFIG.YOLO.FORCE_SIGMOID || analysis.needsSigmoid;
     self.applySigmoid = applySigmoid;
     self.sigmoidDetected = true;
 
     console.log('📊 Score analysis:', {
-      sampleScores: sampleScores.slice(0, 8).map(s => s.toFixed(4)),
+      sampleScores: sampleScores.slice(0, 12).map(s => s?.toFixed(4) || 'N/A'),
+      forceSigmoid: CONFIG.YOLO.FORCE_SIGMOID,
+      analysisResult: analysis.needsSigmoid,
+      reason: analysis.reason,
+      stats: analysis.stats,
       applySigmoid: applySigmoid,
-      interpretation: applySigmoid ? 'Raw logits detected - will apply sigmoid' : 'Probabilities detected - no sigmoid needed'
+      interpretation: applySigmoid ? 'Will apply sigmoid to class scores' : 'Using raw scores as probabilities'
     });
   } else {
     applySigmoid = self.applySigmoid;
@@ -985,6 +572,25 @@ function parseYoloOutput(output, dims, originalWidth, originalHeight) {
         console.warn(`   Expected detect channels: ${expectedDetect}, seg channels: ${expectedSeg}`);
         return [];
       }
+    }
+
+    // Enhanced diagnostic: Log raw output values once to understand model format
+    if (!self.loggedRawOutput) {
+      self.loggedRawOutput = true;
+      console.log('[YOLO] 🔬 Raw output analysis for first 3 predictions:');
+      for (let i = 0; i < Math.min(3, numBoxes); i++) {
+        const values = [];
+        for (let c = 0; c < Math.min(channels, 12); c++) {
+          if (isTransposed) {
+            values.push(output[c * numBoxes + i]);
+          } else {
+            values.push(output[i * channels + c]);
+          }
+        }
+        console.log(`   Pred[${i}]: [${values.map(v => v?.toFixed(3) || 'N/A').join(', ')}]`);
+      }
+      console.log(`   Format: ${isTransposed ? 'transposed [channels, boxes]' : 'standard [boxes, channels]'}`);
+      console.log(`   Total values: ${output.length}, Channels: ${channels}, Boxes: ${numBoxes}`);
     }
 
     // Sample first few detections for debugging
