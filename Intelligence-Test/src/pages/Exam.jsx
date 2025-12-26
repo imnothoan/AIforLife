@@ -1140,13 +1140,14 @@ export default function Exam() {
         setTimeRemaining(exam.duration_minutes * 60);
 
         // Check for existing session or create new one
+        // Use maybeSingle() instead of single() to avoid 406 error when no session exists
         const { data: existingSession } = await supabase
           .from('exam_sessions')
           .select('id, status, started_at')
           .eq('exam_id', examId)
           .eq('student_id', user?.id)
           .eq('status', 'in_progress')
-          .single();
+          .maybeSingle();
 
         if (existingSession) {
           // Resume existing session
