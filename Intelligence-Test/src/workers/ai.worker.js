@@ -73,6 +73,16 @@ const SCORE_ANALYSIS = {
   // Probability distribution analysis
   LOW_BACKGROUND: 0.05,   // Background predictions should be near 0
   HIGH_DETECTION: 0.3,    // Valid detections should exceed this
+  
+  // Raw logit detection thresholds
+  // When most values are within ±NEAR_ZERO_THRESHOLD of 0, they're likely raw logits
+  NEAR_ZERO_THRESHOLD: 0.05,
+  // Ratio of values near zero required to classify as "all near zero" pattern
+  NEAR_ZERO_RATIO: 0.9,
+  // Max value threshold - if max is below this, it's likely raw logits not probabilities
+  MAX_VALUE_FOR_LOGITS: 0.15,
+  // Ratio of low scores expected for valid probability distribution
+  LOW_SCORE_RATIO: 0.7,
 };
 
 // Input tensor validation thresholds
@@ -129,13 +139,13 @@ function analyzeScoreDistribution(scores) {
     };
   }
 
-  // KEY CHECK 2: If ALL values are very close to 0 (within ±0.05), these are likely raw logits
+  // KEY CHECK 2: If ALL values are very close to 0, these are likely raw logits
   // Real probability outputs would have SOME values higher for actual detections
   // Raw logits for background boxes are typically in range [-2, 2] -> after bounded check, near 0
-  const veryNearZeroCount = validScores.filter(s => Math.abs(s) < 0.05).length;
+  const veryNearZeroCount = validScores.filter(s => Math.abs(s) < SCORE_ANALYSIS.NEAR_ZERO_THRESHOLD).length;
   const veryNearZeroRatio = veryNearZeroCount / validScores.length;
   
-  if (veryNearZeroRatio > 0.9 && max < 0.15) {
+  if (veryNearZeroRatio > SCORE_ANALYSIS.NEAR_ZERO_RATIO && max < SCORE_ANALYSIS.MAX_VALUE_FOR_LOGITS) {
     // Almost all values very close to 0, and no high values at all
     // This is raw logits pattern, NOT probability pattern
     // Real probabilities would have at least some scores > 0.3 if there's any detection
@@ -151,12 +161,12 @@ function analyzeScoreDistribution(scores) {
   // - Most background boxes with very low scores (0.001 - 0.1)
   // - Some detection boxes with higher scores (0.3 - 1.0) when object present
   // - A clear gap between background and detection scores
-  const lowScoreCount = validScores.filter(s => s < 0.1).length;
-  const highScoreCount = validScores.filter(s => s > 0.3).length;
+  const lowScoreCount = validScores.filter(s => s < SCORE_ANALYSIS.LOW_BACKGROUND * 2).length;
+  const highScoreCount = validScores.filter(s => s > SCORE_ANALYSIS.HIGH_DETECTION).length;
   const lowScoreRatio = lowScoreCount / validScores.length;
   
   // If we have low scores AND some high scores, this looks like real probabilities
-  if (lowScoreRatio > 0.7 && highScoreCount > 0 && max > 0.3) {
+  if (lowScoreRatio > SCORE_ANALYSIS.LOW_SCORE_RATIO && highScoreCount > 0 && max > SCORE_ANALYSIS.HIGH_DETECTION) {
     return {
       needsSigmoid: false,
       reason: 'valid_probability_distribution_with_detections',
