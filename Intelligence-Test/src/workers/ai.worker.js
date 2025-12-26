@@ -46,6 +46,18 @@ function sigmoid(x) {
   return 1 / (1 + Math.exp(-clampedX));
 }
 
+// Score analysis thresholds for detecting if model outputs logits or probabilities
+const SCORE_ANALYSIS = {
+  LOGIT_NEGATIVE_THRESHOLD: -0.1,  // Scores below this indicate raw logits
+  LOGIT_POSITIVE_THRESHOLD: 1.5,    // Scores above this indicate raw logits
+  CENTERED_MEAN_MIN: 0.4,           // Mean lower bound for "clustered at 0.5" check
+  CENTERED_MEAN_MAX: 0.6,           // Mean upper bound for "clustered at 0.5" check
+  NARROW_STDDEV: 0.1,               // StdDev threshold for narrow distribution
+  NARROW_RANGE: 0.3,                // Max-min range threshold for narrow distribution
+  LOW_BACKGROUND: 0.1,              // Scores below this are "background"
+  HIGH_DETECTION: 0.7,              // Scores above this are "detections"
+};
+
 // Improved sigmoid detection: Check if scores look like raw logits or probabilities
 // Raw logits characteristics:
 // 1. Can be negative or > 1
@@ -75,8 +87,8 @@ function analyzeScoreDistribution(scores) {
   const stdDev = Math.sqrt(variance);
 
   // Check for obvious logit indicators
-  const hasNegative = min < -0.1;  // Negative values indicate logits
-  const hasLargePositive = max > 1.5;  // Values > 1 indicate logits
+  const hasNegative = min < SCORE_ANALYSIS.LOGIT_NEGATIVE_THRESHOLD;
+  const hasLargePositive = max > SCORE_ANALYSIS.LOGIT_POSITIVE_THRESHOLD;
   
   if (hasNegative || hasLargePositive) {
     return { 
@@ -89,8 +101,8 @@ function analyzeScoreDistribution(scores) {
   // Check for "clustered around 0.5" pattern (sigmoid(0) = 0.5)
   // If after sigmoid, everything is ~0.5, the raw values were ~0
   // This pattern: mean ≈ 0.5, low stdDev, and narrow range
-  const isCentered = mean > 0.4 && mean < 0.6;
-  const isNarrow = stdDev < 0.1 && (max - min) < 0.3;
+  const isCentered = mean > SCORE_ANALYSIS.CENTERED_MEAN_MIN && mean < SCORE_ANALYSIS.CENTERED_MEAN_MAX;
+  const isNarrow = stdDev < SCORE_ANALYSIS.NARROW_STDDEV && (max - min) < SCORE_ANALYSIS.NARROW_RANGE;
   
   if (isCentered && isNarrow) {
     // This is suspicious - likely already-sigmoidified logits near 0
@@ -105,8 +117,8 @@ function analyzeScoreDistribution(scores) {
 
   // If scores have a good distribution with clear background (near 0) 
   // and potential detections (higher values), these are likely probabilities
-  const hasLowBackground = min < 0.1;
-  const hasHighDetections = max > 0.7;
+  const hasLowBackground = min < SCORE_ANALYSIS.LOW_BACKGROUND;
+  const hasHighDetections = max > SCORE_ANALYSIS.HIGH_DETECTION;
   
   if (hasLowBackground && hasHighDetections) {
     return {
@@ -412,12 +424,26 @@ function parseYoloOutput(output, dims, originalWidth, originalHeight) {
 
   // Detect if model outputs raw logits or probabilities
   // Use FORCE_SIGMOID config option or analyze scores
-  let applySigmoid = CONFIG.YOLO.FORCE_SIGMOID || false;
+  let applySigmoid = CONFIG.YOLO.FORCE_SIGMOID;
   
   if (!self.sigmoidDetected) {
     // Sample some class scores from different positions
+    // Only sample valid positions within the output tensor
     const sampleScores = [];
-    const samplePositions = [0, 100, 500, 1000, 2000, 4000];
+    
+    // Get number of boxes from output dimensions
+    let numBoxes = 0;
+    if (dims.length === 3) {
+      const dim1 = dims[1];
+      const dim2 = dims[2];
+      numBoxes = dim1 < dim2 ? dim2 : dim1;
+    } else if (dims.length === 2) {
+      numBoxes = dims[0];
+    }
+    
+    // Sample positions must be within valid range (0 to numBoxes-1)
+    const samplePositions = [0, 100, 500, 1000, 2000, 4000]
+      .filter(pos => pos < numBoxes);
 
     if (dims.length === 3) {
       const dim1 = dims[1];
