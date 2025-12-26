@@ -336,12 +336,11 @@ async function processFrame(imageData) {
 // ============================================
 // LETTERBOX PREPROCESSING (matches Ultralytics)
 // ============================================
-// Store letterbox params for coordinate conversion in post-processing
-let letterboxParams = { scale: 1, padX: 0, padY: 0, newW: 640, newH: 640 };
 
 /**
  * Preprocess image with letterbox padding (same as Ultralytics)
  * This maintains aspect ratio and adds gray padding
+ * @returns {{ input: Float32Array, params: LetterboxParams }}
  */
 function preprocessWithLetterbox(imageData) {
   const { width, height, data } = imageData;
@@ -357,12 +356,12 @@ function preprocessWithLetterbox(imageData) {
   const padX = Math.floor((inputSize - newW) / 2);
   const padY = Math.floor((inputSize - newH) / 2);
 
-  // Store for coordinate conversion later
-  letterboxParams = { scale, padX, padY, newW, newH, origW: width, origH: height };
+  // Letterbox params for coordinate conversion later
+  const params = { scale, padX, padY, newW, newH, origW: width, origH: height };
 
   // Log letterbox params once
   if (!self.loggedLetterbox) {
-    console.log('[YOLO] Letterbox params:', letterboxParams);
+    console.log('[YOLO] Letterbox params:', params);
     self.loggedLetterbox = true;
   }
 
@@ -394,7 +393,39 @@ function preprocessWithLetterbox(imageData) {
     }
   }
 
-  return input;
+  return { input, params };
+}
+
+/**
+ * Convert box coordinates from letterbox space to original image coordinates
+ * @param {number} cx - Center X in letterbox space
+ * @param {number} cy - Center Y in letterbox space  
+ * @param {number} w - Width in letterbox space
+ * @param {number} h - Height in letterbox space
+ * @param {Object} params - Letterbox parameters {scale, padX, padY, origW, origH}
+ * @returns {Object} Box in original image coordinates {x, y, width, height}
+ */
+function convertLetterboxToOriginalCoords(cx, cy, w, h, params) {
+  const { scale, padX, padY, origW, origH } = params;
+  
+  // Remove letterbox padding and scale back to original size
+  const x1 = (cx - w / 2 - padX) / scale;
+  const y1 = (cy - h / 2 - padY) / scale;
+  const x2 = (cx + w / 2 - padX) / scale;
+  const y2 = (cy + h / 2 - padY) / scale;
+  
+  // Clamp to image bounds
+  const boxX = Math.max(0, Math.min(x1, origW));
+  const boxY = Math.max(0, Math.min(y1, origH));
+  const boxW = Math.min(x2 - x1, origW - boxX);
+  const boxH = Math.min(y2 - y1, origH - boxY);
+
+  return {
+    x: boxX,
+    y: boxY,
+    width: Math.max(0, boxW),
+    height: Math.max(0, boxH)
+  };
 }
 
 // ============================================
@@ -408,7 +439,7 @@ async function runYoloInference(imageData) {
     const inputSize = CONFIG.YOLO.INPUT_SIZE;
 
     // Preprocess with letterbox (same as Ultralytics Python library)
-    const input = preprocessWithLetterbox(imageData);
+    const { input, params: letterboxParams } = preprocessWithLetterbox(imageData);
 
     // Create tensor with dynamic input name
     const tensor = new ort.Tensor('float32', input, [1, 3, inputSize, inputSize]);
@@ -439,7 +470,7 @@ async function runYoloInference(imageData) {
       self.loggedOutputInfo = true;
     }
 
-    const detections = parseYoloOutput(outputTensor.data, outputTensor.dims, width, height);
+    const detections = parseYoloOutput(outputTensor.data, outputTensor.dims, letterboxParams);
     return detections;
   } catch (error) {
     console.error('[YOLO] Inference error:', error);
@@ -447,7 +478,7 @@ async function runYoloInference(imageData) {
   }
 }
 
-function parseYoloOutput(output, dims, originalWidth, originalHeight) {
+function parseYoloOutput(output, dims, letterboxParams) {
   const detections = [];
   const numClasses = CONFIG.YOLO.CLASSES.length;
   const inputSize = CONFIG.YOLO.INPUT_SIZE;
@@ -701,31 +732,12 @@ function parseYoloOutput(output, dims, originalWidth, originalHeight) {
 
       if (maxScore >= CONFIG.YOLO.CONFIDENCE_THRESHOLD) {
         // Convert from letterbox coordinates back to original image coordinates
-        // The model outputs coordinates in 640x640 letterbox space
-        // We need to: 1) Remove padding offset, 2) Scale back to original size
-        const { scale, padX, padY, origW, origH } = letterboxParams;
-        
-        // Remove letterbox padding and scale back
-        const x1 = (cx - w / 2 - padX) / scale;
-        const y1 = (cy - h / 2 - padY) / scale;
-        const x2 = (cx + w / 2 - padX) / scale;
-        const y2 = (cy + h / 2 - padY) / scale;
-        
-        // Clamp to image bounds
-        const boxX = Math.max(0, Math.min(x1, origW || originalWidth));
-        const boxY = Math.max(0, Math.min(y1, origH || originalHeight));
-        const boxW = Math.min(x2 - x1, (origW || originalWidth) - boxX);
-        const boxH = Math.min(y2 - y1, (origH || originalHeight) - boxY);
+        const box = convertLetterboxToOriginalCoords(cx, cy, w, h, letterboxParams);
 
         detections.push({
           class: CONFIG.YOLO.CLASSES[maxClass],
           confidence: maxScore,
-          box: {
-            x: boxX,
-            y: boxY,
-            width: Math.max(0, boxW),
-            height: Math.max(0, boxH)
-          }
+          box
         });
       }
     }
@@ -773,27 +785,12 @@ function parseYoloOutput(output, dims, originalWidth, originalHeight) {
 
       if (maxScore >= CONFIG.YOLO.CONFIDENCE_THRESHOLD) {
         // Convert from letterbox coordinates back to original image coordinates
-        const { scale, padX, padY, origW, origH } = letterboxParams;
-        
-        const x1 = (cx - w / 2 - padX) / scale;
-        const y1 = (cy - h / 2 - padY) / scale;
-        const x2 = (cx + w / 2 - padX) / scale;
-        const y2 = (cy + h / 2 - padY) / scale;
-        
-        const boxX = Math.max(0, Math.min(x1, origW || originalWidth));
-        const boxY = Math.max(0, Math.min(y1, origH || originalHeight));
-        const boxW = Math.min(x2 - x1, (origW || originalWidth) - boxX);
-        const boxH = Math.min(y2 - y1, (origH || originalHeight) - boxY);
+        const box = convertLetterboxToOriginalCoords(cx, cy, w, h, letterboxParams);
 
         detections.push({
           class: CONFIG.YOLO.CLASSES[maxClass],
           confidence: maxScore,
-          box: {
-            x: boxX,
-            y: boxY,
-            width: Math.max(0, boxW),
-            height: Math.max(0, boxH)
-          }
+          box
         });
       }
     }
