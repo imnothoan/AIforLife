@@ -29,7 +29,7 @@ const RATE_LIMIT_MAX = 100; // max requests per window
 function rateLimiter(req, res, next) {
   const ip = req.ip || req.connection.remoteAddress;
   const now = Date.now();
-  
+
   if (!requestCounts.has(ip)) {
     requestCounts.set(ip, { count: 1, resetTime: now + RATE_LIMIT_WINDOW });
   } else {
@@ -59,7 +59,7 @@ const isProduction = process.env.NODE_ENV === 'production';
 if (!supabaseUrl || !supabaseKey) {
   const errorMsg = 'Missing Supabase configuration. Please set SUPABASE_URL and SUPABASE_SERVICE_KEY environment variables.';
   console.error(errorMsg);
-  
+
   // In production, fail fast - server cannot function without database
   if (isProduction) {
     process.exit(1);
@@ -77,7 +77,7 @@ const model = genAI ? genAI.getGenerativeModel({ model: "gemini-pro" }) : null;
 // Middleware to check if Supabase is configured
 function requireSupabase(req, res, next) {
   if (!supabase) {
-    return res.status(503).json({ 
+    return res.status(503).json({
       error: 'Database not configured',
       message: 'Server is running in demo mode. Please configure Supabase credentials.'
     });
@@ -117,7 +117,7 @@ const GenerateQuestionSchema = z.object({
 const LogProctoringSchema = z.object({
   sessionId: z.string().uuid(),
   eventType: z.enum([
-    'tab_switch', 'fullscreen_exit', 'multi_screen', 
+    'tab_switch', 'fullscreen_exit', 'multi_screen',
     'object_detected', 'face_not_detected', 'gaze_away',
     'copy_paste_attempt', 'right_click', 'keyboard_shortcut',
     'remote_desktop_detected', 'screen_share_detected',
@@ -132,14 +132,14 @@ async function verifyAuth(req, res, next) {
   if (!supabase) {
     return res.status(503).json({ error: 'Database not configured' });
   }
-  
+
   const authHeader = req.headers.authorization;
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
     return res.status(401).json({ error: 'Unauthorized' });
   }
 
   const token = authHeader.split(' ')[1];
-  
+
   try {
     const { data: { user }, error } = await supabase.auth.getUser(token);
     if (error || !user) {
@@ -155,8 +155,8 @@ async function verifyAuth(req, res, next) {
 // --- API Endpoints ---
 
 app.get('/', (req, res) => {
-  res.send({ 
-    status: "ok", 
+  res.send({
+    status: "ok",
     message: "SmartExamPro API Server v2.2",
     features: [
       'Exam Management',
@@ -169,7 +169,7 @@ app.get('/', (req, res) => {
 
 // Health check
 app.get('/health', (req, res) => {
-  res.json({ 
+  res.json({
     status: 'healthy',
     timestamp: new Date().toISOString(),
     services: {
@@ -198,9 +198,9 @@ app.post('/api/auth/register', async (req, res) => {
 
   const validation = RegisterSchema.safeParse(req.body);
   if (!validation.success) {
-    return res.status(400).json({ 
-      error: 'Dữ liệu không hợp lệ', 
-      details: validation.error.errors 
+    return res.status(400).json({
+      error: 'Dữ liệu không hợp lệ',
+      details: validation.error.errors
     });
   }
 
@@ -213,7 +213,7 @@ app.post('/api/auth/register', async (req, res) => {
       .select('id')
       .eq('email', email)
       .single();
-    
+
     if (existingProfile) {
       return res.status(400).json({ error: 'Email này đã được đăng ký' });
     }
@@ -232,13 +232,13 @@ app.post('/api/auth/register', async (req, res) => {
 
     if (createError) {
       // Handle duplicate email error from Supabase
-      if (createError.message?.includes('already been registered') || 
-          createError.message?.includes('already exists')) {
+      if (createError.message?.includes('already been registered') ||
+        createError.message?.includes('already exists')) {
         return res.status(400).json({ error: 'Email này đã được đăng ký' });
       }
       console.error('Create user error:', createError.message);
-      return res.status(400).json({ 
-        error: 'Không thể tạo tài khoản. Vui lòng thử lại.' 
+      return res.status(400).json({
+        error: 'Không thể tạo tài khoản. Vui lòng thử lại.'
       });
     }
 
@@ -260,8 +260,8 @@ app.post('/api/auth/register', async (req, res) => {
       }
     }
 
-    res.json({ 
-      success: true, 
+    res.json({
+      success: true,
       message: 'Đăng ký thành công! Bạn có thể đăng nhập ngay.',
       user: {
         id: userData.user.id,
@@ -293,7 +293,7 @@ app.post('/api/auth/confirm-email', async (req, res) => {
       .select('id')
       .eq('email', email)
       .single();
-    
+
     if (profileError || !profile) {
       return res.status(404).json({ error: 'Không tìm thấy tài khoản với email này' });
     }
@@ -309,9 +309,9 @@ app.post('/api/auth/confirm-email', async (req, res) => {
       return res.status(500).json({ error: 'Không thể xác nhận email' });
     }
 
-    res.json({ 
-      success: true, 
-      message: 'Email đã được xác nhận thành công. Bạn có thể đăng nhập ngay.' 
+    res.json({
+      success: true,
+      message: 'Email đã được xác nhận thành công. Bạn có thể đăng nhập ngay.'
     });
 
   } catch (error) {
@@ -533,13 +533,13 @@ Format strictly as JSON array:
     const result = await model.generateContent(prompt);
     const response = await result.response;
     const text = response.text();
-    
+
     // Extract JSON from response
     const jsonMatch = text.match(/\[[\s\S]*\]/);
     if (!jsonMatch) {
       throw new Error('Invalid AI response format');
     }
-    
+
     const questions = JSON.parse(jsonMatch[0]);
 
     res.json({ success: true, data: questions });
@@ -578,10 +578,10 @@ app.get('/api/instructor/exam/:examId/stats', verifyAuth, async (req, res) => {
       completed: sessions.filter(s => s.status === 'submitted' || s.status === 'auto_submitted').length,
       inProgress: sessions.filter(s => s.status === 'in_progress').length,
       flagged: sessions.filter(s => s.is_flagged).length,
-      averageScore: sessions.filter(s => s.percentage != null).reduce((sum, s) => sum + s.percentage, 0) / 
-                    Math.max(1, sessions.filter(s => s.percentage != null).length),
-      averageViolations: sessions.reduce((sum, s) => sum + (s.cheat_count || 0) + (s.tab_violations || 0), 0) / 
-                         Math.max(1, sessions.length)
+      averageScore: sessions.filter(s => s.percentage != null).reduce((sum, s) => sum + s.percentage, 0) /
+        Math.max(1, sessions.filter(s => s.percentage != null).length),
+      averageViolations: sessions.reduce((sum, s) => sum + (s.cheat_count || 0) + (s.tab_violations || 0), 0) /
+        Math.max(1, sessions.length)
     };
 
     res.json({ success: true, stats, sessions });
@@ -618,7 +618,7 @@ const { generateWarningMessage, generateIntegrityReport } = require('./ai-guardi
 // Generate intelligent warning message during exam
 app.post('/api/ai/explain-warning', verifyAuth, async (req, res) => {
   const { eventType, warningCount, progress } = req.body;
-  
+
   if (!eventType) {
     return res.status(400).json({ error: 'eventType is required' });
   }
@@ -628,15 +628,15 @@ app.post('/api/ai/explain-warning', verifyAuth, async (req, res) => {
       warningCount: warningCount || 1,
       progress: progress || 0
     });
-    
+
     res.json({ success: true, message });
   } catch (error) {
     console.error('AI Warning Error:', error);
     // Fallback message nếu API fail
-    res.json({ 
-      success: true, 
+    res.json({
+      success: true,
       message: 'Vui lòng tập trung vào bài thi.',
-      fallback: true 
+      fallback: true
     });
   }
 });
@@ -659,7 +659,7 @@ app.get('/api/ai/integrity-report/:sessionId', verifyAuth, async (req, res) => {
 
     // Verify user has access (student who took exam or instructor)
     const isStudent = session.student_id === req.user.id;
-    
+
     // Check if user is instructor of this exam's class
     let isInstructor = false;
     if (!isStudent) {
@@ -668,14 +668,14 @@ app.get('/api/ai/integrity-report/:sessionId', verifyAuth, async (req, res) => {
         .select('class_id')
         .eq('id', session.exam_id)
         .single();
-      
+
       if (examData) {
         const { data: classData } = await supabase
           .from('classes')
           .select('instructor_id')
           .eq('id', examData.class_id)
           .single();
-        
+
         isInstructor = classData?.instructor_id === req.user.id;
       }
     }
